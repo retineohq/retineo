@@ -22,8 +22,8 @@ echo-core/
 │   ├── storage/         # CAS, Registry, Config, NodeBuilder
 │   ├── embeddings/      # (planned) Vector embedding generation & caching
 │   ├── search/          # (planned) HNSW, hybrid retrieval, candidate ranking
-│   ├── llm/             # (planned) LLM provider abstraction, prompt templates
-│   ├── layers/          # (planned) L1/L2/L3 compilation pipelines
+│   ├── llm/             # LLM provider abstraction, rate limiting, factory
+│   ├── layers/          # L1/L2/L3 compilation pipelines, queue worker
 │   ├── context/         # (planned) Context assembly, window management
 │   ├── ghost/           # (planned) Orphan recovery, garbage collection
 │   ├── bridge/          # (planned) HTTP/gRPC API, WebSocket streaming
@@ -96,17 +96,28 @@ echo-core/
 |------|---------|-------------|
 | `index.ts` | `(planned)` | Barrel export placeholder. |
 
-### `src/llm/` — LLM Provider Abstraction (planned)
+### `src/llm/` — LLM Provider Abstraction
 
 | File | Exports | Description |
 |------|---------|-------------|
-| `index.ts` | `(planned)` | Barrel export placeholder. |
+| `provider.ts` | `LLMProvider`, `EmbeddingProvider`, `ProviderConfig`, `GenerateOptions`, `ProviderCapabilities` | Provider interfaces. |
+| `factory.ts` | `LLMProviderFactory`, `EmbeddingProviderFactory`, `DefaultLLMProviderFactory`, `DefaultEmbeddingProviderFactory` | Config-driven provider loading with `${ENV_VAR}` resolution. |
+| `rate-limiter.ts` | `RateLimiter`, `SemaphoreRateLimiter` | Per-provider concurrency semaphore. |
+| `providers/ollama.ts` | `OllamaProvider` | LLM + Embedding via Ollama `/api/generate` and `/api/embed`. |
+| `providers/openai-compatible.ts` | `OpenAICompatibleProvider` | LLM + Embedding via OpenAI-compatible `/chat/completions` and `/embeddings`. |
+| `providers/mock.ts` | `MockLLMProvider` | Deterministic hash-based provider for tests. |
+| `index.ts` | Barrel export of `provider.js`, `factory.js`, `rate-limiter.js`, `providers/*.js` | Public LLM API entrypoint. |
 
-### `src/layers/` — Compilation Pipelines (planned)
+### `src/layers/` — Compilation Pipelines
 
 | File | Exports | Description |
 |------|---------|-------------|
-| `index.ts` | `(planned)` | Barrel export placeholder. |
+| `l1-generator.ts` | `L1Generator`, `DefaultL1Generator`, `L1Result`, `L1Index`, `Section`, `Chunk` | Rule-based markdown structural parser. |
+| `l2-generator.ts` | `L2Generator`, `DefaultL2Generator` | LLM-powered semantic extraction with Zod validation and retry. |
+| `l3-generator.ts` | `L3Generator`, `DefaultL3Generator`, `L3Result`, `L3Metadata`, `bruteForceSearch` | Embedding indexer. MVP: `embeddings.jsonl` + brute-force cosine. |
+| `pipeline.ts` | `CompilationPipeline`, `DefaultCompilationPipeline`, `CompilationPipelineDeps` | Orchestrates L1→L2→L3 via job queue. |
+| `worker.ts` | `QueueWorker`, `DefaultQueueWorker`, `QueueWorkerOptions` | Lease-based job processor with heartbeat. |
+| `index.ts` | Barrel export of `l1-generator.js`, `l2-generator.js`, `l3-generator.js`, `pipeline.js`, `worker.js` | Public layers API entrypoint. |
 
 ### `src/context/` — Context Assembly (planned)
 
@@ -158,6 +169,24 @@ echo-core/
 | `image-mock.test.ts` | load manifest, resolve .png/.jpg, ingest ocr blocks, bbox, confidence, no segments | Mock image adapter validation. |
 | `multimodal-pipeline.test.ts` | end-to-end: audio/video/image → CAS → registry → verify content.meta.json | Full pipeline with mock multimodal adapters. |
 
+### `tests/llm/` — LLM Provider Tests
+
+| File | Tests | Description |
+|------|-------|-------------|
+| `factory.test.ts` | Provider loading from config, `${ENV_VAR}` resolution, getDefault, list, register | Factory config parsing and provider registry. |
+| `providers/mock.test.ts` | Deterministic generate, jsonMode, embed normalization, validate, capabilities | MockLLMProvider correctness. |
+| `rate-limiter.test.ts` | Concurrency limits, queue behavior, release semantics | SemaphoreRateLimiter correctness. |
+
+### `tests/layers/` — Compilation Pipeline Tests
+
+| File | Tests | Description |
+|------|-------|-------------|
+| `l1-generator.test.ts` | Heading detection, section tree, chunking, code block preservation, frontmatter | DefaultL1Generator structural parsing. |
+| `l2-generator.test.ts` | Prompt building, JSON validation, retry on invalid JSON/Zod failure, truncation | DefaultL2Generator LLM extraction. |
+| `l3-generator.test.ts` | Embedding generation, jsonl/bm25/manifest writes, manifest increment, brute-force search | DefaultL3Generator indexing. |
+| `pipeline.test.ts` | GENERATE_L1 → L2 enqueue, GENERATE_L2 → L3 enqueue, GENERATE_L3 manifest update, end-to-end | DefaultCompilationPipeline orchestration. |
+| `worker.test.ts` | processNext, empty queue, crash recovery, retry on failure, start/stop lifecycle | DefaultQueueWorker lease model. |
+
 ---
 
 ## Functional Cross-Reference Index
@@ -183,10 +212,15 @@ echo-core/
 | **Add a new adapter protocol method** | `protocol` | `src/adapters/protocol.ts` | `AdapterMethod`, `JSONRPCRequest` |
 | **Implement a custom storage backend** | `CASStorage` interface | `src/storage/cas.ts` | Implement `write`, `read`, `exists`, `writeObject`, `readObject` |
 | **Track orphaned objects for later GC** | `Registry` (orphans) | `src/storage/registry.ts` | `insertOrphan`, `recoverOrphan`, `purgeOrphansOlderThan` |
-| **Build a search index over compiled nodes** | `(planned)` `search/` | `src/search/` | `embeddings/`, `layers/L3` |
-| **Generate vector embeddings for a node** | `(planned)` `embeddings/` | `src/embeddings/` | `ContextNode`, `L2Artifact` |
+| **Build a search index over compiled nodes** | `DefaultL3Generator` + `bruteForceSearch` | `src/layers/l3-generator.ts` | `EmbeddingProvider`, `hnsw.manifest.json` |
+| **Generate vector embeddings for a node** | `EmbeddingProvider` | `src/llm/provider.ts` | `DefaultL3Generator`, `MockLLMProvider` |
+| **Run the L1→L2→L3 compilation pipeline** | `DefaultCompilationPipeline` | `src/layers/pipeline.ts` | `QueueWorker`, `Registry` |
+| **Process background jobs with lease recovery** | `DefaultQueueWorker` | `src/layers/worker.ts` | `Registry.acquireLease`, `heartbeatJob` |
+| **Load LLM providers from config** | `DefaultLLMProviderFactory` | `src/llm/factory.ts` | `ProviderConfig`, `OllamaProvider`, `OpenAICompatibleProvider` |
+| **Write a third-party LLM provider** | `LLM_PROVIDERS.md` | `docs/LLM_PROVIDERS.md` | `LLMProvider`, `EmbeddingProvider` |
 | **Expose ECHO over HTTP/WebSocket** | `(planned)` `bridge/` | `src/bridge/` | `mcp/`, `context/` |
 | **Serve as an MCP server** | `(planned)` `mcp/` | `src/mcp/` | `bridge/`, `search/` |
+| **Add a new LLM provider type to factory** | `DefaultLLMProviderFactory` | `src/llm/factory.ts` | Extend `createProvider` switch |
 
 ---
 
