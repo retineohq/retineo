@@ -29,8 +29,13 @@ echo-core/
 │   ├── bridge/          # (planned) HTTP/gRPC API, WebSocket streaming
 │   ├── mcp/             # (planned) Model Context Protocol server
 │   └── utils/           # (planned) Shared helpers, hash utils, validation
+├── packages/core/adapters/  # Built-in adapter scripts (CommonJS)
+│   ├── text/                # Text adapter (.txt)
+│   ├── markdown/            # Markdown adapter (.md)
+│   └── pdf/                 # PDF adapter (placeholder)
 ├── tests/
-│   └── storage/         # CAS, Registry, NodeBuilder tests
+│   ├── storage/         # CAS, Registry, NodeBuilder tests
+│   └── adapters/        # Transport, Manager, Ingestion tests
 ├── structure.md         # This file
 ├── package.json
 ├── tsconfig.json
@@ -54,6 +59,11 @@ echo-core/
 | File | Exports | Description |
 |------|---------|-------------|
 | `protocol.ts` | `JSONRPCRequest`, `JSONRPCResponse`, `JSONRPCError`, `AdapterErrorCodes`, `InitializeParams`, `InitializeResult`, `CapabilitiesResult`, `IngestParams`, `IngestResult`, `ShutdownParams`, `AdapterMethod`, `AdapterTransport` | JSON-RPC 2.0 protocol for adapter child processes. |
+| `transport.ts` | `JSONRPCTransport`, `LineDelimitedJSONTransport` | LDJSON over stdin/stdout with timeout, error, exit handlers. |
+| `runner.ts` | `AdapterProcessRunner`, `DefaultAdapterProcessRunner` | Spawns adapter, auto-initializes, graceful shutdown. |
+| `manager.ts` | `AdapterManager`, `DefaultAdapterManager` | Loads built-in adapters, resolves by mimeType/extension, ingests. |
+| `ingestion.ts` | `IngestionService`, `DefaultIngestionService` | Orchestrator: file → adapter → CAS → registry → ContextNode. |
+| `index.ts` | Barrel export of `protocol.js`, `transport.js`, `runner.js`, `manager.js`, `ingestion.js` | Public adapter API entrypoint. |
 
 ### `src/storage/` — Persistence Layer (Phase 1)
 
@@ -128,6 +138,14 @@ echo-core/
 | `registry.test.ts` | Sources CRUD, Segments CRUD + FK cascade, Job lease model (acquire/heartbeat/complete/fail/release), Orphan lifecycle | SQLite registry integrity, lease crash recovery, orphan purge. |
 | `node-builder.test.ts` | `buildRoot`, `buildSegments`, `createBuildManifest` | Node tree construction, placeholder generators, manifest validity. |
 
+### `tests/adapters/` — Adapter IPC Tests
+
+| File | Tests | Description |
+|------|-------|-------------|
+| `transport.test.ts` | send/receive, error response, timeout, process exit, onExit handler, auto-id, graceful close | LDJSON transport over child_process stdin/stdout. |
+| `manager.test.ts` | loadBuiltIn, resolve by extension/mimeType, ingest text/md, capabilities | AdapterManager loads adapters, resolves files, validates output. |
+| `ingestion.test.ts` | full pipeline (file → CAS → registry), idempotency, batch ingest, job queueing | IngestionService orchestrates adapter → CAS → registry → GENERATE_L1 job. |
+
 ---
 
 ## Functional Cross-Reference Index
@@ -144,6 +162,10 @@ echo-core/
 | **Recover from a crashed worker mid-job** | `Registry` | `src/storage/registry.ts` | `releaseExpiredLeases` → re-acquire |
 | **Load or save user configuration** | `ConfigManager` | `src/storage/config.ts` | `EchoConfig`, `FileConfigManager` |
 | **Validate runtime data against domain types** | `schemas` | `src/domain/schemas.ts` | `zod` schemas for every domain type |
+| **Spawn an adapter process and talk JSON-RPC** | `LineDelimitedJSONTransport` | `src/adapters/transport.ts` | `AdapterTransport`, `JSONRPCRequest`, `JSONRPCResponse` |
+| **Manage adapter lifecycle (spawn, init, kill)** | `DefaultAdapterProcessRunner` | `src/adapters/runner.ts` | `AdapterProcessRunner`, `InitializeParams` |
+| **Load and resolve built-in adapters** | `DefaultAdapterManager` | `src/adapters/manager.ts` | `AdapterCapabilities`, `NormalizedContentSchema` |
+| **Ingest a file end-to-end (adapter → CAS → registry)** | `DefaultIngestionService` | `src/adapters/ingestion.ts` | `CASStorage`, `Registry`, `NodeBuilder`, `AdapterManager` |
 | **Add a new adapter protocol method** | `protocol` | `src/adapters/protocol.ts` | `AdapterMethod`, `JSONRPCRequest` |
 | **Implement a custom storage backend** | `CASStorage` interface | `src/storage/cas.ts` | Implement `write`, `read`, `exists`, `writeObject`, `readObject` |
 | **Track orphaned objects for later GC** | `Registry` (orphans) | `src/storage/registry.ts` | `insertOrphan`, `recoverOrphan`, `purgeOrphansOlderThan` |

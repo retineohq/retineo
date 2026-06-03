@@ -1,0 +1,7 @@
+{
+  "id": "text",
+  "version": "1.0.0",
+  "mimeTypes": ["text/plain"],
+  "extensions": [".txt"],
+  "entry": "adapter.js"
+}
