@@ -8,3 +8,4 @@ export * from './transport.js';
 export * from './runner.js';
 export * from './manager.js';
 export * from './ingestion.js';
+export * from './mock-registry.js';

@@ -104,6 +104,9 @@ export class DefaultIngestionService implements IngestionService {
         meta: normalized.metadata,
       });
 
+      // Register source before segments (FK constraint)
+      this.registry.insertSource(source);
+
       // Write children to CAS + register segments
       for (let i = 0; i < children.length; i++) {
         const child = children[i];
@@ -129,10 +132,10 @@ export class DefaultIngestionService implements IngestionService {
         content: normalized.content,
         meta: normalized.metadata,
       });
-    }
 
-    // Register source
-    this.registry.insertSource(source);
+      // Register source
+      this.registry.insertSource(source);
+    }
 
     // Queue GENERATE_L1 job for root node
     const job: JobRecord = {

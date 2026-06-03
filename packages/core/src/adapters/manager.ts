@@ -144,6 +144,8 @@ export class DefaultAdapterManager implements AdapterManager {
               length: b.length,
               timestamp: b.timestamp,
               speaker: b.speaker,
+              bbox: b.bbox,
+              confidence: b.confidence,
             })),
           },
         })),

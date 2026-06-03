@@ -1,0 +1,8 @@
+{
+  "id": "audio-mock",
+  "version": "1.0.0",
+  "mimeTypes": ["audio/mpeg", "audio/wav"],
+  "extensions": [".mp3", ".wav"],
+  "entry": "adapter.js",
+  "status": "mock"
+}

@@ -1,0 +1,8 @@
+{
+  "id": "video-mock",
+  "version": "1.0.0",
+  "mimeTypes": ["video/mp4", "video/x-msvideo"],
+  "extensions": [".mp4", ".avi"],
+  "entry": "adapter.js",
+  "status": "mock"
+}

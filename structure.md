@@ -32,10 +32,17 @@ echo-core/
 ├── packages/core/adapters/  # Built-in adapter scripts (CommonJS)
 │   ├── text/                # Text adapter (.txt)
 │   ├── markdown/            # Markdown adapter (.md)
-│   └── pdf/                 # PDF adapter (placeholder)
+│   ├── pdf/                 # PDF adapter (placeholder)
+│   ├── audio-mock/          # Mock audio adapter (.mp3, .wav)
+│   ├── video-mock/          # Mock video adapter (.mp4, .avi)
+│   └── image-mock/          # Mock image adapter (.png, .jpg, .jpeg)
 ├── tests/
 │   ├── storage/         # CAS, Registry, NodeBuilder tests
-│   └── adapters/        # Transport, Manager, Ingestion tests
+│   └── adapters/        # Transport, Manager, Ingestion, Mock adapter tests
+├── docs/                # Developer documentation
+│   ├── README.md        # Documentation index
+│   ├── ARCHITECTURE.md  # High-level system overview
+│   └── ADAPTER_GUIDE.md # Third-party adapter developer guide
 ├── structure.md         # This file
 ├── package.json
 ├── tsconfig.json
@@ -63,7 +70,8 @@ echo-core/
 | `runner.ts` | `AdapterProcessRunner`, `DefaultAdapterProcessRunner` | Spawns adapter, auto-initializes, graceful shutdown. |
 | `manager.ts` | `AdapterManager`, `DefaultAdapterManager` | Loads built-in adapters, resolves by mimeType/extension, ingests. |
 | `ingestion.ts` | `IngestionService`, `DefaultIngestionService` | Orchestrator: file → adapter → CAS → registry → ContextNode. |
-| `index.ts` | Barrel export of `protocol.js`, `transport.js`, `runner.js`, `manager.js`, `ingestion.js` | Public adapter API entrypoint. |
+| `mock-registry.ts` | `MockAdapterRegistry`, `MockAdapterInfo`, `MOCK_ADAPTERS` | Central registry for mock multimodal adapters (Phase 2.5). |
+| `index.ts` | Barrel export of `protocol.js`, `transport.js`, `runner.js`, `manager.js`, `ingestion.js`, `mock-registry.js` | Public adapter API entrypoint. |
 
 ### `src/storage/` — Persistence Layer (Phase 1)
 
@@ -145,6 +153,10 @@ echo-core/
 | `transport.test.ts` | send/receive, error response, timeout, process exit, onExit handler, auto-id, graceful close | LDJSON transport over child_process stdin/stdout. |
 | `manager.test.ts` | loadBuiltIn, resolve by extension/mimeType, ingest text/md, capabilities | AdapterManager loads adapters, resolves files, validates output. |
 | `ingestion.test.ts` | full pipeline (file → CAS → registry), idempotency, batch ingest, job queueing | IngestionService orchestrates adapter → CAS → registry → GENERATE_L1 job. |
+| `audio-mock.test.ts` | load manifest, resolve .mp3/wav, ingest speech blocks, segments, timestamps, determinism | Mock audio adapter validation. |
+| `video-mock.test.ts` | load manifest, resolve .mp4/avi, ingest frame + speech blocks, bbox, segments | Mock video adapter validation. |
+| `image-mock.test.ts` | load manifest, resolve .png/.jpg, ingest ocr blocks, bbox, confidence, no segments | Mock image adapter validation. |
+| `multimodal-pipeline.test.ts` | end-to-end: audio/video/image → CAS → registry → verify content.meta.json | Full pipeline with mock multimodal adapters. |
 
 ---
 
@@ -166,6 +178,8 @@ echo-core/
 | **Manage adapter lifecycle (spawn, init, kill)** | `DefaultAdapterProcessRunner` | `src/adapters/runner.ts` | `AdapterProcessRunner`, `InitializeParams` |
 | **Load and resolve built-in adapters** | `DefaultAdapterManager` | `src/adapters/manager.ts` | `AdapterCapabilities`, `NormalizedContentSchema` |
 | **Ingest a file end-to-end (adapter → CAS → registry)** | `DefaultIngestionService` | `src/adapters/ingestion.ts` | `CASStorage`, `Registry`, `NodeBuilder`, `AdapterManager` |
+| **Discover mock multimodal adapters** | `MockAdapterRegistry` | `src/adapters/mock-registry.ts` | `MOCK_ADAPTERS`, `MockAdapterInfo` |
+| **Write a third-party adapter** | `ADAPTER_GUIDE.md` | `docs/ADAPTER_GUIDE.md` | `protocol.ts`, `types.ts`, `schemas.ts` |
 | **Add a new adapter protocol method** | `protocol` | `src/adapters/protocol.ts` | `AdapterMethod`, `JSONRPCRequest` |
 | **Implement a custom storage backend** | `CASStorage` interface | `src/storage/cas.ts` | Implement `write`, `read`, `exists`, `writeObject`, `readObject` |
 | **Track orphaned objects for later GC** | `Registry` (orphans) | `src/storage/registry.ts` | `insertOrphan`, `recoverOrphan`, `purgeOrphansOlderThan` |
