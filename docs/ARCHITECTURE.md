@@ -144,7 +144,7 @@ CLI: `echo key set <provider> <key>`, `echo key get <provider>`, `echo key delet
 | `GET /v1/metrics` | JSON operational snapshot |
 | `GET /v1/metrics/prometheus` | Prometheus text format |
 
-See [`HEALTH.md`](HEALTH.md) for Kubernetes probe config and alerting rules.
+See [`HEALTH.md`](HEALTH.md) for health probe config and alerting rules.
 See [`SECURITY.md`](SECURITY.md) for secrets and error handling details.
 
 ## Performance Optimization (Phase 7)

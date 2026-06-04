@@ -80,24 +80,6 @@ echo_searches_total 2000
 
 ## Monitoring Guide
 
-### Kubernetes
-
-```yaml
-livenessProbe:
-  httpGet:
-    path: /v1/health
-    port: 37891
-  initialDelaySeconds: 5
-  periodSeconds: 10
-
-readinessProbe:
-  httpGet:
-    path: /v1/ready
-    port: 37891
-  initialDelaySeconds: 2
-  periodSeconds: 5
-```
-
 ### Prometheus Scraping
 
 Add scrape config:
