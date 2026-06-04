@@ -562,13 +562,29 @@ Return JSON-RPC errors for known failure modes:
 Standard error codes:
 - `1000` — Invalid request / method not found
 - `1001` — Unsupported MIME type
+- `1002` — No text layer (image-only PDF)
 - `2000` — Parse error
+- `2001` — PDF parse error (corrupted)
 - `3000` — Timeout
+- `3001` — Encrypted PDF
 - `5000` — Internal error
 - `5001` — OCR failed
 - `5002` — Transcription failed
 
 Custom codes ≥ 6000 are allowed.
+
+## Built-in Adapters
+
+ECHO Core ships with the following built-in adapters:
+
+| Adapter | Status | Formats | Notes |
+|---------|--------|---------|-------|
+| `text` | stable | `.txt` | UTF-8 text, blank-line block heuristics |
+| `markdown` | stable | `.md` | Markdown with heading block detection |
+| `pdf` | stable | `.pdf` | Text extraction via `pdf-parse`, heading heuristics, encrypted PDF detection |
+| `image` | stable | `.png`, `.jpg`, `.jpeg`, `.tiff`, `.bmp`, `.webp` | OCR via `tesseract.js` with bbox + confidence |
+| `audio-mock` | mock | `.mp3`, `.wav` | Synthetic speech blocks for testing |
+| `video-mock` | mock | `.mp4`, `.avi` | Synthetic frame + speech blocks for testing |
 
 ### Determinism Is Strongly Recommended
 While not enforced, deterministic output (same file → same content) makes ECHO Core's deduplication and idempotency features work correctly. Use content-based seeds for any random or synthetic generation.

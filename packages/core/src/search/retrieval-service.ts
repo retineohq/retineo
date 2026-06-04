@@ -11,6 +11,8 @@ import type { CASStorage } from '../storage/cas.js';
 import type { Hash, L2Artifact, SourceRef } from '../domain/types.js';
 import type { SearchConfig } from '../storage/config.js';
 import type { AnalyzedQuery, QueryIntent } from './query-analyzer.js';
+import type { Logger } from '../utils/logger.js';
+import { getGlobalLogger } from '../utils/logger.js';
 
 const readFileAsync = promisify(readFile);
 
@@ -132,6 +134,7 @@ export interface RetrievalServiceDeps {
   casStorage: CASStorage;
   indexDir: string;
   config?: SearchConfig;
+  logger?: Logger;
 }
 
 export class DefaultRetrievalService implements RetrievalService {
@@ -139,11 +142,13 @@ export class DefaultRetrievalService implements RetrievalService {
   private cas: CASStorage;
   private indexDir: string;
   private config: SearchConfig;
+  private logger: Logger;
 
   constructor(deps: RetrievalServiceDeps) {
     this.embedder = deps.embeddingProvider;
     this.cas = deps.casStorage;
     this.indexDir = deps.indexDir;
+    this.logger = deps.logger ?? getGlobalLogger().child({ layer: 'search' });
     this.config = deps.config ?? {
       defaultLanguage: 'en',
       languageDetection: { provider: 'franc', fallback: 'heuristic', confidenceThreshold: 0.7 },
@@ -159,6 +164,7 @@ export class DefaultRetrievalService implements RetrievalService {
   async search(query: AnalyzedQuery, options: SearchOptions = {}): Promise<RetrievalResult> {
     const start = Date.now();
     const trace: RetrievalTrace = { steps: [], durationMs: 0 };
+    this.logger.info('search.query', { query: query.originalQuery, mode: options.mode ?? 'semantic' });
 
     const topK = options.topK ?? this.config.semantic.topK;
     const rerankTopK = options.rerankTopK ?? this.config.rerank.topK;
@@ -260,6 +266,7 @@ export class DefaultRetrievalService implements RetrievalService {
     }
 
     trace.durationMs = Date.now() - start;
+    this.logger.info('search.duration', { query: query.originalQuery, durationMs: trace.durationMs, candidates: reranked.length, selected: selected.length });
 
     return {
       query: query.originalQuery,

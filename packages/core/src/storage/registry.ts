@@ -44,6 +44,8 @@ export interface Registry {
   completeJob(jobId: string): void;
   failJob(jobId: string, error: string): void;
   releaseExpiredLeases(): JobRecord[];
+  releaseAllLeases(workerId: string): JobRecord[];
+  getRunningJobs(workerId: string): JobRecord[];
   getPendingJobs(limit: number): JobRecord[];
 
   insertOrphan(hash: Hash, sourceId: string, l2Path: string): void;
@@ -304,6 +306,25 @@ export class SQLiteRegistry implements Registry {
     stmt.run(now);
 
     return expired.map(rowToJob).map(j => ({ ...j, status: 'PENDING' as JobStatus, leaseUntil: null, workerId: null }));
+  }
+
+  releaseAllLeases(workerId: string): JobRecord[] {
+    const rows = this.db.prepare(
+      `SELECT * FROM jobs WHERE status = 'RUNNING' AND worker_id = ?`
+    ).all(workerId) as Record<string, unknown>[];
+
+    this.db.prepare(
+      `UPDATE jobs SET status = 'PENDING', lease_until = NULL, worker_id = NULL WHERE status = 'RUNNING' AND worker_id = ?`
+    ).run(workerId);
+
+    return rows.map(rowToJob).map(j => ({ ...j, status: 'PENDING' as JobStatus, leaseUntil: null, workerId: null }));
+  }
+
+  getRunningJobs(workerId: string): JobRecord[] {
+    const rows = this.db.prepare(
+      `SELECT * FROM jobs WHERE status = 'RUNNING' AND worker_id = ?`
+    ).all(workerId) as Record<string, unknown>[];
+    return rows.map(rowToJob);
   }
 
   getPendingJobs(limit: number): JobRecord[] {

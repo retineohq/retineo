@@ -78,6 +78,25 @@ Background compilation (L1, L2, embedding) is handled by a SQLite-backed job que
 - `PENDING` → worker acquires lease → `RUNNING`
 - Heartbeats prevent stale leases
 - Failed jobs retry up to `maxAttempts`
+
+## Structured Logging (Phase 6)
+
+All subsystems emit structured JSON logs via Pino:
+- **Trace IDs** propagate across HTTP (`X-Trace-Id`), CLI, and MCP boundaries
+- **Redaction** auto-masks `apiKey`, `password`, `secret`, `token`
+- **Child loggers** bind context (`layer`, `nodeHash`, `jobId`) per subsystem
+
+See [`LOGGING.md`](LOGGING.md) for configuration and event reference.
+
+## Graceful Shutdown (Phase 6)
+
+On `SIGTERM` / `SIGINT`:
+1. HTTP server returns 503 for new requests
+2. Worker finishes current job, stops acquiring new ones
+3. Running jobs are released back to `PENDING` (crash recovery)
+4. Adapters killed, SQLite closed, logs flushed
+
+See [`OPERATIONS.md`](OPERATIONS.md) for deployment notes and health checks.
 - Dead jobs are archived for inspection
 
 ## Storage Layout

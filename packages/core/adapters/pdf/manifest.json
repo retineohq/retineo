@@ -4,5 +4,5 @@
   "mimeTypes": ["application/pdf"],
   "extensions": [".pdf"],
   "entry": "adapter.js",
-  "status": "placeholder"
+  "status": "stable"
 }

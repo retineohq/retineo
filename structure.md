@@ -26,17 +26,18 @@ echo-core/
 │   ├── layers/          # L1/L2/L3 compilation pipelines, queue worker
 │   ├── context/         # (planned) Context assembly, window management
 │   ├── ghost/           # (planned) Orphan recovery, garbage collection
-│   ├── bridge/          # (planned) HTTP/gRPC API, WebSocket streaming
-│   ├── mcp/             # (planned) Model Context Protocol server
+│   ├── bridge/          # HTTP/gRPC API, WebSocket streaming
+│   ├── mcp/             # Model Context Protocol server
 │   ├── i18n/            # Language packs, detection, cross-lingual search
-│   └── utils/           # (planned) Shared helpers, hash utils, validation
+│   └── utils/           # Shared helpers, logger, shutdown manager
 ├── packages/core/adapters/  # Built-in adapter scripts (CommonJS)
 │   ├── text/                # Text adapter (.txt)
 │   ├── markdown/            # Markdown adapter (.md)
-│   ├── pdf/                 # PDF adapter (placeholder)
+│   ├── pdf/                 # PDF adapter (real, pdf-parse)
+│   ├── image/               # Image OCR adapter (real, tesseract.js)
 │   ├── audio-mock/          # Mock audio adapter (.mp3, .wav)
 │   ├── video-mock/          # Mock video adapter (.mp4, .avi)
-│   └── image-mock/          # Mock image adapter (.png, .jpg, .jpeg)
+│   └── image-mock/          # Mock image adapter (deprecated, replaced by image/)
 ├── tests/
 │   ├── storage/         # CAS, Registry, NodeBuilder tests
 │   ├── adapters/        # Transport, Manager, Ingestion, Mock adapter tests
@@ -53,7 +54,9 @@ echo-core/
 │   ├── ARCHITECTURE.md  # High-level system overview
 │   ├── ADAPTER_GUIDE.md # Third-party adapter developer guide
 │   ├── SEARCH.md        # Search configuration & retrieval pipeline guide
-│   └── MULTILINGUAL.md  # Multilingual support & language pack guide
+│   ├── MULTILINGUAL.md  # Multilingual support & language pack guide
+│   ├── LOGGING.md       # Structured logging configuration & events
+│   └── OPERATIONS.md    # Graceful shutdown, health checks, monitoring
 ├── structure.md         # This file
 ├── package.json
 ├── tsconfig.json
@@ -185,11 +188,13 @@ echo-core/
 | `packs/zh.ts` | `zhPack` | Chinese language pack with CJK script regex. |
 | `index.ts` | Barrel export of `language-pack.js`, `detector.js`, `registry.js`, `packs/*.js` | Public i18n API entrypoint. |
 
-### `src/utils/` — Shared Utilities (planned)
+### `src/utils/` — Shared Utilities
 
 | File | Exports | Description |
 |------|---------|-------------|
-| `index.ts` | `(planned)` | Barrel export placeholder. |
+| `logger.ts` | `Logger`, `LogMeta`, `LoggerConfig`, `createLogger`, `setGlobalLogger`, `getGlobalLogger` | Pino-based structured JSON logging with redaction and child loggers. |
+| `shutdown.ts` | `ShutdownManager`, `ShutdownHandler`, `DefaultShutdownManager`, `installSignalHandlers` | SIGTERM/SIGINT handling with 12-step graceful shutdown. |
+| `index.ts` | Barrel export of `logger.js`, `shutdown.js` | Public utils API entrypoint. |
 
 ### `tests/storage/` — Storage Layer Tests
 
@@ -206,9 +211,11 @@ echo-core/
 | `transport.test.ts` | send/receive, error response, timeout, process exit, onExit handler, auto-id, graceful close | LDJSON transport over child_process stdin/stdout. |
 | `manager.test.ts` | loadBuiltIn, resolve by extension/mimeType, ingest text/md, capabilities | AdapterManager loads adapters, resolves files, validates output. |
 | `ingestion.test.ts` | full pipeline (file → CAS → registry), idempotency, batch ingest, job queueing | IngestionService orchestrates adapter → CAS → registry → GENERATE_L1 job. |
+| `pdf.test.ts` | valid PDF text extraction, heading detection, encrypted PDF, image-only PDF, manifest status | Real PDF adapter via pdf-parse. |
+| `image.test.ts` | PNG/JPG resolution, blank image empty content, unsupported format, missing file, manifest status | Real image OCR adapter via tesseract.js. |
 | `audio-mock.test.ts` | load manifest, resolve .mp3/wav, ingest speech blocks, segments, timestamps, determinism | Mock audio adapter validation. |
 | `video-mock.test.ts` | load manifest, resolve .mp4/avi, ingest frame + speech blocks, bbox, segments | Mock video adapter validation. |
-| `image-mock.test.ts` | load manifest, resolve .png/.jpg, ingest ocr blocks, bbox, confidence, no segments | Mock image adapter validation. |
+| `image-mock.test.ts` | load manifest, resolve .png/.jpg, ingest ocr blocks, bbox, confidence, no segments | Mock image adapter validation (deprecated). |
 | `multimodal-pipeline.test.ts` | end-to-end: audio/video/image → CAS → registry → verify content.meta.json | Full pipeline with mock multimodal adapters. |
 
 ### `tests/llm/` — LLM Provider Tests
@@ -260,11 +267,20 @@ echo-core/
 | `server.test.ts` | `EchoMCPServer` construction | MCP server initialization. |
 | `tools.test.ts` | `echo_search`, `echo_ingest`, `echo_status`, `echo_get_node` | Tool execution with mocked services. |
 
+### `tests/utils/` — Utility Tests
+
+| File | Tests | Description |
+|------|-------|-------------|
+| `logger.test.ts` | Log levels, child loggers, redaction, traceId propagation | PinoLogger correctness. |
+| `shutdown.test.ts` | SIGTERM handling, job release, adapter cleanup, timeout scenarios | DefaultShutdownManager correctness. |
+
 ### `tests/integration/` — Integration Tests
 
 | File | Tests | Description |
 |------|-------|-------------|
 | `end-to-end.test.ts` | CLI ingest → HTTP search → MCP status | Full UI layer integration. |
+| `pdf-pipeline.test.ts` | Ingest real PDF → L1/L2/L3 compilation → verify artifacts | End-to-end PDF pipeline. |
+| `image-pipeline.test.ts` | Ingest real image → L1/L2/L3 compilation → verify artifacts | End-to-end image OCR pipeline. |
 
 ### `tests/i18n/` — Multilingual Tests
 
@@ -295,6 +311,8 @@ echo-core/
 | **Ingest a file end-to-end (adapter → CAS → registry)** | `DefaultIngestionService` | `src/adapters/ingestion.ts` | `CASStorage`, `Registry`, `NodeBuilder`, `AdapterManager` |
 | **Discover mock multimodal adapters** | `MockAdapterRegistry` | `src/adapters/mock-registry.ts` | `MOCK_ADAPTERS`, `MockAdapterInfo` |
 | **Write a third-party adapter** | `ADAPTER_GUIDE.md` | `docs/ADAPTER_GUIDE.md` | `protocol.ts`, `types.ts`, `schemas.ts` |
+| **Add structured logging** | `createLogger` | `src/utils/logger.ts` | `Logger`, `LogMeta`, `getGlobalLogger` |
+| **Implement graceful shutdown** | `DefaultShutdownManager` | `src/utils/shutdown.ts` | `ShutdownHandler`, `installSignalHandlers` |
 | **Add a new adapter protocol method** | `protocol` | `src/adapters/protocol.ts` | `AdapterMethod`, `JSONRPCRequest` |
 | **Implement a custom storage backend** | `CASStorage` interface | `src/storage/cas.ts` | Implement `write`, `read`, `exists`, `writeObject`, `readObject` |
 | **Track orphaned objects for later GC** | `Registry` (orphans) | `src/storage/registry.ts` | `insertOrphan`, `recoverOrphan`, `purgeOrphansOlderThan` |

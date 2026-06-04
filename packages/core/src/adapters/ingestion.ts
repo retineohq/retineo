@@ -16,6 +16,8 @@ import type { CASStorage, computeHash as ComputeHashFn } from '../storage/cas.js
 import type { Registry } from '../storage/registry.js';
 import type { NodeBuilder } from '../storage/node-builder.js';
 import type { AdapterManager } from './manager.js';
+import type { Logger } from '../utils/logger.js';
+import { getGlobalLogger } from '../utils/logger.js';
 
 export interface IngestionService {
   ingestFile(filePath: string): Promise<ContextNode>;
@@ -28,30 +30,33 @@ export class DefaultIngestionService implements IngestionService {
   private nodeBuilder: NodeBuilder;
   private adapterManager: AdapterManager;
   private computeHash: typeof ComputeHashFn;
+  private logger: Logger;
 
   constructor(
     cas: CASStorage,
     registry: Registry,
     nodeBuilder: NodeBuilder,
     adapterManager: AdapterManager,
-    computeHashImpl: typeof ComputeHashFn
+    computeHashImpl: typeof ComputeHashFn,
+    logger?: Logger
   ) {
     this.cas = cas;
     this.registry = registry;
     this.nodeBuilder = nodeBuilder;
     this.adapterManager = adapterManager;
     this.computeHash = computeHashImpl;
+    this.logger = logger ?? getGlobalLogger().child({ layer: 'ingestion' });
   }
 
   async ingestFile(filePath: string): Promise<ContextNode> {
     const absolutePath = path.resolve(filePath);
+    this.logger.info('ingest.start', { sourcePath: absolutePath });
     const rawBuffer = await readFile(absolutePath);
     const rawHash = this.computeHash(rawBuffer);
 
-    // Idempotency check
     const existing = this.registry.getSourceByRawHash(rawHash);
     if (existing) {
-      // Return reconstructed root node from CAS
+      this.logger.info('ingest.duplicate', { sourcePath: absolutePath, rawHash });
       const rootHash = existing.rootHash || rawHash;
       if (this.cas.exists(rootHash)) {
         const obj = await this.cas.readObject(rootHash);
@@ -67,7 +72,9 @@ export class DefaultIngestionService implements IngestionService {
     else if (ext === '.pdf') mimeType = 'application/pdf';
 
     const adapterId = await this.adapterManager.resolve(absolutePath, mimeType);
+    this.logger.info('adapter.ingest.start', { sourcePath: absolutePath, adapterId });
     const normalized = await this.adapterManager.ingest(absolutePath, mimeType);
+    this.logger.info('adapter.ingest.complete', { sourcePath: absolutePath, adapterId, contentLength: normalized.content.length });
 
     const contentHash = this.computeHash(normalized.content);
 
@@ -87,6 +94,7 @@ export class DefaultIngestionService implements IngestionService {
     let rootNode: ContextNode;
 
     if (normalized.segments && normalized.segments.length > 0) {
+      this.logger.info('ingest.segment', { sourcePath: absolutePath, segmentCount: normalized.segments.length });
       // Multi-segment ingestion
       rootNode = await this.nodeBuilder.buildRoot(source, normalized, rawHash);
       const children = await this.nodeBuilder.buildSegments(
@@ -154,6 +162,7 @@ export class DefaultIngestionService implements IngestionService {
       completedAt: null,
     };
     this.registry.insertJob(job);
+    this.logger.info('ingest.complete', { sourcePath: absolutePath, nodeId: rootNode.id, jobId: job.id });
 
     // Queue GENERATE_L1 for each child segment too
     for (const childId of rootNode.childrenIds) {

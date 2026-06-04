@@ -12,6 +12,8 @@ import type {
   InitializeResult,
   ShutdownParams,
 } from './protocol.js';
+import type { Logger } from '../utils/logger.js';
+import { getGlobalLogger } from '../utils/logger.js';
 
 export interface AdapterProcessRunner {
   spawn(
@@ -23,9 +25,11 @@ export interface AdapterProcessRunner {
 
 export class DefaultAdapterProcessRunner implements AdapterProcessRunner {
   private workDir: string;
+  private logger: Logger;
 
-  constructor(workDir: string) {
+  constructor(workDir: string, logger?: Logger) {
     this.workDir = workDir;
+    this.logger = logger ?? getGlobalLogger().child({ layer: 'adapter' });
   }
 
   async spawn(
@@ -53,9 +57,10 @@ export class DefaultAdapterProcessRunner implements AdapterProcessRunner {
           `Adapter initialize failed: ${response.error.message}`
         );
       }
-      // Initialize succeeded — transport is ready
+      this.logger.info('adapter.spawn', { adapterPath });
       return transport;
     } catch (err) {
+      this.logger.error('adapter.spawn.failed', { adapterPath, error: String(err) });
       await transport.close();
       throw err;
     }
@@ -78,12 +83,12 @@ export class DefaultAdapterProcessRunner implements AdapterProcessRunner {
       // Shutdown request may fail if process already dead — ignore
     }
 
-    // Force close after timeout
     const timeout = setTimeout(() => {
       // transport.close() handles SIGTERM
     }, timeoutMs);
 
     await transport.close();
     clearTimeout(timeout);
+    this.logger.info('adapter.kill');
   }
 }

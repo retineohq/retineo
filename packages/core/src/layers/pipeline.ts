@@ -12,6 +12,8 @@ import type { L2Generator } from './l2-generator.js';
 import type { L3Generator } from './l3-generator.js';
 import { randomUUID } from 'crypto';
 import path from 'path';
+import type { Logger } from '../utils/logger.js';
+import { getGlobalLogger } from '../utils/logger.js';
 
 export interface CompilationPipeline {
   processJob(job: JobRecord): Promise<void>;
@@ -29,6 +31,7 @@ export interface CompilationPipelineDeps {
   llmProvider: LLMProvider;
   embeddingProvider: EmbeddingProvider;
   dataDir: string;
+  logger?: Logger;
 }
 
 function makeGeneratorInfo(id: string, version: string, provider?: LLMProvider | EmbeddingProvider): GeneratorInfo {
@@ -55,27 +58,36 @@ async function writeNodeBuildManifest(cas: CASStorage, nodeHash: Hash, manifest:
 
 export class DefaultCompilationPipeline implements CompilationPipeline {
   private deps: CompilationPipelineDeps;
+  private logger: Logger;
 
   constructor(deps: CompilationPipelineDeps) {
     this.deps = deps;
+    this.logger = deps.logger ?? getGlobalLogger().child({ layer: 'pipeline' });
   }
 
   async processJob(job: JobRecord): Promise<void> {
     const payload = JSON.parse(job.payload) as { nodeId: string; sourceId?: string };
     const nodeHash = payload.nodeId;
+    this.logger.info(`pipeline.${job.type.toLowerCase()}.start`, { jobId: job.id, nodeHash });
 
-    switch (job.type) {
-      case 'GENERATE_L1':
-        await this.processL1(nodeHash);
-        break;
-      case 'GENERATE_L2':
-        await this.processL2(nodeHash);
-        break;
-      case 'GENERATE_L3':
-        await this.processL3(nodeHash);
-        break;
-      default:
-        throw new Error(`Unknown job type: ${job.type}`);
+    try {
+      switch (job.type) {
+        case 'GENERATE_L1':
+          await this.processL1(nodeHash);
+          break;
+        case 'GENERATE_L2':
+          await this.processL2(nodeHash);
+          break;
+        case 'GENERATE_L3':
+          await this.processL3(nodeHash);
+          break;
+        default:
+          throw new Error(`Unknown job type: ${job.type}`);
+      }
+      this.logger.info('pipeline.complete', { jobId: job.id, nodeHash, type: job.type });
+    } catch (err) {
+      this.logger.error('pipeline.retry', { jobId: job.id, nodeHash, type: job.type, error: String(err) });
+      throw err;
     }
   }
 

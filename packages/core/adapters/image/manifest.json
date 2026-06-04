@@ -1,0 +1,9 @@
+{
+  "id": "image",
+  "version": "1.0.0",
+  "mimeTypes": ["image/png", "image/jpeg", "image/tiff", "image/bmp", "image/webp"],
+  "extensions": [".png", ".jpg", ".jpeg", ".tiff", ".bmp", ".webp"],
+  "entry": "adapter.js",
+  "status": "stable",
+  "defaultLanguage": "eng"
+}
