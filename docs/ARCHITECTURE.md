@@ -44,6 +44,28 @@ Adapters are external child processes that speak JSON-RPC 2.0 over stdin/stdout.
                                                                          └─────────┘
 ```
 
+## Retrieval Pipeline (Phase 4)
+
+```
+User Query
+  ↓
+QueryAnalyzer        (language detection → intent classification → enrichment)
+  ↓
+RetrievalService     (L3 semantic search → L2 rerank → L1/L0 cascade)
+  ↓
+ContextAssembler     (token budgets → citations → drill-down tree)
+  ↓
+AssembledContext     (ready for LLM consumption)
+```
+
+| Stage | What it does | Key config |
+|-------|-------------|------------|
+| **QueryAnalyzer** | Detects language, classifies intent, resolves pronouns, extracts entities | `search.languageDetection`, `search.prompts` |
+| **L3 Search** | Brute-force cosine over `embeddings.jsonl` + BM25 hybrid | `search.semantic.topK`, `search.semantic.hybridWeight` |
+| **L2 Rerank** | Scores by concept/claim/summary/language overlap | `search.rerank.weights` |
+| **L1/L0 Cascade** | Loads deeper artifacts based on intent | `search.cascade.budgets` |
+| **ContextAssembler** | Allocates tokens, formats citations, builds drill-down | `search.citations.format`, `maxTokens` |
+
 | Layer | Input | Output | Stored In |
 |-------|-------|--------|-----------|
 | **L0** | Adapter output | Normalized text + metadata blocks | `objects/{hash}/content.md` + `content.meta.json` |
@@ -85,10 +107,11 @@ data/
 | `adapters/` | JSON-RPC protocol, transport, runner, manager, ingestion service |
 | `storage/` | CAS (filesystem), Registry (SQLite), NodeBuilder, Config |
 | `embeddings/` | `(planned)` Vector generation & caching |
-| `search/` | `(planned)` HNSW, hybrid retrieval, ranking |
+| `search/` | Query analysis, semantic/keyword/hybrid retrieval, L2 rerank, L1/L0 cascade, context assembly |
 | `llm/` | Provider abstraction, rate limiting, factory (Ollama, OpenAI-compatible, Mock) |
 | `layers/` | L1/L2/L3 generators, compilation pipeline, queue worker |
 | `context/` | `(planned)` Context assembly, window management |
+| `i18n/` | Language packs, detection (franc/cld3/heuristic), cross-lingual search |
 | `ghost/` | `(planned)` Orphan recovery, garbage collection |
 | `bridge/` | `(planned)` HTTP/gRPC API, WebSocket streaming |
 | `mcp/` | `(planned)` Model Context Protocol server |

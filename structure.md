@@ -21,13 +21,14 @@ echo-core/
 │   ├── adapters/        # Adapter IPC protocol
 │   ├── storage/         # CAS, Registry, Config, NodeBuilder
 │   ├── embeddings/      # (planned) Vector embedding generation & caching
-│   ├── search/          # (planned) HNSW, hybrid retrieval, candidate ranking
+│   ├── search/          # Query analysis, retrieval, context assembly
 │   ├── llm/             # LLM provider abstraction, rate limiting, factory
 │   ├── layers/          # L1/L2/L3 compilation pipelines, queue worker
 │   ├── context/         # (planned) Context assembly, window management
 │   ├── ghost/           # (planned) Orphan recovery, garbage collection
 │   ├── bridge/          # (planned) HTTP/gRPC API, WebSocket streaming
 │   ├── mcp/             # (planned) Model Context Protocol server
+│   ├── i18n/            # Language packs, detection, cross-lingual search
 │   └── utils/           # (planned) Shared helpers, hash utils, validation
 ├── packages/core/adapters/  # Built-in adapter scripts (CommonJS)
 │   ├── text/                # Text adapter (.txt)
@@ -38,11 +39,17 @@ echo-core/
 │   └── image-mock/          # Mock image adapter (.png, .jpg, .jpeg)
 ├── tests/
 │   ├── storage/         # CAS, Registry, NodeBuilder tests
-│   └── adapters/        # Transport, Manager, Ingestion, Mock adapter tests
+│   ├── adapters/        # Transport, Manager, Ingestion, Mock adapter tests
+│   ├── llm/             # Provider factory, mock provider, rate limiter tests
+│   ├── layers/          # L1/L2/L3 generators, pipeline, worker tests
+│   ├── search/          # Query analyzer, retrieval service, context assembler, end-to-end
+│   └── i18n/            # Language detector, pack registry tests
 ├── docs/                # Developer documentation
 │   ├── README.md        # Documentation index
 │   ├── ARCHITECTURE.md  # High-level system overview
-│   └── ADAPTER_GUIDE.md # Third-party adapter developer guide
+│   ├── ADAPTER_GUIDE.md # Third-party adapter developer guide
+│   ├── SEARCH.md        # Search configuration & retrieval pipeline guide
+│   └── MULTILINGUAL.md  # Multilingual support & language pack guide
 ├── structure.md         # This file
 ├── package.json
 ├── tsconfig.json
@@ -90,11 +97,14 @@ echo-core/
 |------|---------|-------------|
 | `index.ts` | `(planned)` | Barrel export placeholder. |
 
-### `src/search/` — Retrieval & Ranking (planned)
+### `src/search/` — Retrieval & Ranking
 
 | File | Exports | Description |
 |------|---------|-------------|
-| `index.ts` | `(planned)` | Barrel export placeholder. |
+| `query-analyzer.ts` | `QueryAnalyzer`, `DefaultQueryAnalyzer`, `AnalyzedQuery`, `QueryIntent`, `QuerySignal`, `SessionContext` | Language detection, intent classification, entity extraction, pronoun resolution. |
+| `retrieval-service.ts` | `RetrievalService`, `DefaultRetrievalService`, `CandidateNode`, `RetrievalResult`, `Citation`, `SearchOptions` | L3 semantic/keyword/hybrid search, L2 rerank, L1/L0 cascade. |
+| `context-assembler.ts` | `ContextAssembler`, `DefaultContextAssembler`, `AssembledContext`, `ContextSegment` | Token budget allocation, citation generation, drill-down segments. |
+| `index.ts` | Barrel export of `query-analyzer.js`, `retrieval-service.js`, `context-assembler.js` | Public search API entrypoint. |
 
 ### `src/llm/` — LLM Provider Abstraction
 
@@ -143,6 +153,18 @@ echo-core/
 |------|---------|-------------|
 | `index.ts` | `(planned)` | Barrel export placeholder. |
 
+### `src/i18n/` — Multilingual Support
+
+| File | Exports | Description |
+|------|---------|-------------|
+| `language-pack.ts` | `LanguagePack` | Interface for per-language prompts and search tuning. |
+| `detector.ts` | `LanguageDetector`, `HeuristicDetector`, `FrancDetector`, `CLD3Detector`, `createDetector` | Language detection with franc/cld3/heuristic providers. |
+| `registry.ts` | `LanguagePackRegistry`, `DefaultLanguagePackRegistry` | Built-in pack registry (en, ru, zh) + custom pack registration. |
+| `packs/en.ts` | `enPack` | English language pack with default prompts. |
+| `packs/ru.ts` | `ruPack` | Russian language pack with Cyrillic script regex. |
+| `packs/zh.ts` | `zhPack` | Chinese language pack with CJK script regex. |
+| `index.ts` | Barrel export of `language-pack.js`, `detector.js`, `registry.js`, `packs/*.js` | Public i18n API entrypoint. |
+
 ### `src/utils/` — Shared Utilities (planned)
 
 | File | Exports | Description |
@@ -187,6 +209,22 @@ echo-core/
 | `pipeline.test.ts` | GENERATE_L1 → L2 enqueue, GENERATE_L2 → L3 enqueue, GENERATE_L3 manifest update, end-to-end | DefaultCompilationPipeline orchestration. |
 | `worker.test.ts` | processNext, empty queue, crash recovery, retry on failure, start/stop lifecycle | DefaultQueueWorker lease model. |
 
+### `tests/search/` — Search & Retrieval Tests
+
+| File | Tests | Description |
+|------|-------|-------------|
+| `query-analyzer.test.ts` | Language detection (heuristic/franc), intent classification (rule/LLM), entity extraction, pronoun resolution, signal generation | DefaultQueryAnalyzer correctness. |
+| `retrieval-service.test.ts` | L3 semantic search, keyword search, hybrid mode, threshold filtering, L2 rerank scoring, L1/L0 cascade, trace | DefaultRetrievalService correctness. |
+| `context-assembler.test.ts` | Token budgets per intent, cascade modes, citation generation, drill-down children, language propagation | DefaultContextAssembler correctness. |
+| `end-to-end.test.ts` | Full pipeline: Russian query → detect → search → rerank → assemble → citations in Russian | Cross-lingual end-to-end validation. |
+
+### `tests/i18n/` — Multilingual Tests
+
+| File | Tests | Description |
+|------|-------|-------------|
+| `detector.test.ts` | Heuristic script detection, franc fallback, cld3 fallback, createDetector factory | LanguageDetector implementations. |
+| `packs.test.ts` | Pack loading, prompt resolution, search tuning values, script regex, custom pack registration | DefaultLanguagePackRegistry correctness. |
+
 ---
 
 ## Functional Cross-Reference Index
@@ -218,6 +256,13 @@ echo-core/
 | **Process background jobs with lease recovery** | `DefaultQueueWorker` | `src/layers/worker.ts` | `Registry.acquireLease`, `heartbeatJob` |
 | **Load LLM providers from config** | `DefaultLLMProviderFactory` | `src/llm/factory.ts` | `ProviderConfig`, `OllamaProvider`, `OpenAICompatibleProvider` |
 | **Write a third-party LLM provider** | `LLM_PROVIDERS.md` | `docs/LLM_PROVIDERS.md` | `LLMProvider`, `EmbeddingProvider` |
+| **Analyze a query (language, intent, entities)** | `DefaultQueryAnalyzer` | `src/search/query-analyzer.ts` | `LanguageDetector`, `LanguagePackRegistry` |
+| **Search the index (semantic/keyword/hybrid)** | `DefaultRetrievalService` | `src/search/retrieval-service.ts` | `EmbeddingProvider`, `CASStorage`, `bruteForceSearch` |
+| **Assemble context for LLM consumption** | `DefaultContextAssembler` | `src/search/context-assembler.ts` | `CandidateNode`, `SearchConfig` |
+| **Detect language of a query** | `createDetector` | `src/i18n/detector.ts` | `FrancDetector`, `HeuristicDetector`, `CLD3Detector` |
+| **Load or register a language pack** | `DefaultLanguagePackRegistry` | `src/i18n/registry.ts` | `LanguagePack`, `enPack`, `ruPack`, `zhPack` |
+| **Add a new language to ECHO** | `LanguagePack` + `DefaultLanguagePackRegistry` | `src/i18n/packs/{code}.ts` | `docs/MULTILINGUAL.md` |
+| **Configure search behavior** | `FileConfigManager` | `src/storage/config.ts` | `SearchConfig`, `I18nConfig` |
 | **Expose ECHO over HTTP/WebSocket** | `(planned)` `bridge/` | `src/bridge/` | `mcp/`, `context/` |
 | **Serve as an MCP server** | `(planned)` `mcp/` | `src/mcp/` | `bridge/`, `search/` |
 | **Add a new LLM provider type to factory** | `DefaultLLMProviderFactory` | `src/llm/factory.ts` | Extend `createProvider` switch |
