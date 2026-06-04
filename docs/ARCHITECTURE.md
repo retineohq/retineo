@@ -113,7 +113,33 @@ data/
 | `context/` | `(planned)` Context assembly, window management |
 | `i18n/` | Language packs, detection (franc/cld3/heuristic), cross-lingual search |
 | `ghost/` | `(planned)` Orphan recovery, garbage collection |
-| `bridge/` | `(planned)` HTTP/gRPC API, WebSocket streaming |
-| `mcp/` | `(planned)` Model Context Protocol server |
+| `bridge/` | HTTP REST API + SSE streaming (Fastify, localhost-only) |
+| `mcp/` | Model Context Protocol server (stdio transport) |
+
+## User Interface Layer (Phase 5)
+
+```
+User / External Agent
+  ↓
+┌─────────────────────────────────────────┐
+│  CLI          │  HTTP API    │  MCP      │
+│  echo ingest  │  POST /v1/   │  echo_    │
+│  echo search  │  ingest      │  search   │
+│  echo status  │  POST /v1/   │  echo_    │
+│  echo compile │  search      │  ingest   │
+│  echo config  │  GET /v1/    │  echo_    │
+│               │  status      │  status   │
+│               │  SSE /v1/    │           │
+│               │  jobs/:id    │           │
+└─────────────────────────────────────────┘
+  ↓
+IngestionService / RetrievalService / CompilationPipeline
+```
+
+| Interface | Transport | Default | Auth |
+|-----------|-----------|---------|------|
+| **CLI** | `stdio` | `echo` command | none (local process) |
+| **HTTP API** | Fastify | `127.0.0.1:37891` | none in MVP (future: API keys) |
+| **MCP** | stdio (JSON-RPC) | Claude Desktop, Cursor | none |
 
 See [`structure.md`](../structure.md) for the complete file listing and cross-reference index.

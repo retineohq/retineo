@@ -43,7 +43,11 @@ echo-core/
 │   ├── llm/             # Provider factory, mock provider, rate limiter tests
 │   ├── layers/          # L1/L2/L3 generators, pipeline, worker tests
 │   ├── search/          # Query analyzer, retrieval service, context assembler, end-to-end
-│   └── i18n/            # Language detector, pack registry tests
+│   ├── i18n/            # Language detector, pack registry tests
+│   ├── bridge/          # HTTP server, routes, SSE tests
+│   ├── cli/             # CLI command parsing and execution tests
+│   ├── mcp/             # MCP server initialization and tool tests
+│   └── integration/     # End-to-end: CLI → HTTP → MCP
 ├── docs/                # Developer documentation
 │   ├── README.md        # Documentation index
 │   ├── ARCHITECTURE.md  # High-level system overview
@@ -141,17 +145,33 @@ echo-core/
 |------|---------|-------------|
 | `index.ts` | `(planned)` | Barrel export placeholder. |
 
-### `src/bridge/` — External API (planned)
+### `src/bridge/` — External API
 
 | File | Exports | Description |
 |------|---------|-------------|
-| `index.ts` | `(planned)` | Barrel export placeholder. |
+| `types.ts` | `SearchRequest`, `SearchResponse`, `IngestRequest`, `IngestResponse`, `StatusResponse`, `NodeResponse`, `SourceResponse`, `JobResponse`, `BridgeError`, `BridgeConfig` | HTTP API request/response types. |
+| `server.ts` | `BridgeServer`, `FastifyBridgeServer`, `BridgeServerOptions` | Fastify-based localhost-only HTTP server. |
+| `routes.ts` | `registerRoutes` | Route registration (search, ingest, status, nodes, sources, jobs). |
+| `handlers.ts` | `BridgeHandlersDeps`, `createHandlers` | Request handlers calling core services. |
+| `sse.ts` | `SSEStream`, `createSSEStream` | Server-Sent Events for job progress and search streaming. |
+| `index.ts` | Barrel export of `types.js`, `server.js`, `routes.js`, `handlers.js`, `sse.js` | Public bridge API entrypoint. |
 
-### `src/mcp/` — Model Context Protocol (planned)
+### `src/cli/` — Command-Line Interface
 
 | File | Exports | Description |
 |------|---------|-------------|
-| `index.ts` | `(planned)` | Barrel export placeholder. |
+| `commands.ts` | `CLICommands`, `CLICommandsDeps`, `IngestCLIOptions`, `SearchCLIOptions` | CLI command implementations (ingest, search, status, compile, config, jobs, recover). |
+| `formatters.ts` | `formatSearchResult`, `formatStatus`, `formatJobs`, `formatIngestResult`, `formatConfig`, `formatRecoverResult` | Output formatters for CLI commands. |
+| `index.ts` | `createCLI` | Commander-based CLI entry point. |
+
+### `src/mcp/` — Model Context Protocol
+
+| File | Exports | Description |
+|------|---------|-------------|
+| `tools.ts` | `MCPTool`, `ECHO_SEARCH_TOOL`, `ECHO_INGEST_TOOL`, `ECHO_STATUS_TOOL`, `ECHO_GET_NODE_TOOL`, `ALL_TOOLS` | MCP tool definitions. |
+| `handlers.ts` | `MCPHandlersDeps`, `createHandlers` | Tool handlers calling core services. |
+| `server.ts` | `MCPServer`, `EchoMCPServer`, `MCPServerOptions` | MCP server over stdio transport. |
+| `index.ts` | Barrel export of `tools.js`, `handlers.js`, `server.js` | Public MCP API entrypoint. |
 
 ### `src/i18n/` — Multilingual Support
 
@@ -218,6 +238,34 @@ echo-core/
 | `context-assembler.test.ts` | Token budgets per intent, cascade modes, citation generation, drill-down children, language propagation | DefaultContextAssembler correctness. |
 | `end-to-end.test.ts` | Full pipeline: Russian query → detect → search → rerank → assemble → citations in Russian | Cross-lingual end-to-end validation. |
 
+### `tests/bridge/` — Bridge Tests
+
+| File | Tests | Description |
+|------|-------|-------------|
+| `server.test.ts` | `FastifyBridgeServer` start/stop, route registration, GET /v1/status | HTTP server lifecycle. |
+| `search-route.test.ts` | POST /v1/search (valid, invalid, empty) | Search route validation. |
+| `ingest-route.test.ts` | POST /v1/ingest (valid, missing sourcePath) | Ingest route validation. |
+| `sse.test.ts` | SSE streaming, headers, events | Server-Sent Events correctness. |
+
+### `tests/cli/` — CLI Tests
+
+| File | Tests | Description |
+|------|-------|-------------|
+| `commands.test.ts` | `ingest`, `status`, `config`, `recover` with mocked services | CLI command parsing and execution. |
+
+### `tests/mcp/` — MCP Tests
+
+| File | Tests | Description |
+|------|-------|-------------|
+| `server.test.ts` | `EchoMCPServer` construction | MCP server initialization. |
+| `tools.test.ts` | `echo_search`, `echo_ingest`, `echo_status`, `echo_get_node` | Tool execution with mocked services. |
+
+### `tests/integration/` — Integration Tests
+
+| File | Tests | Description |
+|------|-------|-------------|
+| `end-to-end.test.ts` | CLI ingest → HTTP search → MCP status | Full UI layer integration. |
+
 ### `tests/i18n/` — Multilingual Tests
 
 | File | Tests | Description |
@@ -263,8 +311,9 @@ echo-core/
 | **Load or register a language pack** | `DefaultLanguagePackRegistry` | `src/i18n/registry.ts` | `LanguagePack`, `enPack`, `ruPack`, `zhPack` |
 | **Add a new language to ECHO** | `LanguagePack` + `DefaultLanguagePackRegistry` | `src/i18n/packs/{code}.ts` | `docs/MULTILINGUAL.md` |
 | **Configure search behavior** | `FileConfigManager` | `src/storage/config.ts` | `SearchConfig`, `I18nConfig` |
-| **Expose ECHO over HTTP/WebSocket** | `(planned)` `bridge/` | `src/bridge/` | `mcp/`, `context/` |
-| **Serve as an MCP server** | `(planned)` `mcp/` | `src/mcp/` | `bridge/`, `search/` |
+| **Expose ECHO over HTTP/WebSocket** | `FastifyBridgeServer` | `src/bridge/server.ts` | `bridge/routes.ts`, `bridge/sse.ts` |
+| **Serve as an MCP server** | `EchoMCPServer` | `src/mcp/server.ts` | `mcp/tools.ts`, `mcp/handlers.ts` |
+| **Run CLI commands** | `CLICommands` + `createCLI` | `src/cli/commands.ts`, `src/cli/index.ts` | `commander`, `bridge/types.ts` |
 | **Add a new LLM provider type to factory** | `DefaultLLMProviderFactory` | `src/llm/factory.ts` | Extend `createProvider` switch |
 
 ---
