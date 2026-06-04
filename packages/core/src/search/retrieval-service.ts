@@ -1,6 +1,6 @@
 /**
  * ECHO Core — Retrieval Service
- * Phase 4: L3 semantic search → L2 rerank → L1/L0 cascade.
+ * Phase 7: L3 semantic search → L2 rerank → L1/L0 cascade with LRU cache.
  */
 
 import { readFile, existsSync } from 'fs';
@@ -13,6 +13,8 @@ import type { SearchConfig } from '../storage/config.js';
 import type { AnalyzedQuery, QueryIntent } from './query-analyzer.js';
 import type { Logger } from '../utils/logger.js';
 import { getGlobalLogger } from '../utils/logger.js';
+import type { LRUCache } from '../utils/cache.js';
+import { SimpleLRUCache } from '../utils/cache.js';
 
 const readFileAsync = promisify(readFile);
 
@@ -75,7 +77,7 @@ function cosineSimilarity(a: number[], b: number[]): number {
   return dot / (Math.sqrt(normA) * Math.sqrt(normB) || 1);
 }
 
-/** Load all embeddings from jsonl. MVP simplification — replace with HNSW in future phase. */
+/** Load all embeddings from jsonl. */
 async function loadEmbeddings(indexDir: string): Promise<Array<{ hash: string; vector: number[] }>> {
   const embeddingsPath = path.join(indexDir, 'embeddings.jsonl');
   if (!existsSync(embeddingsPath)) return [];
@@ -120,7 +122,6 @@ function keywordScore(query: string, bm25: Record<string, string[]>): Map<string
       scores.set(h, (scores.get(h) ?? 0) + 1);
     }
   }
-  // Normalize
   let max = 0;
   for (const v of scores.values()) max = Math.max(max, v);
   if (max > 0) {
@@ -135,6 +136,9 @@ export interface RetrievalServiceDeps {
   indexDir: string;
   config?: SearchConfig;
   logger?: Logger;
+  embeddingCache?: LRUCache<string, number[]>;
+  l2Cache?: LRUCache<string, L2Artifact>;
+  searchCache?: LRUCache<string, RetrievalResult>;
 }
 
 export class DefaultRetrievalService implements RetrievalService {
@@ -143,12 +147,18 @@ export class DefaultRetrievalService implements RetrievalService {
   private indexDir: string;
   private config: SearchConfig;
   private logger: Logger;
+  private embeddingCache: LRUCache<string, number[]>;
+  private l2Cache: LRUCache<string, L2Artifact>;
+  private searchCache: LRUCache<string, RetrievalResult>;
 
   constructor(deps: RetrievalServiceDeps) {
     this.embedder = deps.embeddingProvider;
     this.cas = deps.casStorage;
     this.indexDir = deps.indexDir;
     this.logger = deps.logger ?? getGlobalLogger().child({ layer: 'search' });
+    this.embeddingCache = deps.embeddingCache ?? new SimpleLRUCache(1000);
+    this.l2Cache = deps.l2Cache ?? new SimpleLRUCache(500);
+    this.searchCache = deps.searchCache ?? new SimpleLRUCache(100, 300000);
     this.config = deps.config ?? {
       defaultLanguage: 'en',
       languageDetection: { provider: 'franc', fallback: 'heuristic', confidenceThreshold: 0.7 },
@@ -163,6 +173,13 @@ export class DefaultRetrievalService implements RetrievalService {
 
   async search(query: AnalyzedQuery, options: SearchOptions = {}): Promise<RetrievalResult> {
     const start = Date.now();
+    const cacheKey = `${query.enrichedQuery}|${options.mode ?? 'semantic'}|${options.topK ?? ''}|${options.threshold ?? ''}`;
+    const cached = this.searchCache.get(cacheKey);
+    if (cached) {
+      this.logger.info('search.cache.hit', { query: query.originalQuery });
+      return cached;
+    }
+
     const trace: RetrievalTrace = { steps: [], durationMs: 0 };
     this.logger.info('search.query', { query: query.originalQuery, mode: options.mode ?? 'semantic' });
 
@@ -176,7 +193,7 @@ export class DefaultRetrievalService implements RetrievalService {
     // L3 Semantic Search
     trace.steps.push('L3: load embeddings');
     const embeddings = await loadEmbeddings(this.indexDir);
-    const [queryVector] = await this.embedder.embed([query.enrichedQuery]);
+    const queryVector = await this.getQueryVector(query.enrichedQuery);
 
     let l3Scores: Array<{ hash: string; score: number }> = [];
 
@@ -201,7 +218,7 @@ export class DefaultRetrievalService implements RetrievalService {
         for (const [hash, score] of kwScores) {
           if (score >= threshold) l3Scores.push({ hash, score });
         }
-        l3Scores.sort((a, b) => b.score - b.score);
+        l3Scores.sort((a, b) => b.score - a.score);
         l3Scores = l3Scores.slice(0, topK);
       }
     }
@@ -268,22 +285,37 @@ export class DefaultRetrievalService implements RetrievalService {
     trace.durationMs = Date.now() - start;
     this.logger.info('search.duration', { query: query.originalQuery, durationMs: trace.durationMs, candidates: reranked.length, selected: selected.length });
 
-    return {
+    const result: RetrievalResult = {
       query: query.originalQuery,
       candidates: reranked,
       selected,
       citations,
       trace,
     };
+
+    this.searchCache.set(cacheKey, result);
+    return result;
+  }
+
+  private async getQueryVector(query: string): Promise<number[]> {
+    const cached = this.embeddingCache.get(query);
+    if (cached) return cached;
+    const [vector] = await this.embedder.embed([query]);
+    this.embeddingCache.set(query, vector);
+    return vector;
   }
 
   private async loadL2(hash: Hash): Promise<L2Artifact | null> {
+    const cached = this.l2Cache.get(hash);
+    if (cached) return cached;
     try {
       const objPath = this.cas.getObjectPath(hash);
       const l2Path = path.join(objPath, 'L2.json');
       if (!existsSync(l2Path)) return null;
       const raw = await readFileAsync(l2Path, 'utf-8');
-      return JSON.parse(raw) as L2Artifact;
+      const l2 = JSON.parse(raw) as L2Artifact;
+      this.l2Cache.set(hash, l2);
+      return l2;
     } catch {
       return null;
     }
@@ -293,7 +325,6 @@ export class DefaultRetrievalService implements RetrievalService {
     const w = this.config.rerank.weights;
     let score = 0;
 
-    // Concept overlap
     const qTerms = new Set(query.entities.concat(query.signals.map((s) => s.value)));
     const concepts = new Set(l2.concepts.map((c) => c.toLowerCase()));
     let conceptHits = 0;
@@ -304,7 +335,6 @@ export class DefaultRetrievalService implements RetrievalService {
     }
     score += conceptHits * w.concept;
 
-    // Claim match
     const qStr = query.enrichedQuery.toLowerCase();
     let claimHits = 0;
     for (const claim of l2.claims) {
@@ -312,7 +342,6 @@ export class DefaultRetrievalService implements RetrievalService {
     }
     score += claimHits * w.claim;
 
-    // Summary semantic similarity (approximate via keyword overlap)
     const summaryWords = new Set(l2.summary.toLowerCase().split(/\s+/));
     let summaryHits = 0;
     for (const t of qTerms) {
@@ -322,11 +351,7 @@ export class DefaultRetrievalService implements RetrievalService {
     }
     score += summaryHits * w.summary;
 
-    // Language match
-    // We don't store per-L2 language yet; skip if not available
-    // Future: read L2 metadata for language tag
-    // For now, apply neutral
-    score += w.language * 0.5; // neutral baseline
+    score += w.language * 0.5;
 
     return score;
   }
@@ -335,13 +360,11 @@ export class DefaultRetrievalService implements RetrievalService {
     const hash = candidate.nodeId;
     const objPath = this.cas.getObjectPath(hash);
 
-    // Load L1 if needed
     if (intent === 'section' || intent === 'precision') {
       try {
         const l1Path = path.join(objPath, 'L1.md');
         if (existsSync(l1Path)) {
           const l1Raw = await readFileAsync(l1Path, 'utf-8');
-          // Take first ~800 chars as preview
           candidate.l1Preview = l1Raw.slice(0, 800);
         }
       } catch {
@@ -349,13 +372,11 @@ export class DefaultRetrievalService implements RetrievalService {
       }
     }
 
-    // Load L0 if precision
     if (intent === 'precision') {
       try {
         const l0Path = path.join(objPath, 'content.md');
         if (existsSync(l0Path)) {
           const l0Raw = await readFileAsync(l0Path, 'utf-8');
-          // Find best matching chunk by keyword overlap
           const chunks = l0Raw.split('\n\n');
           let bestChunk = chunks[0] ?? l0Raw.slice(0, 512);
           let bestScore = -1;
@@ -367,7 +388,6 @@ export class DefaultRetrievalService implements RetrievalService {
             }
           }
           candidate.l0Preview = bestChunk.slice(0, 512);
-          // Approximate line range
           const linesBefore = l0Raw.slice(0, l0Raw.indexOf(bestChunk)).split('\n').length - 1;
           const lineCount = bestChunk.split('\n').length;
           candidate.lineRange = { start: linesBefore, end: linesBefore + lineCount };

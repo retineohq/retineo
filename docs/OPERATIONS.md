@@ -34,11 +34,31 @@ On `SIGTERM` / `SIGINT`, ECHO Core executes a 12-step clean shutdown:
 
 ## Health Checks
 
-| Check | Method |
-|-------|--------|
-| HTTP alive | `GET /v1/status` |
-| Worker alive | Heartbeat timestamp in registry |
-| SQLite | `PRAGMA integrity_check` |
+| Check | Method | Endpoint |
+|-------|--------|----------|
+| HTTP alive | `GET /v1/status` | Basic engine status |
+| Liveness | `GET /v1/health` | SQLite, CAS, LLM, worker probes |
+| Readiness | `GET /v1/ready` | Index loaded, queue healthy, not shutting down |
+| Worker alive | Heartbeat timestamp in registry | — |
+| SQLite | `PRAGMA integrity_check` | — |
+
+### Kubernetes Probe Example
+
+```yaml
+livenessProbe:
+  httpGet:
+    path: /v1/health
+    port: 37891
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /v1/ready
+    port: 37891
+  initialDelaySeconds: 2
+  periodSeconds: 5
+```
 
 ## Monitoring
 
@@ -50,9 +70,22 @@ All logs are JSON. Key metrics to alert on:
 | Search latency | `search.duration.durationMs` | > 2000 ms |
 | Lease expiry | `releaseExpiredLeases` result | > 0 (stuck workers) |
 | Shutdown forced | `shutdown.complete.exitCode` | 1 |
+| LLM circuit open | `echo_llm_errors_total` | > 100 |
+
+Prometheus scraping:
+
+```yaml
+scrape_configs:
+  - job_name: 'echo-core'
+    static_configs:
+      - targets: ['localhost:37891']
+    metrics_path: /v1/metrics/prometheus
+```
 
 ## Deployment Notes
 
 - Docker: use `STOPSIGNAL SIGTERM` (default)
 - Kubernetes: `terminationGracePeriodSeconds` should be ≥ 35s
 - systemd: `TimeoutStopSec=35`
+- Set `ECHO_MASTER_KEY` for production secrets encryption
+- Restrict `~/.echo/` permissions to `0700`

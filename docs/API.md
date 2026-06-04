@@ -83,6 +83,58 @@ Engine status.
 }
 ```
 
+### `GET /v1/health`
+
+Liveness probe. Returns 200 if healthy, 503 if any subsystem check fails.
+
+**Response:**
+```json
+{
+  "status": "healthy",
+  "checks": {
+    "sqlite": true,
+    "cas": true,
+    "llmProvider": true,
+    "worker": true
+  },
+  "timestamp": "2024-01-01T00:00:00.000Z"
+}
+```
+
+### `GET /v1/ready`
+
+Readiness probe. Returns 200 only when the engine is ready to serve requests.
+
+**Response:**
+```json
+{
+  "ready": true,
+  "indexLoaded": true,
+  "queueHealthy": true
+}
+```
+
+### `GET /v1/metrics`
+
+Operational metrics as JSON.
+
+**Response:**
+```json
+{
+  "nodes": 1234,
+  "sources": 1234,
+  "jobs": { "pending": 10, "running": 2, "completed": 500, "failed": 1 },
+  "index": { "vectorCount": 10000, "lastIndexed": "2024-01-01T00:00:00Z" },
+  "adapters": { "text": 500, "pdf": 100 },
+  "searches": { "total": 2000, "avgDurationMs": 45 },
+  "llm": { "requests": 5000, "errors": 10, "avgLatencyMs": 120 }
+}
+```
+
+### `GET /v1/metrics/prometheus`
+
+Prometheus-compatible text format export.
+
 ### `GET /v1/nodes/:hash`
 
 Get node by content hash.
@@ -118,3 +170,13 @@ Codes:
 - `INGEST_FAILED` — 422
 - `SEARCH_FAILED` — 500
 - `INTERNAL_ERROR` — 500
+- `ADAPTER_SPAWN_FAILED` — 500
+- `ADAPTER_UNSUPPORTED_MIME` — 400
+- `INGEST_CAS_WRITE_FAILED` — 500
+- `LLM_TIMEOUT` — 504
+- `LLM_CIRCUIT_OPEN` — 503
+- `LLM_RATE_LIMITED` — 429
+- `SEARCH_EMPTY` — 404
+- `SEARCH_TIMEOUT` — 504
+- `CONFIG_SECRET_NOT_FOUND` — 400
+- `BRIDGE_SHUTDOWN` — 503

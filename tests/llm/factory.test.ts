@@ -1,5 +1,6 @@
 /**
  * LLM Provider Factory Tests
+ * Phase 7: Updated for async loadFromConfig and circuit breaker wrapping.
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
@@ -14,7 +15,7 @@ describe('DefaultLLMProviderFactory', () => {
     factory = new DefaultLLMProviderFactory();
   });
 
-  it('loads providers from config and resolves env vars', () => {
+  it('loads providers from config and resolves env vars', async () => {
     process.env.TEST_API_KEY = 'secret123';
     const config: EchoConfig = {
       dataDir: '/tmp/echo',
@@ -29,14 +30,14 @@ describe('DefaultLLMProviderFactory', () => {
       },
     } as unknown as EchoConfig;
 
-    factory.loadFromConfig(config);
+    await factory.loadFromConfig(config);
     expect(factory.list()).toContain('mock');
     const p = factory.get('mock');
     expect(p.config.apiKey).toBe('secret123');
     delete process.env.TEST_API_KEY;
   });
 
-  it('returns default provider', () => {
+  it('returns default provider', async () => {
     const config: EchoConfig = {
       dataDir: '/tmp/echo',
       defaultAdapter: 'file',
@@ -48,7 +49,7 @@ describe('DefaultLLMProviderFactory', () => {
       },
     } as unknown as EchoConfig;
 
-    factory.loadFromConfig(config);
+    await factory.loadFromConfig(config);
     expect(factory.getDefault().id).toBe('mock');
   });
 
@@ -59,7 +60,9 @@ describe('DefaultLLMProviderFactory', () => {
   it('allows manual registration', () => {
     const mock = new MockLLMProvider({ id: 'custom', type: 'mock', model: 'm' });
     factory.register('custom', mock);
-    expect(factory.get('custom')).toBe(mock);
+    const wrapped = factory.get('custom');
+    expect(wrapped.id).toBe('custom');
+    expect(wrapped.config.model).toBe('m');
   });
 });
 
@@ -70,7 +73,7 @@ describe('DefaultEmbeddingProviderFactory', () => {
     factory = new DefaultEmbeddingProviderFactory();
   });
 
-  it('loads embedding providers from config', () => {
+  it('loads embedding providers from config', async () => {
     const config: EchoConfig = {
       dataDir: '/tmp/echo',
       defaultAdapter: 'file',
@@ -82,7 +85,7 @@ describe('DefaultEmbeddingProviderFactory', () => {
       },
     } as unknown as EchoConfig;
 
-    factory.loadFromConfig(config);
+    await factory.loadFromConfig(config);
     expect(factory.list()).toContain('mock-embed');
     expect(factory.getDefault().id).toBe('mock-embed');
   });

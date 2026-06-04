@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * ECHO Core — CLI Entry Point
- * Phase 5: Commander-based CLI.
+ * Phase 7: Commander-based CLI with key management.
  */
 
 import { Command } from 'commander';
@@ -67,6 +67,37 @@ export function createCLI(deps: CLICommandsDeps): Command {
     .description('Recover an orphaned node')
     .action(async (hash: string) => {
       await commands.recover(hash);
+    });
+
+  // Key management
+  const keyCmd = program.command('key').description('Manage API keys and secrets');
+
+  keyCmd
+    .command('set <provider> <apiKey>')
+    .description('Encrypt and store an API key')
+    .action(async (provider: string, apiKey: string) => {
+      await commands.keySet(provider, apiKey);
+    });
+
+  keyCmd
+    .command('get <provider>')
+    .description('Show masked API key')
+    .action(async (provider: string) => {
+      await commands.keyGet(provider);
+    });
+
+  keyCmd
+    .command('delete <provider>')
+    .description('Delete stored API key')
+    .action(async (provider: string) => {
+      await commands.keyDelete(provider);
+    });
+
+  keyCmd
+    .command('list')
+    .description('List all stored keys (masked)')
+    .action(async () => {
+      await commands.keyList();
     });
 
   return program;

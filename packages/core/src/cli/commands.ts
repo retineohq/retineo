@@ -1,6 +1,6 @@
 /**
  * ECHO Core — CLI Commands
- * Phase 5: CLI command implementations.
+ * Phase 7: Added key management commands.
  */
 
 import type { IngestionService } from '../adapters/ingestion.js';
@@ -10,6 +10,7 @@ import type { ContextAssembler } from '../search/context-assembler.js';
 import type { Registry } from '../storage/registry.js';
 import type { ConfigManager, EchoConfig } from '../storage/config.js';
 import type { CompilationPipeline } from '../layers/pipeline.js';
+import type { SecretsManager } from '../storage/secrets.js';
 import { formatSearchResult, formatStatus, formatJobs, formatIngestResult, formatConfig, formatRecoverResult } from './formatters.js';
 
 export interface IngestCLIOptions {
@@ -31,6 +32,7 @@ export interface CLICommandsDeps {
   registry: Registry;
   configManager: ConfigManager;
   pipeline: CompilationPipeline;
+  secretsManager: SecretsManager;
   version: string;
 }
 
@@ -96,7 +98,6 @@ export class CLICommands {
     } else {
       const pending = this.deps.registry.getPendingJobs(100);
       console.log(`Compiling ${pending.length} pending jobs...`);
-      // Compilation is async via worker; CLI just triggers awareness
     }
   }
 
@@ -131,6 +132,40 @@ export class CLICommands {
     this.deps.registry.recoverOrphan(hash);
     const orphan = this.deps.registry.getOrphan(hash);
     console.log(formatRecoverResult(hash, orphan?.originalSourceId ?? 'unknown'));
+  }
+
+  // --- Key management ---
+
+  async keySet(provider: string, apiKey: string): Promise<void> {
+    await this.deps.secretsManager.set(provider, apiKey);
+    console.log(`Key set for ${provider}`);
+  }
+
+  async keyGet(provider: string): Promise<void> {
+    const value = await this.deps.secretsManager.get(provider);
+    if (value === undefined) {
+      console.log(`No key found for ${provider}`);
+      return;
+    }
+    const masked = value.length <= 8 ? '****' : value.slice(0, 4) + '...' + value.slice(-4);
+    console.log(`${provider}: ${masked}`);
+  }
+
+  async keyDelete(provider: string): Promise<void> {
+    await this.deps.secretsManager.delete(provider);
+    console.log(`Key deleted for ${provider}`);
+  }
+
+  async keyList(): Promise<void> {
+    const keys = await this.deps.secretsManager.list();
+    if (keys.length === 0) {
+      console.log('No keys stored');
+      return;
+    }
+    const masked = await (this.deps.secretsManager as unknown as { listMasked(): Promise<Record<string, string>> }).listMasked?.() ?? {};
+    for (const k of keys) {
+      console.log(`${k}: ${masked[k] ?? '****'}`);
+    }
   }
 }
 

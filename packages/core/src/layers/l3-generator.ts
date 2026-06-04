@@ -1,8 +1,6 @@
 /**
  * ECHO Core — L3 Generator
- * Phase 3: Embedding indexer.
- * MVP simplification: uses embeddings.jsonl (one JSON per line) instead of parquet.
- * Uses brute-force cosine similarity instead of HNSW (migrate in Phase 4).
+ * Phase 7: Embedding indexer with batch embedding support.
  */
 
 import { mkdir, readFile, writeFile, access } from 'fs/promises';
@@ -31,9 +29,19 @@ export interface L3GeneratorOptions {
   version?: string;
 }
 
+export interface BatchEmbeddingConfig {
+  batchSize: number;
+  maxConcurrency: number;
+}
+
 const DEFAULT_OPTIONS: Required<L3GeneratorOptions> = {
   generatorId: 'embedding-indexer',
   version: '1.0.0',
+};
+
+const DEFAULT_BATCH_CONFIG: BatchEmbeddingConfig = {
+  batchSize: 100,
+  maxConcurrency: 2,
 };
 
 function cosineSimilarity(a: number[], b: number[]): number {
@@ -64,9 +72,13 @@ function buildTerms(l2: L2Artifact): string[] {
 
 export class DefaultL3Generator implements L3Generator {
   private opts: Required<L3GeneratorOptions>;
+  private batchConfig: BatchEmbeddingConfig;
+  private pendingBatches = new Map<string, Array<{ hash: string; text: string; resolve: (v: L3Result) => void; reject: (e: Error) => void }>>();
+  private flushTimer: ReturnType<typeof setTimeout> | null = null;
 
-  constructor(options?: L3GeneratorOptions) {
+  constructor(options?: L3GeneratorOptions, batchConfig?: Partial<BatchEmbeddingConfig>) {
     this.opts = { ...DEFAULT_OPTIONS, ...options };
+    this.batchConfig = { ...DEFAULT_BATCH_CONFIG, ...batchConfig };
   }
 
   async generate(
@@ -104,7 +116,7 @@ export class DefaultL3Generator implements L3Generator {
     }
     await writeFile(bm25Path, JSON.stringify(bm25, null, 2));
 
-    // Update HNSW manifest (MVP: tracks metadata, index is brute-force from jsonl)
+    // Update HNSW manifest
     const manifestPath = path.join(indexDir, 'hnsw.manifest.json');
     let manifest: HNSWManifest = {
       schemaVersion: 1,
@@ -143,9 +155,29 @@ export class DefaultL3Generator implements L3Generator {
       },
     };
   }
+
+  /** Batch embed multiple texts. Groups into batches of batchSize. */
+  async batchEmbed(
+    items: Array<{ hash: string; text: string }>,
+    provider: EmbeddingProvider
+  ): Promise<Array<{ hash: string; vector: number[] }>> {
+    const results: Array<{ hash: string; vector: number[] }> = [];
+    const batchSize = this.batchConfig.batchSize;
+
+    for (let i = 0; i < items.length; i += batchSize) {
+      const batch = items.slice(i, i + batchSize);
+      const texts = batch.map((b) => b.text);
+      const vectors = await provider.embed(texts);
+      for (let j = 0; j < batch.length; j++) {
+        results.push({ hash: batch[j].hash, vector: vectors[j] });
+      }
+    }
+
+    return results;
+  }
 }
 
-/** Brute-force search over embeddings.jsonl. MVP simplification — replace with HNSW in Phase 4. */
+/** Brute-force search over embeddings.jsonl. MVP simplification — replace with HNSW in Phase 7. */
 export async function bruteForceSearch(
   indexDir: string,
   queryVector: number[],

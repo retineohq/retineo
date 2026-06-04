@@ -1,13 +1,15 @@
 /**
  * ECHO Core — Bridge Routes
- * Phase 5: Fastify route definitions.
+ * Phase 7: Fastify route definitions with health/metrics.
  */
 
 import type { FastifyInstance } from 'fastify';
 import type { BridgeHandlersDeps } from './handlers.js';
 import { createHandlers } from './handlers.js';
+import type { HealthRoutesDeps } from './routes-health.js';
+import { registerHealthRoutes } from './routes-health.js';
 
-export async function registerRoutes(fastify: FastifyInstance, deps: BridgeHandlersDeps) {
+export async function registerRoutes(fastify: FastifyInstance, deps: BridgeHandlersDeps, healthDeps: HealthRoutesDeps) {
   const handlers = createHandlers(deps);
 
   fastify.post('/v1/search', handlers.search);
@@ -18,4 +20,6 @@ export async function registerRoutes(fastify: FastifyInstance, deps: BridgeHandl
   fastify.get('/v1/sources/:id', handlers.getSource);
   fastify.get('/v1/jobs/:id', handlers.getJob);
   fastify.get('/v1/jobs/:id/events', handlers.jobEvents);
+
+  await registerHealthRoutes(fastify, healthDeps);
 }

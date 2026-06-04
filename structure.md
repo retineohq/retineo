@@ -95,14 +95,17 @@ echo-core/
 | `registry.ts` | `Registry`, `SQLiteRegistry`, `OrphanRecord` | SQLite-backed registry: sources, segments, jobs (lease model), orphans. |
 | `config.ts` | `ConfigManager`, `FileConfigManager`, `EchoConfig` | YAML config manager (`~/.echo/config.yaml`). |
 | `node-builder.ts` | `NodeBuilder`, `DefaultNodeBuilder` | Builds `ContextNode` trees + `BuildManifest` from adapter output. |
+| `secrets.ts` | `SecretsManager`, `FileSecretsManager`, `resolveSecret`, `resolveConfigValue` | AES-256-GCM encrypted secrets store (`~/.echo/secrets.json`). |
 | `schema.sql` | — | SQLite DDL: `sources`, `segments`, `jobs`, `orphaned_objects`, `encryption_keys`, `audit_logs`. |
-| `index.ts` | Barrel export of `cas.js`, `registry.js`, `config.js`, `node-builder.js` | Public storage API entrypoint. |
+| `index.ts` | Barrel export of `cas.js`, `registry.js`, `config.js`, `node-builder.js`, `secrets.js` | Public storage API entrypoint. |
 
-### `src/embeddings/` — Vector Embeddings (planned)
+### `src/embeddings/` — Vector Embeddings
 
 | File | Exports | Description |
 |------|---------|-------------|
-| `index.ts` | `(planned)` | Barrel export placeholder. |
+| `hnsw-index.ts` | `HNSWIndex`, `HNSWManifest`, `createHNSWIndex`, `loadOrBuildHNSW`, `BruteForceHNSW` | Approximate nearest neighbor index with native `hnswlib-node` and brute-force fallback. |
+| `parquet-store.ts` | `ParquetEmbeddingStore`, `EmbeddingRecord`, `createEmbeddingStore`, `JSONLEmbeddingStore` | Embedding persistence interface with JSONL fallback; Parquet migration stubbed. |
+| `index.ts` | Barrel export of `hnsw-index.js`, `parquet-store.js` | Public embeddings API entrypoint. |
 
 ### `src/search/` — Retrieval & Ranking
 
@@ -118,12 +121,13 @@ echo-core/
 | File | Exports | Description |
 |------|---------|-------------|
 | `provider.ts` | `LLMProvider`, `EmbeddingProvider`, `ProviderConfig`, `GenerateOptions`, `ProviderCapabilities` | Provider interfaces. |
-| `factory.ts` | `LLMProviderFactory`, `EmbeddingProviderFactory`, `DefaultLLMProviderFactory`, `DefaultEmbeddingProviderFactory` | Config-driven provider loading with `${ENV_VAR}` resolution. |
+| `factory.ts` | `LLMProviderFactory`, `EmbeddingProviderFactory`, `DefaultLLMProviderFactory`, `DefaultEmbeddingProviderFactory` | Config-driven provider loading with `${ENV_VAR}` resolution, circuit breaker wrapping, and fallback routing. |
 | `rate-limiter.ts` | `RateLimiter`, `SemaphoreRateLimiter` | Per-provider concurrency semaphore. |
+| `circuit-breaker.ts` | `CircuitBreaker`, `DefaultCircuitBreaker`, `CircuitBreakerConfig`, `CircuitState`, `DEFAULT_CIRCUIT_BREAKER_CONFIG` | Per-provider circuit breaker with closed/open/half-open states. |
 | `providers/ollama.ts` | `OllamaProvider` | LLM + Embedding via Ollama `/api/generate` and `/api/embed`. |
 | `providers/openai-compatible.ts` | `OpenAICompatibleProvider` | LLM + Embedding via OpenAI-compatible `/chat/completions` and `/embeddings`. |
 | `providers/mock.ts` | `MockLLMProvider` | Deterministic hash-based provider for tests. |
-| `index.ts` | Barrel export of `provider.js`, `factory.js`, `rate-limiter.js`, `providers/*.js` | Public LLM API entrypoint. |
+| `index.ts` | Barrel export of `provider.js`, `factory.js`, `rate-limiter.js`, `circuit-breaker.js`, `providers/*.js` | Public LLM API entrypoint. |
 
 ### `src/layers/` — Compilation Pipelines
 
@@ -131,7 +135,7 @@ echo-core/
 |------|---------|-------------|
 | `l1-generator.ts` | `L1Generator`, `DefaultL1Generator`, `L1Result`, `L1Index`, `Section`, `Chunk` | Rule-based markdown structural parser. |
 | `l2-generator.ts` | `L2Generator`, `DefaultL2Generator` | LLM-powered semantic extraction with Zod validation and retry. |
-| `l3-generator.ts` | `L3Generator`, `DefaultL3Generator`, `L3Result`, `L3Metadata`, `bruteForceSearch` | Embedding indexer. MVP: `embeddings.jsonl` + brute-force cosine. |
+| `l3-generator.ts` | `L3Generator`, `DefaultL3Generator`, `L3Result`, `L3Metadata`, `bruteForceSearch`, `BatchEmbeddingConfig` | Embedding indexer with batch embedding support. |
 | `pipeline.ts` | `CompilationPipeline`, `DefaultCompilationPipeline`, `CompilationPipelineDeps` | Orchestrates L1→L2→L3 via job queue. |
 | `worker.ts` | `QueueWorker`, `DefaultQueueWorker`, `QueueWorkerOptions` | Lease-based job processor with heartbeat. |
 | `index.ts` | Barrel export of `l1-generator.js`, `l2-generator.js`, `l3-generator.js`, `pipeline.js`, `worker.js` | Public layers API entrypoint. |
@@ -153,11 +157,14 @@ echo-core/
 | File | Exports | Description |
 |------|---------|-------------|
 | `types.ts` | `SearchRequest`, `SearchResponse`, `IngestRequest`, `IngestResponse`, `StatusResponse`, `NodeResponse`, `SourceResponse`, `JobResponse`, `BridgeError`, `BridgeConfig` | HTTP API request/response types. |
-| `server.ts` | `BridgeServer`, `FastifyBridgeServer`, `BridgeServerOptions` | Fastify-based localhost-only HTTP server. |
+| `server.ts` | `BridgeServer`, `FastifyBridgeServer`, `BridgeServerOptions` | Fastify-based localhost-only HTTP server with shutdown hook. |
 | `routes.ts` | `registerRoutes` | Route registration (search, ingest, status, nodes, sources, jobs). |
 | `handlers.ts` | `BridgeHandlersDeps`, `createHandlers` | Request handlers calling core services. |
 | `sse.ts` | `SSEStream`, `createSSEStream` | Server-Sent Events for job progress and search streaming. |
-| `index.ts` | Barrel export of `types.js`, `server.js`, `routes.js`, `handlers.js`, `sse.js` | Public bridge API entrypoint. |
+| `health.ts` | `HealthService`, `DefaultHealthService`, `HealthResult`, `ReadyResult`, `HealthServiceDeps` | Liveness/readiness probes with SQLite, CAS, LLM, worker checks. |
+| `metrics.ts` | `MetricsService`, `DefaultMetricsService`, `MetricsSnapshot`, `MetricsCounters`, `MetricsServiceDeps`, `formatPrometheus`, `createMetricsCounters` | Operational metrics collection and Prometheus text export. |
+| `routes-health.ts` | `registerHealthRoutes`, `HealthRoutesDeps` | Health, readiness, metrics, and Prometheus route registration. |
+| `index.ts` | Barrel export of `types.js`, `server.js`, `routes.js`, `handlers.js`, `sse.js`, `health.js`, `metrics.js`, `routes-health.js` | Public bridge API entrypoint. |
 
 ### `src/cli/` — Command-Line Interface
 
@@ -194,7 +201,10 @@ echo-core/
 |------|---------|-------------|
 | `logger.ts` | `Logger`, `LogMeta`, `LoggerConfig`, `createLogger`, `setGlobalLogger`, `getGlobalLogger` | Pino-based structured JSON logging with redaction and child loggers. |
 | `shutdown.ts` | `ShutdownManager`, `ShutdownHandler`, `DefaultShutdownManager`, `installSignalHandlers` | SIGTERM/SIGINT handling with 12-step graceful shutdown. |
-| `index.ts` | Barrel export of `logger.js`, `shutdown.js` | Public utils API entrypoint. |
+| `errors.ts` | `EchoError`, `BaseEchoError`, `AdapterError`, `IngestError`, `LLMError`, `PipelineError`, `SearchError`, `BridgeError`, `ConfigError`, and factory functions for each code | Standardized error hierarchy with codes and HTTP status mapping. |
+| `error-handler.ts` | `isEchoError`, `echoErrorFrom`, `sendErrorReply`, `formatCLIError` | Unified error handling for HTTP (Fastify), CLI, and MCP. |
+| `cache.ts` | `LRUCache`, `SimpleLRUCache` | In-memory LRU cache with TTL eviction and MRU reordering. |
+| `index.ts` | Barrel export of `logger.js`, `shutdown.js`, `errors.js`, `error-handler.js`, `cache.js` | Public utils API entrypoint. |
 
 ### `tests/storage/` — Storage Layer Tests
 
@@ -203,6 +213,7 @@ echo-core/
 | `cas.test.ts` | `computeHash`, `getObjectPath`, `LocalCASStorage` (write/read/exists/delete/writeObject/readObject) | CAS correctness, hash path resolution, artifact persistence. |
 | `registry.test.ts` | Sources CRUD, Segments CRUD + FK cascade, Job lease model (acquire/heartbeat/complete/fail/release), Orphan lifecycle | SQLite registry integrity, lease crash recovery, orphan purge. |
 | `node-builder.test.ts` | `buildRoot`, `buildSegments`, `createBuildManifest` | Node tree construction, placeholder generators, manifest validity. |
+| `secrets.test.ts` | `FileSecretsManager` set/get/delete/list, encryption round-trip, `resolveSecret`, `resolveConfigValue` | AES-256-GCM secrets storage and config resolution. |
 
 ### `tests/adapters/` — Adapter IPC Tests
 
@@ -225,6 +236,7 @@ echo-core/
 | `factory.test.ts` | Provider loading from config, `${ENV_VAR}` resolution, getDefault, list, register | Factory config parsing and provider registry. |
 | `providers/mock.test.ts` | Deterministic generate, jsonMode, embed normalization, validate, capabilities | MockLLMProvider correctness. |
 | `rate-limiter.test.ts` | Concurrency limits, queue behavior, release semantics | SemaphoreRateLimiter correctness. |
+| `circuit-breaker.test.ts` | Closed→open transition, half-open recovery, fallback routing, failure counting | DefaultCircuitBreaker state machine. |
 
 ### `tests/layers/` — Compilation Pipeline Tests
 
@@ -253,6 +265,8 @@ echo-core/
 | `search-route.test.ts` | POST /v1/search (valid, invalid, empty) | Search route validation. |
 | `ingest-route.test.ts` | POST /v1/ingest (valid, missing sourcePath) | Ingest route validation. |
 | `sse.test.ts` | SSE streaming, headers, events | Server-Sent Events correctness. |
+| `health.test.ts` | GET /v1/health (healthy/unhealthy), GET /v1/ready (ready/not ready) | Liveness and readiness probes. |
+| `metrics.test.ts` | GET /v1/metrics (JSON), GET /v1/metrics/prometheus (text format) | Metrics collection and Prometheus export. |
 
 ### `tests/cli/` — CLI Tests
 
@@ -273,6 +287,8 @@ echo-core/
 |------|-------|-------------|
 | `logger.test.ts` | Log levels, child loggers, redaction, traceId propagation | PinoLogger correctness. |
 | `shutdown.test.ts` | SIGTERM handling, job release, adapter cleanup, timeout scenarios | DefaultShutdownManager correctness. |
+| `errors.test.ts` | `BaseEchoError` hierarchy, `toJSON`, factory functions, status codes | Standardized error codes and serialization. |
+| `cache.test.ts` | `SimpleLRUCache` get/set/has/delete, TTL eviction, MRU reordering, max size | LRU cache correctness. |
 
 ### `tests/integration/` — Integration Tests
 
@@ -281,6 +297,7 @@ echo-core/
 | `end-to-end.test.ts` | CLI ingest → HTTP search → MCP status | Full UI layer integration. |
 | `pdf-pipeline.test.ts` | Ingest real PDF → L1/L2/L3 compilation → verify artifacts | End-to-end PDF pipeline. |
 | `image-pipeline.test.ts` | Ingest real image → L1/L2/L3 compilation → verify artifacts | End-to-end image OCR pipeline. |
+| `circuit-breaker.test.ts` | Factory loads breaker config, wrapper fast-fails on open circuit, fallback routing | Circuit breaker integration with LLM factory. |
 
 ### `tests/i18n/` — Multilingual Tests
 
@@ -318,6 +335,15 @@ echo-core/
 | **Track orphaned objects for later GC** | `Registry` (orphans) | `src/storage/registry.ts` | `insertOrphan`, `recoverOrphan`, `purgeOrphansOlderThan` |
 | **Build a search index over compiled nodes** | `DefaultL3Generator` + `bruteForceSearch` | `src/layers/l3-generator.ts` | `EmbeddingProvider`, `hnsw.manifest.json` |
 | **Generate vector embeddings for a node** | `EmbeddingProvider` | `src/llm/provider.ts` | `DefaultL3Generator`, `MockLLMProvider` |
+| **Use HNSW for fast approximate nearest neighbors** | `createHNSWIndex` | `src/embeddings/hnsw-index.ts` | `loadOrBuildHNSW`, `BruteForceHNSW` |
+| **Store embeddings in Parquet/JSONL** | `createEmbeddingStore` | `src/embeddings/parquet-store.ts` | `JSONLEmbeddingStore`, `EmbeddingRecord` |
+| **Batch embed multiple texts efficiently** | `DefaultL3Generator.batchEmbed` | `src/layers/l3-generator.ts` | `BatchEmbeddingConfig` |
+| **Cache search results and embeddings** | `SimpleLRUCache` | `src/utils/cache.ts` | `DefaultRetrievalService` embedding/L2/search caches |
+| **Protect LLM calls with circuit breaker** | `DefaultCircuitBreaker` | `src/llm/circuit-breaker.ts` | `DefaultLLMProviderFactory` wrapper, fallback |
+| **Encrypt and retrieve API secrets** | `FileSecretsManager` | `src/storage/secrets.ts` | `resolveSecret`, `resolveConfigValue` |
+| **Add health/readiness probes** | `DefaultHealthService` | `src/bridge/health.ts` | `registerHealthRoutes`, `/v1/health`, `/v1/ready` |
+| **Export operational metrics** | `DefaultMetricsService` | `src/bridge/metrics.ts` | `formatPrometheus`, `/v1/metrics/prometheus` |
+| **Handle errors consistently across HTTP/CLI** | `sendErrorReply`, `formatCLIError` | `src/utils/error-handler.ts` | `BaseEchoError`, `isEchoError` |
 | **Run the L1→L2→L3 compilation pipeline** | `DefaultCompilationPipeline` | `src/layers/pipeline.ts` | `QueueWorker`, `Registry` |
 | **Process background jobs with lease recovery** | `DefaultQueueWorker` | `src/layers/worker.ts` | `Registry.acquireLease`, `heartbeatJob` |
 | **Load LLM providers from config** | `DefaultLLMProviderFactory` | `src/llm/factory.ts` | `ProviderConfig`, `OllamaProvider`, `OpenAICompatibleProvider` |
@@ -332,6 +358,7 @@ echo-core/
 | **Expose ECHO over HTTP/WebSocket** | `FastifyBridgeServer` | `src/bridge/server.ts` | `bridge/routes.ts`, `bridge/sse.ts` |
 | **Serve as an MCP server** | `EchoMCPServer` | `src/mcp/server.ts` | `mcp/tools.ts`, `mcp/handlers.ts` |
 | **Run CLI commands** | `CLICommands` + `createCLI` | `src/cli/commands.ts`, `src/cli/index.ts` | `commander`, `bridge/types.ts` |
+| **Manage encrypted API keys via CLI** | `CLICommands.keySet/get/delete/list` | `src/cli/commands.ts` | `FileSecretsManager`, `echo key` |
 | **Add a new LLM provider type to factory** | `DefaultLLMProviderFactory` | `src/llm/factory.ts` | Extend `createProvider` switch |
 
 ---

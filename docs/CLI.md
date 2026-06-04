@@ -70,3 +70,36 @@ Recover an orphaned node.
 ```bash
 echo recover deadbeef...
 ```
+
+### `echo key set <provider> <apiKey>`
+
+Encrypt and store an API key in `~/.echo/secrets.json`.
+
+```bash
+echo key set openai sk-xxxxxxxx
+```
+
+### `echo key get <provider>`
+
+Show a masked version of the stored key.
+
+```bash
+echo key get openai
+# openai: sk-x...xxxx
+```
+
+### `echo key delete <provider>`
+
+Remove a stored key.
+
+```bash
+echo key delete openai
+```
+
+### `echo key list`
+
+List all stored keys (masked).
+
+```bash
+echo key list
+```
