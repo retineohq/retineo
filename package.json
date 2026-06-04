@@ -1,12 +1,27 @@
 {
-  "name": "echo-core",
+  "name": "@echo/core",
   "version": "0.1.0",
-  "description": "ECHO Core — Content Compilation Engine (L0-L3)",
+  "description": "Content Compilation Engine: fractal knowledge compiler (L0-L3)",
   "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "echo": "bin/echo.js"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "adapters",
+    "docs",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
-    "build": "tsc --noEmit",
+    "build": "tsc",
+    "test": "vitest --run",
     "lint": "eslint src/**/*.ts",
-    "test": "vitest"
+    "bundle:binary": "esbuild bin/echo.js --bundle --platform=node --outfile=dist/bundle.cjs --format=cjs",
+    "package:binary": "pnpm bundle:binary && pkg dist/bundle.cjs --out-path=dist --targets=node18-linux-x64,node18-macos-x64,node18-win-x64"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
@@ -25,11 +40,34 @@
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.19.41",
     "@types/pdf-parse": "^1.1.5",
+    "esbuild": "^0.28.0",
     "eslint": "^8.57.0",
+    "pkg": "^5.8.1",
     "typescript": "^5.4.0",
     "vitest": "^1.6.0"
   },
   "engines": {
     "node": ">=20.0.0"
+  },
+  "keywords": [
+    "knowledge-management",
+    "rag",
+    "semantic-search",
+    "content-compilation",
+    "llm",
+    "obsidian",
+    "local-first"
+  ],
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/echo-core.git"
+  },
+  "bugs": {
+    "url": "https://github.com/your-org/echo-core/issues"
+  },
+  "homepage": "https://github.com/your-org/echo-core#readme",
+  "publishConfig": {
+    "access": "public"
   }
 }

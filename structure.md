@@ -52,7 +52,8 @@ echo-core/
 │   └── integration/     # End-to-end: CLI → HTTP → MCP
 ├── docs/                # Developer documentation
 │   ├── README.md        # Documentation index
-│   ├── INSTALL.md       # Installation guide (npm, source)
+│   ├── INSTALL.md       # Installation guide (npm, binary, source)
+│   ├── DISTRIBUTION.md  # Distribution guide: npm vs binary vs source
 │   ├── GETTING_STARTED.md # First-run tutorial
 │   ├── CONTRIBUTING.md  # Contributor guide
 │   ├── ARCHITECTURE.md  # High-level system overview
@@ -62,6 +63,12 @@ echo-core/
 │   ├── MULTILINGUAL.md  # Multilingual support & language pack guide
 │   ├── LOGGING.md       # Structured logging configuration & events
 │   └── OPERATIONS.md    # Graceful shutdown, health checks, monitoring
+├── .github/
+│   ├── workflows/
+│   │   ├── ci.yml       # CI: test on PR/push (Node 20, 22, pnpm)
+│   │   └── release.yml  # CD: publish npm + build binaries + GitHub Release
+│   └── release.yml      # Release notes category configuration
+├── CHANGELOG.md         # Version history
 ├── structure.md         # This file
 ├── package.json
 ├── tsconfig.json

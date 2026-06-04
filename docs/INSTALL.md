@@ -52,7 +52,21 @@ What `init` does:
 
 ---
 
-## Install from Source
+## Install from binary
+
+Download a standalone binary from [GitHub Releases](https://github.com/your-org/echo-core/releases) if you cannot install Node.js.
+
+| Platform | Binary |
+|----------|--------|
+| Linux x64 | `echo-core-linux-x64` |
+| macOS x64 | `echo-core-macos-x64` |
+| Windows x64 | `echo-core-win-x64.exe` |
+
+> **Note:** Binaries are best-effort and may not support native dependencies (e.g., `better-sqlite3`). For full functionality, use npm install.
+
+---
+
+## Install from source
 
 ```bash
 git clone https://github.com/your-org/echo-core.git
@@ -70,7 +84,7 @@ node bin/echo.js <command>
 
 ---
 
-## First Run
+## First run
 
 ```bash
 echo status

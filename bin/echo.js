@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { createCLI } from '../packages/core/src/cli/index.js';
+import { createCLI } from '../dist/cli/index.js';
 
 // MVP: wire with mock deps for standalone execution
 // Real deployments should inject actual services via a bootstrap module
@@ -7,10 +7,10 @@ import { createCLI } from '../packages/core/src/cli/index.js';
 const mockDeps = {
   version: '0.1.0',
   ingestionService: {
-    async ingestFile(filePath: string) {
+    async ingestFile(filePath) {
       return {
         id: 'mock-hash',
-        sourceRef: { protocol: 'file' as const, uri: filePath, mimeType: 'text/plain' },
+        sourceRef: { protocol: 'file', uri: filePath, mimeType: 'text/plain' },
         childrenIds: [],
         depth: 0,
         artifacts: {},
@@ -32,12 +32,12 @@ const mockDeps = {
     },
   },
   queryAnalyzer: {
-    async analyze(query: string) {
+    async analyze(query) {
       return {
         originalQuery: query,
         language: 'en',
         confidence: 1,
-        intent: 'vague' as const,
+        intent: 'vague',
         enrichedQuery: query,
         entities: [],
         signals: [],
@@ -68,8 +68,8 @@ const mockDeps = {
       defaultAdapter: '',
       llmProvider: '',
       embeddingModel: '',
-      search: {} as any,
-      i18n: {} as any,
+      search: {},
+      i18n: {},
     }),
     save: async () => {},
   },
@@ -81,7 +81,7 @@ const mockDeps = {
   },
 };
 
-const program = createCLI(mockDeps as any);
+const program = createCLI(mockDeps);
 program.parseAsync(process.argv).catch((err) => {
   console.error(err);
   process.exit(1);

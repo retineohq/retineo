@@ -1,10 +1,14 @@
 # ECHO Core Documentation
 
+[![npm version](https://img.shields.io/npm/v/@echo/core)](https://www.npmjs.com/package/@echo/core)
+[![CI](https://github.com/your-org/echo-core/actions/workflows/ci.yml/badge.svg)](https://github.com/your-org/echo-core/actions)
+
 ## Quick Start
 - [Installation](INSTALL.md)
 - [Getting Started](GETTING_STARTED.md)
 - [CLI Usage](CLI.md)
 - [HTTP API](API.md)
+- [Distribution](DISTRIBUTION.md) — npm, binary, source
 
 ## Developer Guides
 - [Architecture Overview](ARCHITECTURE.md)
