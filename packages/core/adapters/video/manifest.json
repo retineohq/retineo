@@ -1,0 +1,8 @@
+{
+  "id": "video",
+  "version": "1.0.0",
+  "mimeTypes": ["video/mp4", "video/x-msvideo", "video/quicktime", "video/x-matroska", "video/webm"],
+  "extensions": [".mp4", ".avi", ".mov", ".mkv", ".webm"],
+  "entry": "adapter.js",
+  "status": "stable"
+}

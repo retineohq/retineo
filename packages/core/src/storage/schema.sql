@@ -26,8 +26,7 @@ CREATE TABLE segments (
     span_end    INTEGER NOT NULL,
     adapter_id  TEXT NOT NULL,
     parent_hash TEXT,                       -- null for root nodes
-    FOREIGN KEY (source_id) REFERENCES sources(id) ON DELETE CASCADE,
-    FOREIGN KEY (parent_hash) REFERENCES segments(hash) ON DELETE SET NULL
+    FOREIGN KEY (source_id) REFERENCES sources(id) ON DELETE CASCADE
 );
 
 CREATE INDEX idx_segments_source ON segments(source_id);

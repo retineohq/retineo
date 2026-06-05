@@ -1,0 +1,9 @@
+{
+  "whisperProvider": "openai",
+  "apiKey": "${WHISPER_API_KEY}",
+  "model": "whisper-1",
+  "ffmpegPath": "ffmpeg",
+  "frameIntervalSeconds": 30,
+  "segmentMinutes": 5,
+  "language": "auto"
+}

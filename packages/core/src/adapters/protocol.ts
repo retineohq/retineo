@@ -80,6 +80,8 @@ export interface IngestResult {
         length: number;
         timestamp?: number;
         speaker?: string;
+        bbox?: [number, number, number, number];
+        confidence?: number;
       }>;
     };
   }>;

@@ -1,0 +1,8 @@
+{
+  "id": "image-mock",
+  "version": "1.0.0",
+  "mimeTypes": ["image/png", "image/jpeg"],
+  "extensions": [".png", ".jpg", ".jpeg"],
+  "entry": "adapter.js",
+  "status": "mock"
+}

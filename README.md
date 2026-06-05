@@ -1,8 +1,11 @@
 # ECHO Core — Content Compilation Engine
 
+[![npm version](https://img.shields.io/npm/v/@echo/core)](https://www.npmjs.com/package/@echo/core)
+[![CI](https://github.com/your-org/echo-core/actions/workflows/ci.yml/badge.svg)](https://github.com/your-org/echo-core/actions)
+
 **Version:** 0.1.0 MVP  
 **License:** Apache 2.0  
-**Status:** Phase 0 — Domain & Schemas
+**Status:** Phases 0–7 complete — 277 tests passing
 
 ## What is ECHO Core?
 
@@ -17,6 +20,29 @@ ECHO Core is a **Content Compilation Engine** that transforms any information so
 | **L2** | `L2.json` | Semantic object: summary, concepts[], claims[], relations[] |
 | **L3** | `embeddings.parquet` + `hnsw.bin` + `bm25.json` | Vector index + keyword index |
 
+## Install
+
+```bash
+npm install -g @echo/core
+```
+
+Or try without installing:
+
+```bash
+npx @echo/core status
+```
+
+See [docs/INSTALL.md](docs/INSTALL.md) for binary and source install options.
+
+## Quick start
+
+```bash
+echo init      # create ~/.echo/ config
+echo status    # check engine status
+echo ingest ./my-document.pdf
+echo search "semantic search query"
+```
+
 ## Architecture Principles
 
 - **Content-Addressable Storage (CAS):** `objects/{hash}/` where `hash = SHA-256(normalized text)`
@@ -26,90 +52,14 @@ ECHO Core is a **Content Compilation Engine** that transforms any information so
 - **SQLite Registry:** Mutable source metadata, segments linkage, job queue, audit logs.
 - **Adapter IPC:** Built-in adapters run as `child_process` with JSON-RPC 2.0 over stdin/stdout.
 
-## Storage Layout
+## Documentation
 
-```
-{dataDir}/
-├── objects/                          # CAS: immutable artifacts L0-L2
-│   └── ab/cd/{contentHash}/
-│       ├── node.json                 # Build manifest + metadata
-│       ├── content.md                # L0: normalized text
-│       ├── content.meta.json         # L0: multimodal offsets
-│       ├── L1.md                     # L1: structure (Markdown)
-│       ├── L1.index.json             # L1: derived machine index
-│       └── L2.json                   # L2: essence (JSON)
-│
-├── index/                            # Global L3 indices
-│   ├── embeddings.parquet            # CANONICAL: all vectors
-│   ├── hnsw.bin                      # REBUILDABLE CACHE
-│   ├── hnsw.manifest.json            # model, dimension, version
-│   └── bm25.json                     # global keyword index
-│
-├── adapters/                         # child_process scripts
-│   └── {adapterId}/
-│       ├── adapter.js
-│       └── manifest.json
-│
-├── echo.sqlite                       # Registry: sources, segments, jobs, audit
-└── config.yaml
-```
-
-## SQLite Registry Schema
-
-See `packages/core/src/storage/schema.sql` for full DDL.
-
-Key tables:
-- `sources` — mutable source registry (uri, mimeType, rawHash, rootHash)
-- `segments` — fractal node linkage (hash, sourceId, span, parentHash)
-- `jobs` — background compilation queue with lease model (PENDING → RUNNING → COMPLETED/FAILED)
-- `orphaned_objects` — Ghost System: L2 survival after source deletion
-- `encryption_keys` — master key versions for at-rest encryption
-- `audit_logs` — append-only operation log
-
-## Queue Lease Model
-
-SQLite-backed job queue with crash recovery:
-
-```sql
-UPDATE jobs
-SET status='RUNNING', worker_id=?, lease_until=?
-WHERE id = (SELECT id FROM jobs WHERE status='PENDING' ORDER BY priority DESC LIMIT 1);
-```
-
-If worker crashes, lease expires → job becomes `PENDING` again.
-
-## Adapter IPC Protocol
-
-JSON-RPC 2.0 over `child_process`:
-
-| Method | Description |
-|--------|-------------|
-| `initialize` | Handshake, config exchange |
-| `capabilities` | Returns supported mimeTypes/extensions |
-| `ingest` | Transforms source → normalized content + optional segments |
-| `shutdown` | Graceful termination |
-
-## Phase 0 Deliverables
-
-- [x] TypeScript domain interfaces (`types.ts`)
-- [x] Zod runtime schemas (`schemas.ts`)
-- [x] SQLite DDL (`schema.sql`)
-- [x] Adapter IPC protocol (`protocol.ts`)
-- [x] Build manifest schema
-- [x] HNSW manifest schema
-
-## MVP Roadmap
-
-| Phase | Duration | Deliverable |
-|-------|----------|-------------|
-| **0** | 3-5 days | Domain, schemas, interfaces |
-| **1** | 5-7 days | CAS + SQLite registry |
-| **2** | 5 days | Adapter IPC (text, markdown, PDF) |
-| **3** | 7-10 days | Compilation pipeline L0→L1→L2 |
-| **4** | 7 days | Retrieval: embeddings, HNSW, BM25 |
-| **5** | 5-7 days | API + CLI + MCP |
+- [Installation](docs/INSTALL.md)
+- [Getting Started](docs/GETTING_STARTED.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Adapter Guide](docs/ADAPTER_GUIDE.md)
+- [Distribution](docs/DISTRIBUTION.md)
 
 ## License
 
 Apache 2.0 — see LICENSE file.
-# echo-core

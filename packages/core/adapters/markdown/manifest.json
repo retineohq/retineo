@@ -1,0 +1,7 @@
+{
+  "id": "markdown",
+  "version": "1.0.0",
+  "mimeTypes": ["text/markdown"],
+  "extensions": [".md"],
+  "entry": "adapter.js"
+}

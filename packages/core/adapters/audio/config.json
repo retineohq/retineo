@@ -1,0 +1,9 @@
+{
+  "whisperProvider": "openai",
+  "apiKey": "${WHISPER_API_KEY}",
+  "model": "whisper-1",
+  "language": "auto",
+  "segmentMinutes": 5,
+  "whisperCppPath": "whisper-cli",
+  "whisperCppModel": ""
+}
