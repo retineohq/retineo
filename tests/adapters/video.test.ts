@@ -79,7 +79,7 @@ describe('video adapter', () => {
     expect(result.metadata.blocks).toEqual([]);
   });
 
-  it('returns ADAPTER_CONFIG_ERROR when API key missing', async () => {
+  it('returns graceful empty when no transcription engine available', async () => {
     const filePath = path.join(tmpDir, 'clip.mp4');
     writeFileSync(filePath, Buffer.alloc(1024));
 
@@ -92,7 +92,10 @@ describe('video adapter', () => {
     const manager = new DefaultAdapterManager(adaptersDir, runner);
     await manager.loadBuiltIn();
 
-    await expect(manager.ingest(filePath)).rejects.toThrow(/WHISPER_API_KEY not set/);
+    const result = await manager.ingest(filePath);
+    // No API key and no whisper.cpp → graceful empty
+    expect(result.content).toBe('');
+    expect(result.metadata.blocks).toEqual([]);
 
     if (oldKey) process.env.WHISPER_API_KEY = oldKey;
     if (oldOpenAi) process.env.OPENAI_API_KEY = oldOpenAi;

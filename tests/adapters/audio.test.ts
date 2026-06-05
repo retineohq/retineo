@@ -85,7 +85,7 @@ describe('audio adapter', () => {
     expect(id).toBe('audio');
   });
 
-  it('returns speech blocks with timestamps', async () => {
+  it('returns speech blocks with timestamps via API fallback', async () => {
     const filePath = path.join(tmpDir, 'small.mp3');
     writeFileSync(filePath, Buffer.alloc(1024 * 2));
 
@@ -113,7 +113,7 @@ describe('audio adapter', () => {
     expect(speechBlocks[0].speaker).toBeDefined();
   });
 
-  it('returns ADAPTER_CONFIG_ERROR when API key missing', async () => {
+  it('returns graceful empty when no engine available', async () => {
     const filePath = path.join(tmpDir, 'small.mp3');
     writeFileSync(filePath, Buffer.alloc(1024 * 2));
 
@@ -127,13 +127,15 @@ describe('audio adapter', () => {
     const manager = new DefaultAdapterManager(adaptersDir, runner);
     await manager.loadBuiltIn();
 
-    await expect(manager.ingest(filePath)).rejects.toThrow(/WHISPER_API_KEY not set/);
+    const result = await manager.ingest(filePath);
+    expect(result.content).toBe('');
+    expect(result.metadata.blocks).toEqual([]);
 
     if (oldKey) process.env.WHISPER_API_KEY = oldKey;
     if (oldOpenAi) process.env.OPENAI_API_KEY = oldOpenAi;
   });
 
-  it('returns error when file too large', async () => {
+  it('returns error when file too large for API', async () => {
     const filePath = path.join(tmpDir, 'huge.mp3');
     writeFileSync(filePath, Buffer.alloc(26 * 1024 * 1024)); // 26 MB
 
@@ -147,7 +149,7 @@ describe('audio adapter', () => {
     await expect(manager.ingest(filePath)).rejects.toThrow(/too large/);
   });
 
-  it('creates segments for long audio', async () => {
+  it('creates segments for long audio via API fallback', async () => {
     const filePath = path.join(tmpDir, 'long.mp3');
     writeFileSync(filePath, Buffer.alloc(1024 * 2));
 

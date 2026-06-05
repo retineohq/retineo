@@ -1,9 +1,12 @@
 /**
  * ECHO Core — Dependency Checker (echo doctor)
- * Checks external tools: ffmpeg, tesseract, whisper API key, ollama.
+ * Checks external tools: ffmpeg, tesseract, whisper.cpp, whisper API key, ollama.
  */
 
 import { spawn } from 'child_process';
+import { access } from 'fs/promises';
+import { homedir } from 'os';
+import path from 'path';
 
 export interface DependencyCheck {
   name: string;
@@ -72,6 +75,61 @@ async function checkTesseract(): Promise<DependencyCheck> {
   };
 }
 
+async function checkWhisperCpp(): Promise<DependencyCheck> {
+  const res = await checkCommand('whisper-cli', ['--version'], /whisper(?:\.cpp)?\s*v?(\S+)/i);
+  if (res.ok) {
+    return {
+      name: 'whisper.cpp',
+      required: false,
+      installed: true,
+      version: res.version,
+      message: 'PRIMARY — local transcription engine',
+    };
+  }
+  // Check fallback path
+  const fallback = path.join(homedir(), '.echo', 'bin', 'whisper-cli');
+  try {
+    await access(fallback);
+    return {
+      name: 'whisper.cpp',
+      required: false,
+      installed: true,
+      message: `PRIMARY — ${fallback}`,
+    };
+  } catch {
+    return {
+      name: 'whisper.cpp',
+      required: false,
+      installed: false,
+      message: 'Install whisper.cpp for local audio/video transcription (https://github.com/ggerganov/whisper.cpp)',
+    };
+  }
+}
+
+async function checkWhisperModel(): Promise<DependencyCheck> {
+  const modelDir = path.join(homedir(), '.echo', 'models', 'whisper');
+  try {
+    const files = await (await import('fs/promises')).readdir(modelDir);
+    const model = files.find((f: string) => f.startsWith('ggml-') && f.endsWith('.bin'));
+    if (model) {
+      return {
+        name: 'whisper model',
+        required: false,
+        installed: true,
+        message: `${model} found`,
+      };
+    }
+  } catch {
+    // fall through
+  }
+  return {
+    name: 'whisper model',
+    required: false,
+    installed: false,
+    message: 'Download a model (e.g., ggml-base.bin) to ~/.echo/models/whisper/ (https://huggingface.co/ggerganov/whisper.cpp)',
+  };
+}
+
 async function checkWhisperKey(): Promise<DependencyCheck> {
   const key = process.env.WHISPER_API_KEY || process.env.OPENAI_API_KEY;
   const ok = !!key;
@@ -79,7 +137,7 @@ async function checkWhisperKey(): Promise<DependencyCheck> {
     name: 'Whisper API key',
     required: false,
     installed: ok,
-    message: ok ? undefined : 'Set WHISPER_API_KEY or OPENAI_API_KEY env var (required for audio/video adapters)',
+    message: ok ? 'OPTIONAL — cloud fallback' : 'Set WHISPER_API_KEY or OPENAI_API_KEY env var (optional, cloud fallback)',
   };
 }
 
@@ -108,6 +166,8 @@ export async function runDoctor(): Promise<DoctorResult> {
     checkNodeVersion(),
     checkFfmpeg(),
     checkTesseract(),
+    checkWhisperCpp(),
+    checkWhisperModel(),
     checkWhisperKey(),
     checkOllama(),
   ]);

@@ -6,9 +6,50 @@ Common issues and fixes for audio/video adapters and external dependencies.
 
 ## Audio/Video Adapters
 
+### No local transcription engine found (error 5004)
+
+**Cause:** Neither whisper.cpp nor a Whisper API key is available.
+
+**Fix — Option A: Install whisper.cpp (recommended, local-first)**
+
+```bash
+mkdir -p ~/.echo/bin ~/.echo/models/whisper
+wget https://github.com/ggerganov/whisper.cpp/releases/download/v1.6.0/whisper-cli-linux-x64
+chmod +x whisper-cli-linux-x64
+mv whisper-cli-linux-x64 ~/.echo/bin/whisper-cli
+wget https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin
+mv ggml-base.bin ~/.echo/models/whisper/
+```
+
+**Fix — Option B: Use cloud fallback**
+
+```bash
+export WHISPER_API_KEY="sk-..."
+# or
+export OPENAI_API_KEY="sk-..."
+```
+
+---
+
+### whisper.cpp model not found (error 5005)
+
+**Cause:** `whisper-cli` is installed but no GGML model file was found in `~/.echo/models/whisper/`.
+
+**Fix:**
+
+```bash
+mkdir -p ~/.echo/models/whisper
+wget https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin
+mv ggml-base.bin ~/.echo/models/whisper/
+```
+
+Or set `whisperCppModel` in your adapter config to an existing model path.
+
+---
+
 ### `WHISPER_API_KEY not set`
 
-**Cause:** The audio or video adapter needs an OpenAI API key to call the Whisper transcription API.
+**Cause:** The audio or video adapter needs an OpenAI API key to call the Whisper transcription API. This is only required if whisper.cpp is not installed.
 
 **Fix:**
 
@@ -33,7 +74,7 @@ echo key set openai sk-...
 **Fix:**
 
 - Split the audio into smaller chunks before ingestion.
-- Use the `whisper.cpp` fallback (configure `whisperCppModel` in adapter config).
+- Use whisper.cpp local transcription (no file size limit).
 - Compress the audio to a lower bitrate before sending.
 
 ---

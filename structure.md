@@ -36,9 +36,9 @@ echo-core/
 │   ├── markdown/            # Markdown adapter (.md)
 │   ├── pdf/                 # PDF adapter (real, pdf-parse)
 │   ├── image/               # Image OCR adapter (real, tesseract.js)
-│   ├── audio/               # Real audio adapter (Whisper API, .mp3/.wav/.m4a/.ogg/.flac/.webm)
+│   ├── audio/               # Real audio adapter (whisper.cpp primary → Whisper API fallback → graceful empty, .mp3/.wav/.m4a/.ogg/.flac/.webm)
 │   ├── audio-mock/          # Mock audio adapter (fallback for testing)
-│   ├── video/               # Real video adapter (ffmpeg + Whisper, .mp4/.avi/.mov/.mkv/.webm)
+│   ├── video/               # Real video adapter (ffmpeg + whisper.cpp primary → Whisper API fallback → graceful empty, .mp4/.avi/.mov/.mkv/.webm)
 │   ├── video-mock/          # Mock video adapter (fallback for testing)
 │   └── image-mock/          # Mock image adapter (deprecated, replaced by image/)
 ├── tests/
@@ -185,7 +185,7 @@ echo-core/
 | File            | Exports                                                                                                         | Description                                                                           |
 | --------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
 | `commands.ts`   | `CLICommands`, `CLICommandsDeps`, `IngestCLIOptions`, `SearchCLIOptions`                                        | CLI command implementations (ingest, search, status, compile, config, jobs, recover, doctor). |
-| `doctor.ts`     | `runDoctor`, `formatDoctor`, `DoctorResult`, `DependencyCheck`                                                  | External dependency checker (ffmpeg, tesseract, whisper key, ollama).                 |
+| `doctor.ts`     | `runDoctor`, `formatDoctor`, `DoctorResult`, `DependencyCheck`                                                  | External dependency checker (ffmpeg, tesseract, whisper.cpp, whisper model, whisper key, ollama). |
 | `formatters.ts` | `formatSearchResult`, `formatStatus`, `formatJobs`, `formatIngestResult`, `formatConfig`, `formatRecoverResult` | Output formatters for CLI commands.                                                   |
 | `index.ts`      | `createCLI`                                                                                                     | Commander-based CLI entry point.                                                      |
 
@@ -239,9 +239,9 @@ echo-core/
 | `ingestion.test.ts`           | full pipeline (file → CAS → registry), idempotency, batch ingest, job queueing                   | IngestionService orchestrates adapter → CAS → registry → GENERATE_L1 job. |
 | `pdf.test.ts`                 | valid PDF text extraction, heading detection, encrypted PDF, image-only PDF, manifest status     | Real PDF adapter via pdf-parse.                                           |
 | `image.test.ts`               | PNG/JPG resolution, blank image empty content, unsupported format, missing file, manifest status | Real image OCR adapter via tesseract.js.                                  |
-| `audio.test.ts`               | load manifest, resolve extensions/mimeTypes, ingest speech blocks, API key missing, large file, segments | Real audio adapter via Whisper API.                                |
+| `audio.test.ts`               | load manifest, resolve extensions/mimeTypes, ingest speech blocks, API fallback, graceful empty, large file, segments | Real audio adapter: whisper.cpp primary → Whisper API fallback → empty. |
 | `audio-mock.test.ts`          | load manifest, resolve .mp3/wav, ingest speech blocks, segments, timestamps, determinism         | Mock audio adapter validation (fallback).                                 |
-| `video.test.ts`               | load manifest, resolve .mp4, ffmpeg missing, API key missing, manifest status                    | Real video adapter via ffmpeg + Whisper API.                              |
+| `video.test.ts`               | load manifest, resolve .mp4, ffmpeg missing, graceful empty, manifest status                     | Real video adapter: ffmpeg + whisper.cpp primary → Whisper API fallback → empty. |
 | `video-mock.test.ts`          | load manifest, resolve .mp4/avi, ingest frame + speech blocks, bbox, segments                    | Mock video adapter validation (fallback).                                 |
 | `image-mock.test.ts`          | load manifest, resolve .png/.jpg, ingest ocr blocks, bbox, confidence, no segments               | Mock image adapter validation (deprecated).                               |
 | `multimodal-pipeline.test.ts` | end-to-end: audio/video/image → CAS → registry → verify content.meta.json                        | Full pipeline with mock multimodal adapters.                              |
@@ -290,7 +290,7 @@ echo-core/
 | File               | Tests                                                        | Description                        |
 | ------------------ | ------------------------------------------------------------ | ---------------------------------- |
 | `commands.test.ts` | `ingest`, `status`, `config`, `recover` with mocked services | CLI command parsing and execution. |
-| `doctor.test.ts`   | `runDoctor`, `formatDoctor`, Node.js check, output formatting | Dependency checker correctness.    |
+| `doctor.test.ts`   | `runDoctor`, `formatDoctor`, Node.js check, whisper.cpp check, whisper model check, output formatting | Dependency checker correctness.    |
 
 ### `tests/mcp/` — MCP Tests
 

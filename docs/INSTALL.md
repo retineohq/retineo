@@ -8,7 +8,8 @@
 | OS          | Linux, macOS, Windows WSL | Native Windows without WSL is not tested               |
 | ffmpeg      | optional                  | Required for video adapter (audio extract + frames)    |
 | Tesseract   | optional                  | For PDF/image OCR if not using built-in `tesseract.js` |
-| Whisper API key | optional              | Required for audio/video transcription (OpenAI Whisper) |
+| whisper.cpp | optional                  | **Primary** audio/video transcription engine (local, offline) |
+| Whisper API key | optional              | Cloud fallback for audio/video transcription (OpenAI Whisper) |
 
 Install Node.js via [nodejs.org](https://nodejs.org/) or your package manager:
 
@@ -100,7 +101,31 @@ brew install ffmpeg
 ffmpeg -version
 ```
 
-### Whisper API key (required for audio/video adapters)
+### whisper.cpp (recommended for audio/video adapters)
+
+Local-first speech-to-text. Offline, free, private.
+
+```bash
+# Download whisper-cli binary
+mkdir -p ~/.echo/bin
+wget https://github.com/ggerganov/whisper.cpp/releases/download/v1.6.0/whisper-cli-linux-x64
+chmod +x whisper-cli-linux-x64
+mv whisper-cli-linux-x64 ~/.echo/bin/whisper-cli
+
+# Download model (~500MB for base, good balance)
+mkdir -p ~/.echo/models/whisper
+wget https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin
+mv ggml-base.bin ~/.echo/models/whisper/
+
+# Verify
+echo doctor
+```
+
+Without whisper.cpp, audio/video adapters will use the OpenAI API if a key is set, otherwise return empty content.
+
+### Whisper API key (cloud fallback for audio/video adapters)
+
+Only needed if whisper.cpp is not installed.
 
 ```bash
 export WHISPER_API_KEY="sk-..."

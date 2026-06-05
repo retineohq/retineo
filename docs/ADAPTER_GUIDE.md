@@ -542,6 +542,49 @@ Your adapter must return a string in `content`. Binary data (images, audio wavef
 ### Adapter Does Not Store Files
 Your adapter is a transformer, not a storage layer. It reads the input file, produces normalized content, and exits. ECHO Core handles all persistence. Do not write to disk unless required for temporary processing.
 
+### Local-First Audio/Video Transcription
+
+ECHO Core's `audio` and `video` adapters use a **local-first** priority cascade:
+
+1. **whisper.cpp (local)** — PRIMARY. Offline, free, private. Requires `whisper-cli` binary + GGML model.
+2. **OpenAI Whisper API (cloud)** — OPTIONAL FALLBACK. Requires `WHISPER_API_KEY` or `OPENAI_API_KEY`.
+3. **Graceful empty** — LAST RESORT. Returns empty content with error code `5004` if no engine is available.
+
+#### Setting up whisper.cpp
+
+```bash
+# 1. Download whisper-cli binary
+mkdir -p ~/.echo/bin
+wget https://github.com/ggerganov/whisper.cpp/releases/download/v1.6.0/whisper-cli-linux-x64
+chmod +x whisper-cli-linux-x64
+mv whisper-cli-linux-x64 ~/.echo/bin/whisper-cli
+
+# 2. Download a model (~500MB for base)
+mkdir -p ~/.echo/models/whisper
+wget https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin
+mv ggml-base.bin ~/.echo/models/whisper/
+
+# 3. Verify
+echo doctor
+```
+
+Supported model locations:
+- `~/.echo/models/whisper/ggml-*.bin` (auto-detected)
+- Config key `whisperCppModel` in adapter config
+- Any path passed via `whisperCppPath` in adapter config
+
+#### Using Cloud Fallback Only
+
+If you prefer not to install whisper.cpp, set an API key:
+
+```bash
+export WHISPER_API_KEY="sk-..."
+# or
+export OPENAI_API_KEY="sk-..."
+```
+
+The adapters will skip local detection and use the cloud API directly.
+
 ### Heavy Processing Is Your Responsibility
 If your adapter needs ML models (Whisper, Tesseract, YOLO), large binaries (ffmpeg, pandoc), or network calls, you must bundle and manage them. ECHO Core provides the spawn environment and working directory, but nothing else.
 
@@ -583,9 +626,9 @@ ECHO Core ships with the following built-in adapters:
 | `markdown` | stable | `.md` | Markdown with heading block detection |
 | `pdf` | stable | `.pdf` | Text extraction via `pdf-parse`, heading heuristics, encrypted PDF detection |
 | `image` | stable | `.png`, `.jpg`, `.jpeg`, `.tiff`, `.bmp`, `.webp` | OCR via `tesseract.js` with bbox + confidence |
-| `audio` | stable | `.mp3`, `.wav`, `.m4a`, `.ogg`, `.flac`, `.webm` | Speech-to-text via OpenAI Whisper API with heuristic speaker diarization |
+| `audio` | stable | `.mp3`, `.wav`, `.m4a`, `.ogg`, `.flac`, `.webm` | Speech-to-text via **whisper.cpp (local, primary)** → OpenAI Whisper API (cloud, fallback) → graceful empty. Heuristic speaker diarization |
 | `audio-mock` | mock | `.mp3`, `.wav` | Synthetic speech blocks for testing (fallback) |
-| `video` | stable | `.mp4`, `.avi`, `.mov`, `.mkv`, `.webm` | ffmpeg audio extract + Whisper transcription + key-frame timestamps |
+| `video` | stable | `.mp4`, `.avi`, `.mov`, `.mkv`, `.webm` | ffmpeg audio extract → **whisper.cpp (local, primary)** → OpenAI Whisper API (cloud, fallback) → graceful empty. Key-frame timestamps |
 | `video-mock` | mock | `.mp4`, `.avi` | Synthetic frame + speech blocks for testing (fallback) |
 
 ### Determinism Is Strongly Recommended

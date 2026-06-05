@@ -20,11 +20,34 @@ describe('doctor', () => {
     expect(node!.installed).toBe(true);
   });
 
+  it('includes whisper.cpp check', async () => {
+    const result = await runDoctor();
+    const whisper = result.checks.find((c) => c.name === 'whisper.cpp');
+    expect(whisper).toBeDefined();
+    expect(whisper!.required).toBe(false);
+  });
+
+  it('includes whisper model check', async () => {
+    const result = await runDoctor();
+    const model = result.checks.find((c) => c.name === 'whisper model');
+    expect(model).toBeDefined();
+    expect(model!.required).toBe(false);
+  });
+
+  it('includes Whisper API key check as optional', async () => {
+    const result = await runDoctor();
+    const key = result.checks.find((c) => c.name === 'Whisper API key');
+    expect(key).toBeDefined();
+    expect(key!.required).toBe(false);
+  });
+
   it('formatDoctor produces lines', async () => {
     const result = await runDoctor();
     const out = formatDoctor(result);
     expect(out).toContain('ECHO Core Dependency Check');
     expect(out).toContain('Node.js');
+    expect(out).toContain('whisper.cpp');
+    expect(out).toContain('whisper model');
   });
 
   it('ok is true when Node.js present', async () => {

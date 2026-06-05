@@ -1,6 +1,6 @@
 /**
  * ECHO Real Video Adapter
- * Extracts audio via ffmpeg → Whisper API transcription.
+ * Extracts audio via ffmpeg → transcribe with whisper.cpp (primary) → OpenAI Whisper API (fallback) → graceful empty.
  * Extracts key frames via ffmpeg (placeholder descriptions).
  * Supports: .mp4 .avi .mov .mkv .webm
  */
@@ -10,7 +10,6 @@ const fs = require('fs').promises;
 const path = require('path');
 const os = require('os');
 const { spawn } = require('child_process');
-const { createReadStream } = require('fs');
 
 const rl = readline.createInterface({ input: process.stdin });
 
@@ -27,6 +26,8 @@ const SUPPORTED_EXTS = ['.mp4', '.avi', '.mov', '.mkv', '.webm'];
 const SEGMENT_MS = 300000; // 5 minutes
 const DEFAULT_WHISPER_URL = 'https://api.openai.com/v1/audio/transcriptions';
 const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25 MB
+const WHISPER_MODEL_DIR = path.join(os.homedir(), '.echo', 'models', 'whisper');
+const WHISPER_BIN_FALLBACK = path.join(os.homedir(), '.echo', 'bin', 'whisper-cli');
 
 let config = {};
 
@@ -47,7 +48,7 @@ rl.on('line', async (line) => {
   switch (req.method) {
     case 'initialize':
       config = req.params.config || {};
-      result = { adapterId: 'video', version: '1.0.0' };
+      result = { adapterId: 'video', version: '1.1.0' };
       break;
     case 'capabilities':
       result = { mimeTypes: SUPPORTED_MIMES, extensions: SUPPORTED_EXTS };
@@ -91,16 +92,6 @@ function extToMime(ext) {
     '.webm': 'video/webm',
   };
   return map[ext] || null;
-}
-
-function resolveApiKey() {
-  const key = config.apiKey || process.env.WHISPER_API_KEY || process.env.OPENAI_API_KEY;
-  if (!key) {
-    const err = new Error('WHISPER_API_KEY not set');
-    err.code = 5001;
-    throw err;
-  }
-  return key;
 }
 
 function formatTimestamp(ms) {
@@ -176,13 +167,116 @@ async function extractFrames(uri, outDir, frameIntervalSec, durationSec) {
     proc.stderr.on('data', (d) => { stderr += d; });
     proc.on('close', (code) => {
       if (code !== 0) {
-        // Non-fatal: some videos may fail frame extraction
         resolve([]);
       } else {
         resolve();
       }
     });
     proc.on('error', () => resolve([]));
+  });
+}
+
+async function commandExists(cmd) {
+  return new Promise((resolve) => {
+    const proc = spawn(cmd, ['--version'], { stdio: 'pipe' });
+    proc.on('error', () => resolve(false));
+    proc.on('close', (code) => resolve(code === 0));
+  });
+}
+
+async function findWhisperCli() {
+  const configured = config.whisperCppPath;
+  if (configured) {
+    try {
+      await fs.access(configured);
+      return configured;
+    } catch {
+      // fall through
+    }
+  }
+  if (await commandExists('whisper-cli')) {
+    return 'whisper-cli';
+  }
+  try {
+    await fs.access(WHISPER_BIN_FALLBACK);
+    return WHISPER_BIN_FALLBACK;
+  } catch {
+    return null;
+  }
+}
+
+async function findModel() {
+  const configured = config.whisperCppModel;
+  if (configured) {
+    try {
+      await fs.access(configured);
+      return configured;
+    } catch {
+      // fall through
+    }
+  }
+  try {
+    const files = await fs.readdir(WHISPER_MODEL_DIR);
+    const model = files.find((f) => f.startsWith('ggml-') && f.endsWith('.bin'));
+    if (model) {
+      return path.join(WHISPER_MODEL_DIR, model);
+    }
+  } catch {
+    // fall through
+  }
+  return null;
+}
+
+async function callWhisperCpp(filePath, whisperPath, modelPath) {
+  const outJson = path.join(os.tmpdir(), `echo-whisper-${Date.now()}.json`);
+  const args = [
+    '-m', modelPath,
+    '-f', filePath,
+    '-oj',
+    '-of', outJson.replace(/\.json$/, ''),
+    '--output-json',
+  ];
+  const lang = config.language;
+  if (lang && lang !== 'auto') {
+    args.push('-l', lang);
+  }
+
+  return new Promise((resolve, reject) => {
+    const proc = spawn(whisperPath, args, { stdio: 'pipe' });
+    let stderr = '';
+    proc.stderr.on('data', (d) => { stderr += d; });
+    proc.on('close', async (code) => {
+      if (code !== 0) {
+        const err = new Error(`whisper.cpp failed (code ${code}): ${stderr}`);
+        err.code = 5002;
+        reject(err);
+        return;
+      }
+      try {
+        const data = JSON.parse(await fs.readFile(outJson, 'utf-8'));
+        await fs.unlink(outJson).catch(() => {});
+        const raw = data.transcription || [];
+        const segments = raw.map((seg, idx) => {
+          const startMs = seg.offsets ? seg.offsets.from : 0;
+          const endMs = seg.offsets ? seg.offsets.to : (startMs + 5000);
+          return {
+            id: idx,
+            start: startMs / 1000,
+            end: endMs / 1000,
+            text: seg.text || '',
+          };
+        });
+        resolve({ segments });
+      } catch (e) {
+        const err = new Error(`Failed to parse whisper.cpp output: ${e.message}`);
+        err.code = 5002;
+        reject(err);
+      }
+    });
+    proc.on('error', (err) => {
+      err.code = 5002;
+      reject(err);
+    });
   });
 }
 
@@ -220,6 +314,45 @@ async function callWhisperAPI(filePath, apiKey) {
   }
 
   return res.json();
+}
+
+async function transcribeAudio(filePath) {
+  // Priority 1: local whisper.cpp
+  const whisperPath = await findWhisperCli();
+  if (whisperPath) {
+    const modelPath = await findModel();
+    if (modelPath) {
+      try {
+        return await callWhisperCpp(filePath, whisperPath, modelPath);
+      } catch (err) {
+        if (err.code === 5002) {
+          throw err;
+        }
+        // unexpected — try fallback
+      }
+    } else {
+      const apiKey = config.apiKey || process.env.WHISPER_API_KEY || process.env.OPENAI_API_KEY;
+      if (!apiKey) {
+        const err = new Error(
+          'whisper.cpp model not found. Download a model (e.g., ggml-base.bin) to ~/.echo/models/whisper/ or set WHISPER_API_KEY for cloud fallback.'
+        );
+        err.code = 5005;
+        throw err;
+      }
+      // fall through to API
+    }
+  }
+
+  // Priority 2: OpenAI Whisper API fallback
+  const apiKey = config.apiKey || process.env.WHISPER_API_KEY || process.env.OPENAI_API_KEY;
+  if (apiKey) {
+    return await callWhisperAPI(filePath, apiKey);
+  }
+
+  // Priority 3: graceful empty
+  return {
+    segments: [],
+  };
 }
 
 function heuristicSpeakerDiarization(segments) {
@@ -260,7 +393,6 @@ async function ingestFile(uri, mimeType) {
     throw err;
   }
 
-  const apiKey = resolveApiKey();
   const tmpDir = path.join(os.tmpdir(), `echo-video-${Date.now()}`);
   const wavPath = path.join(tmpDir, 'audio.wav');
   const framesDir = path.join(tmpDir, 'frames');
@@ -282,7 +414,7 @@ async function ingestFile(uri, mimeType) {
     await fs.mkdir(tmpDir, { recursive: true });
     try {
       await extractAudio(uri, wavPath);
-      const whisperResult = await callWhisperAPI(wavPath, apiKey);
+      const whisperResult = await transcribeAudio(wavPath);
       whisperSegments = whisperResult.segments || [];
       if (!whisperSegments.length && whisperResult.text) {
         whisperSegments.push({ id: 0, start: 0, end: Math.max(1, videoInfo.durationSec || 1), text: whisperResult.text });
@@ -290,9 +422,8 @@ async function ingestFile(uri, mimeType) {
     } catch (err) {
       if (err.message && err.message.includes('audio extract failed')) {
         hasAudio = false;
-      } else {
-        throw err;
       }
+      // Other transcription errors → graceful empty (no speech blocks)
     }
   }
 
@@ -324,7 +455,6 @@ async function ingestFile(uri, mimeType) {
   let globalOffset = 0;
   const contentLines = [];
 
-  // Interleave frames and speech
   let frameIdx = 0;
   let segIdx = 0;
 
@@ -365,11 +495,13 @@ async function ingestFile(uri, mimeType) {
 
   const content = contentLines.join('\n');
 
+  const result = {
+    content,
+    metadata: { blocks: allBlocks },
+  };
+
   if (durationMs <= SEGMENT_MS) {
-    return {
-      content,
-      metadata: { blocks: allBlocks },
-    };
+    return result;
   }
 
   // Split into segments
@@ -394,5 +526,6 @@ async function ingestFile(uri, mimeType) {
     seg.content += (seg.content ? '\n' : '') + text;
   }
 
-  return { content, metadata: { blocks: allBlocks }, segments };
+  result.segments = segments;
+  return result;
 }
