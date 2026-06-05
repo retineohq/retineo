@@ -27,17 +27,17 @@ interface SecretsManager {
 
 ```bash
 # Store an API key (encrypted)
-echo key set openai sk-xxxxxxxx
+echoc key set openai sk-xxxxxxxx
 
 # View masked key
-echo key get openai
+echoc key get openai
 # openai: sk-x...xxxx
 
 # List all keys (masked)
-echo key list
+echoc key list
 
 # Remove a key
-echo key delete openai
+echoc key delete openai
 ```
 
 ### Config Resolution Order

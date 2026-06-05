@@ -378,7 +378,7 @@ echo-core/
 | **Expose ECHO over HTTP/WebSocket**                     | `FastifyBridgeServer`                          | `src/bridge/server.ts`                              | `bridge/routes.ts`, `bridge/sse.ts`                              |
 | **Serve as an MCP server**                              | `EchoMCPServer`                                | `src/mcp/server.ts`                                 | `mcp/tools.ts`, `mcp/handlers.ts`                                |
 | **Run CLI commands**                                    | `CLICommands` + `createCLI`                    | `src/cli/commands.ts`, `src/cli/index.ts`           | `commander`, `bridge/types.ts`                                   |
-| **Manage encrypted API keys via CLI**                   | `CLICommands.keySet/get/delete/list`           | `src/cli/commands.ts`                               | `FileSecretsManager`, `echo key`                                 |
+| **Manage encrypted API keys via CLI**                   | `CLICommands.keySet/get/delete/list`           | `src/cli/commands.ts`                               | `FileSecretsManager`, `echoc key`                                 |
 | **Add a new LLM provider type to factory**              | `DefaultLLMProviderFactory`                    | `src/llm/factory.ts`                                | Extend `createProvider` switch                                   |
 
 ---

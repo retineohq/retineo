@@ -5,101 +5,103 @@
 ```bash
 npm install -g echo-core
 # or run locally:
-node bin/echo.js <command>
+node bin/echo-core.js <command>
 ```
+
+> `echo-core` is also available as an alias for `echoc`.
 
 ## Commands
 
-### `echo ingest <filePath>`
+### `echoc ingest <filePath>`
 
 Ingest a file into the knowledge base.
 
 ```bash
-echo ingest ./notes.md
-echo ingest ./doc.pdf --adapter pdf
+echoc ingest ./notes.md
+echoc ingest ./doc.pdf --adapter pdf
 ```
 
-### `echo search <query>`
+### `echoc search <query>`
 
 Search the knowledge base.
 
 ```bash
-echo search "machine learning"
-echo search "deep learning" --language en --mode hybrid --top-k 10 --json
+echoc search "machine learning"
+echoc search "deep learning" --language en --mode hybrid --top-k 10 --json
 ```
 
-### `echo status`
+### `echoc status`
 
 Show engine status.
 
 ```bash
-echo status
+echoc status
 ```
 
-### `echo compile [filePath]`
+### `echoc compile [filePath]`
 
 Compile pending jobs or a specific file.
 
 ```bash
-echo compile
-echo compile ./notes.md --layer l2
+echoc compile
+echoc compile ./notes.md --layer l2
 ```
 
-### `echo config [key] [value]`
+### `echoc config [key] [value]`
 
 Read or write config values.
 
 ```bash
-echo config
-echo config search.defaultLanguage
-echo config search.defaultLanguage ru
+echoc config
+echoc config search.defaultLanguage
+echoc config search.defaultLanguage ru
 ```
 
-### `echo jobs`
+### `echoc jobs`
 
 List recent jobs.
 
 ```bash
-echo jobs
+echoc jobs
 ```
 
-### `echo recover <hash>`
+### `echoc recover <hash>`
 
 Recover an orphaned node.
 
 ```bash
-echo recover deadbeef...
+echoc recover deadbeef...
 ```
 
-### `echo key set <provider> <apiKey>`
+### `echoc key set <provider> <apiKey>`
 
 Encrypt and store an API key in `~/.echo/secrets.json`.
 
 ```bash
-echo key set openai sk-xxxxxxxx
+echoc key set openai sk-xxxxxxxx
 ```
 
-### `echo key get <provider>`
+### `echoc key get <provider>`
 
 Show a masked version of the stored key.
 
 ```bash
-echo key get openai
+echoc key get openai
 # openai: sk-x...xxxx
 ```
 
-### `echo key delete <provider>`
+### `echoc key delete <provider>`
 
 Remove a stored key.
 
 ```bash
-echo key delete openai
+echoc key delete openai
 ```
 
-### `echo key list`
+### `echoc key list`
 
 List all stored keys (masked).
 
 ```bash
-echo key list
+echoc key list
 ```

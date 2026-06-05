@@ -2,6 +2,8 @@
 
 This tutorial walks through your first ingestion, search, and API call.
 
+> `echo-core` is also available as an alias for `echoc`.
+
 ---
 
 ## 1. Initialize
@@ -9,7 +11,7 @@ This tutorial walks through your first ingestion, search, and API call.
 Verify installation:
 
 ```bash
-echo status
+echoc status
 ```
 
 Expected output:
@@ -28,14 +30,14 @@ Expected output:
 ## 2. Ingest Your First Files
 
 ```bash
-echo ingest ~/Documents/report.pdf
-echo ingest ~/Documents/notes.md
-echo ingest ~/Documents/podcast.mp3
-echo ingest ~/Documents/meeting.mp4
+echoc ingest ~/Documents/report.pdf
+echoc ingest ~/Documents/notes.md
+echoc ingest ~/Documents/podcast.mp3
+echoc ingest ~/Documents/meeting.mp4
 ```
 
 > **Audio/video require:** `WHISPER_API_KEY` env var and `ffmpeg` (for video).
-> Run `echo doctor` to verify dependencies.
+> Run `echoc doctor` to verify dependencies.
 
 Expected output:
 
@@ -59,7 +61,7 @@ ECHO Core:
 ## 3. Check Compilation
 
 ```bash
-echo jobs
+echoc jobs
 ```
 
 Watch for status changes:
@@ -83,7 +85,7 @@ When all jobs show `COMPLETED`, the file is fully searchable.
 ## 4. Search
 
 ```bash
-echo search "pricing objections"
+echoc search "pricing objections"
 ```
 
 Expected output:
@@ -108,7 +110,7 @@ Results: 3
 ## 5. Try Multilingual
 
 ```bash
-echo search "возражения по цене" --language ru
+echoc search "возражения по цене" --language ru
 ```
 
 ECHO Core detects Russian, loads the `ruPack`, and searches the shared embedding space. English documents can match Russian queries via cross-lingual embeddings.
@@ -157,8 +159,8 @@ Add to Claude Desktop config (`~/Library/Application Support/Claude/claude_deskt
 ```json
 {
   "mcpServers": {
-    "echo": {
-      "command": "echo",
+    "echoc": {
+      "command": "echoc",
       "args": ["mcp"]
     }
   }

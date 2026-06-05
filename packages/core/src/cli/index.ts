@@ -12,7 +12,7 @@ export function createCLI(deps: CLICommandsDeps): Command {
   const commands = new CLICommands(deps);
   const program = new Command();
 
-  program.name('echo').description('ECHO Core CLI').version(deps.version);
+  program.name('echoc').description('ECHO Core CLI').version(deps.version);
 
   program
     .command('ingest <filePath>')

@@ -7,7 +7,7 @@ Add to Claude Desktop `claude_desktop_config.json`:
 ```json
 {
   "mcpServers": {
-    "echo": {
+    "echoc": {
       "command": "node",
       "args": ["/path/to/echo-core/bin/echo-mcp.js"]
     }

@@ -565,7 +565,7 @@ wget https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin
 mv ggml-base.bin ~/.echo/models/whisper/
 
 # 3. Verify
-echo doctor
+echoc doctor
 ```
 
 Supported model locations:

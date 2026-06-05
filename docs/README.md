@@ -1,6 +1,6 @@
 # ECHO Core Documentation
 
-[![npm version](https://img.shields.io/npm/v/@echo/core)](https://www.npmjs.com/package/@echo/core)
+[![npm version](https://img.shields.io/npm/v/echo-core)](https://www.npmjs.com/package/echo-core)
 [![CI](https://github.com/your-org/echo-core/actions/workflows/ci.yml/badge.svg)](https://github.com/your-org/echo-core/actions)
 
 ## Quick Start

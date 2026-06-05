@@ -3,13 +3,13 @@
 ## Install via npm (recommended)
 
 ```bash
-npm install -g @echo/core
+npm install -g echo-core
 ```
 
 Or run without installing:
 
 ```bash
-npx @echo/core <command>
+npx echo-core <command>
 ```
 
 Requires Node.js >= 20.
@@ -39,7 +39,7 @@ pnpm test
 Run locally:
 
 ```bash
-node bin/echo.js <command>
+node bin/echo-core.js <command>
 ```
 
 ## Limitations

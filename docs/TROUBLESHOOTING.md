@@ -62,7 +62,7 @@ export OPENAI_API_KEY="sk-..."
 Persist in ECHO secrets:
 
 ```bash
-echo key set openai sk-...
+echoc key set openai sk-...
 ```
 
 ---
@@ -120,10 +120,10 @@ ffmpeg -i video.mp4 2>&1 | grep Audio
 
 ## Dependency Checks
 
-Run `echo doctor` to verify all external tools:
+Run `echoc doctor` to verify all external tools:
 
 ```bash
-echo doctor
+echoc doctor
 ```
 
 Expected output when healthy:

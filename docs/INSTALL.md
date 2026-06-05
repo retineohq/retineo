@@ -30,20 +30,22 @@ node --version  # v20.x.x or higher
 ## Install via npm
 
 ```bash
-npm install -g @echo/core
+npm install -g echo-core
 ```
 
 Or run without installing:
 
 ```bash
-npx @echo/core <command>
+npx echo-core <command>
 ```
 
 ### Initialize ECHO
 
 ```bash
-echo init
+echoc init
 ```
+
+> `echo-core` is also available as an alias for `echoc`.
 
 What `init` does:
 
@@ -81,7 +83,7 @@ pnpm test
 Run locally:
 
 ```bash
-node bin/echo.js <command>
+node bin/echo-core.js <command>
 ```
 
 ---
@@ -118,7 +120,7 @@ wget https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin
 mv ggml-base.bin ~/.echo/models/whisper/
 
 # Verify
-echo doctor
+echoc doctor
 ```
 
 Without whisper.cpp, audio/video adapters will use the OpenAI API if a key is set, otherwise return empty content.
@@ -136,13 +138,13 @@ export OPENAI_API_KEY="sk-..."
 Store persistently:
 
 ```bash
-echo key set openai $OPENAI_API_KEY
+echoc key set openai $OPENAI_API_KEY
 ```
 
 ### Check all dependencies
 
 ```bash
-echo doctor
+echoc doctor
 ```
 
 ---
@@ -150,7 +152,7 @@ echo doctor
 ## First run
 
 ```bash
-echo status
+echoc status
 ```
 
 Expected output:
@@ -182,19 +184,19 @@ Files created in `~/.echo/`:
 View current config:
 
 ```bash
-echo config
+echoc config
 ```
 
 Set data directory:
 
 ```bash
-echo config dataDir /path/to/data
+echoc config dataDir /path/to/data
 ```
 
 Set default LLM provider:
 
 ```bash
-echo config llm.defaultProvider ollama
+echoc config llm.defaultProvider ollama
 ```
 
 Edit `~/.echo/config.yaml` directly for advanced options. See [`ARCHITECTURE.md`](ARCHITECTURE.md) for config reference.
@@ -206,11 +208,11 @@ Edit `~/.echo/config.yaml` directly for advanced options. See [`ARCHITECTURE.md`
 | Symptom                                 | Cause                                    | Fix                                                                                                     |
 | --------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------- |
 | `Port 37891 is already in use`          | Another ECHO instance running            | `kill` the old process or change `bridge.port` in config                                                |
-| `SQLite database is locked`             | Concurrent access or crashed worker      | Wait 30s for lease expiry, or run `echo recover`                                                        |
+| `SQLite database is locked`             | Concurrent access or crashed worker      | Wait 30s for lease expiry, or run `echoc recover`                                                        |
 | `Adapter not found for .ext`            | No adapter registered for that extension | Check [`ADAPTER_GUIDE.md`](ADAPTER_GUIDE.md) or install the adapter                                     |
-| `LLM provider timeout`                  | Provider unreachable or overloaded       | Check `llm.providers[].baseUrl`, increase `timeoutMs`, or verify API key with `echo key get <provider>` |
-| `CONFIG_SECRET_NOT_FOUND`               | Environment variable or secret missing   | Set with `echo key set <provider> <key>` or export the env var                                          |
-| `WHISPER_API_KEY not set`               | Missing Whisper API key                  | Set `WHISPER_API_KEY` or `OPENAI_API_KEY` env var, or run `echo key set openai <key>`                  |
+| `LLM provider timeout`                  | Provider unreachable or overloaded       | Check `llm.providers[].baseUrl`, increase `timeoutMs`, or verify API key with `echoc key get <provider>` |
+| `CONFIG_SECRET_NOT_FOUND`               | Environment variable or secret missing   | Set with `echoc key set <provider> <key>` or export the env var                                          |
+| `WHISPER_API_KEY not set`               | Missing Whisper API key                  | Set `WHISPER_API_KEY` or `OPENAI_API_KEY` env var, or run `echoc key set openai <key>`                  |
 | `ffmpeg is required`                    | ffmpeg not installed                     | Install ffmpeg: `apt install ffmpeg` or `brew install ffmpeg`                                            |
 | `Module not found` after source install | Forgot `pnpm build`                      | Run `pnpm build`                                                                                        |
 

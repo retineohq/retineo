@@ -133,7 +133,7 @@ Sensitive config values (`${ENV_VAR}`) resolve in order:
 2. `SecretsManager` (`~/.echo/secrets.json`, AES-256-GCM encrypted)
 3. Throw `CONFIG_SECRET_NOT_FOUND`
 
-CLI: `echo key set <provider> <key>`, `echo key get <provider>`, `echo key delete <provider>`, `echo key list`.
+CLI: `echoc key set <provider> <key>`, `echoc key get <provider>`, `echoc key delete <provider>`, `echoc key list`.
 
 ### Health & Metrics
 
@@ -222,11 +222,11 @@ User / External Agent
   ↓
 ┌─────────────────────────────────────────┐
 │  CLI          │  HTTP API    │  MCP      │
-│  echo ingest  │  POST /v1/   │  echo_    │
-│  echo search  │  ingest      │  search   │
-│  echo status  │  POST /v1/   │  echo_    │
-│  echo compile │  search      │  ingest   │
-│  echo config  │  GET /v1/    │  echo_    │
+│  echoc ingest  │  POST /v1/   │  echo_    │
+│  echoc search  │  ingest      │  search   │
+│  echoc status  │  POST /v1/   │  echo_    │
+│  echoc compile │  search      │  ingest   │
+│  echoc config  │  GET /v1/    │  echo_    │
 │               │  status      │  status   │
 │               │  SSE /v1/    │           │
 │               │  jobs/:id    │           │
@@ -237,24 +237,24 @@ IngestionService / RetrievalService / CompilationPipeline
 
 | Interface | Transport | Default | Auth |
 |-----------|-----------|---------|------|
-| **CLI** | `stdio` | `echo` command | none (local process) |
+| **CLI** | `stdio` | `echoc` command | none (local process) |
 | **HTTP API** | Fastify | `127.0.0.1:37891` | none in MVP (future: API keys) |
 | **MCP** | stdio (JSON-RPC) | Claude Desktop, Cursor | none |
 
 ### CLI Commands (Phase 7)
 
 ```
-echo ingest <file>          # Ingest a file
-echo search <query>         # Search with --language, --mode, --top-k, --json
-echo status                 # Engine status
-echo compile [file]         # Compile pending jobs or specific file
-echo config [key] [value]   # Read/write config
-echo jobs                   # List recent jobs
-echo recover <hash>         # Recover orphaned node
-echo key set <p> <key>      # Store encrypted API key
-echo key get <p>            # Show masked key
-echo key delete <p>         # Remove key
-echo key list               # List all keys (masked)
+echoc ingest <file>          # Ingest a file
+echoc search <query>         # Search with --language, --mode, --top-k, --json
+echoc status                 # Engine status
+echoc compile [file]         # Compile pending jobs or specific file
+echoc config [key] [value]   # Read/write config
+echoc jobs                   # List recent jobs
+echoc recover <hash>         # Recover orphaned node
+echoc key set <p> <key>      # Store encrypted API key
+echoc key get <p>            # Show masked key
+echoc key delete <p>         # Remove key
+echoc key list               # List all keys (masked)
 ```
 
 See [`structure.md`](../structure.md) for the complete file listing and cross-reference index.

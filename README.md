@@ -1,6 +1,6 @@
 # ECHO Core — Content Compilation Engine
 
-[![npm version](https://img.shields.io/npm/v/@echo/core)](https://www.npmjs.com/package/@echo/core)
+[![npm version](https://img.shields.io/npm/v/echo-core)](https://www.npmjs.com/package/echo-core)
 [![CI](https://github.com/your-org/echo-core/actions/workflows/ci.yml/badge.svg)](https://github.com/your-org/echo-core/actions)
 
 **Version:** 0.1.0 MVP  
@@ -23,13 +23,13 @@ ECHO Core is a **Content Compilation Engine** that transforms any information so
 ## Install
 
 ```bash
-npm install -g @echo/core
+npm install -g echo-core
 ```
 
 Or try without installing:
 
 ```bash
-npx @echo/core status
+npx echo-core status
 ```
 
 See [docs/INSTALL.md](docs/INSTALL.md) for binary and source install options.
@@ -37,11 +37,13 @@ See [docs/INSTALL.md](docs/INSTALL.md) for binary and source install options.
 ## Quick start
 
 ```bash
-echo init      # create ~/.echo/ config
-echo status    # check engine status
-echo ingest ./my-document.pdf
-echo search "semantic search query"
+echoc init      # create ~/.echo/ config
+echoc status    # check engine status
+echoc ingest ./my-document.pdf
+echoc search "semantic search query"
 ```
+
+> `echo-core` is also available as an alias for the `echoc` command.
 
 ## Architecture Principles
 

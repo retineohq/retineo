@@ -1,12 +1,13 @@
 {
-  "name": "@echo/core",
+  "name": "echo-core",
   "version": "0.1.0",
   "description": "Content Compilation Engine: fractal knowledge compiler (L0-L3)",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "echo": "bin/echo.js"
+    "echoc": "bin/echo-core.js",
+    "echo-core": "bin/echo-core.js"
   },
   "files": [
     "dist",
@@ -20,7 +21,7 @@
     "build": "tsc",
     "test": "vitest --run",
     "lint": "eslint src/**/*.ts",
-    "bundle:binary": "esbuild bin/echo.js --bundle --platform=node --outfile=dist/bundle.cjs --format=cjs",
+    "bundle:binary": "esbuild bin/echo-core.js --bundle --platform=node --outfile=dist/bundle.cjs --format=cjs",
     "package:binary": "pnpm bundle:binary && pkg dist/bundle.cjs --out-path=dist --targets=node18-linux-x64,node18-macos-x64,node18-win-x64"
   },
   "dependencies": {
