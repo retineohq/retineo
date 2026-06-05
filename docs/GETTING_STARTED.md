@@ -30,7 +30,12 @@ Expected output:
 ```bash
 echo ingest ~/Documents/report.pdf
 echo ingest ~/Documents/notes.md
+echo ingest ~/Documents/podcast.mp3
+echo ingest ~/Documents/meeting.mp4
 ```
+
+> **Audio/video require:** `WHISPER_API_KEY` env var and `ffmpeg` (for video).
+> Run `echo doctor` to verify dependencies.
 
 Expected output:
 

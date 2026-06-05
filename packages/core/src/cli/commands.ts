@@ -12,6 +12,7 @@ import type { ConfigManager, EchoConfig } from '../storage/config.js';
 import type { CompilationPipeline } from '../layers/pipeline.js';
 import type { SecretsManager } from '../storage/secrets.js';
 import { formatSearchResult, formatStatus, formatJobs, formatIngestResult, formatConfig, formatRecoverResult } from './formatters.js';
+import { runDoctor, formatDoctor } from './doctor.js';
 
 export interface IngestCLIOptions {
   adapter?: string;
@@ -165,6 +166,14 @@ export class CLICommands {
     const masked = await (this.deps.secretsManager as unknown as { listMasked(): Promise<Record<string, string>> }).listMasked?.() ?? {};
     for (const k of keys) {
       console.log(`${k}: ${masked[k] ?? '****'}`);
+    }
+  }
+
+  async doctor(): Promise<void> {
+    const result = await runDoctor();
+    console.log(formatDoctor(result));
+    if (!result.ok) {
+      process.exitCode = 1;
     }
   }
 }

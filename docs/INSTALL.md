@@ -6,8 +6,9 @@
 | ----------- | ------------------------- | ------------------------------------------------------ |
 | Node.js     | 20+                       | Required. Check with `node --version`                  |
 | OS          | Linux, macOS, Windows WSL | Native Windows without WSL is not tested               |
-| ffmpeg      | optional                  | For future audio/video adapters                        |
+| ffmpeg      | optional                  | Required for video adapter (audio extract + frames)    |
 | Tesseract   | optional                  | For PDF/image OCR if not using built-in `tesseract.js` |
+| Whisper API key | optional              | Required for audio/video transcription (OpenAI Whisper) |
 
 Install Node.js via [nodejs.org](https://nodejs.org/) or your package manager:
 
@@ -84,6 +85,43 @@ node bin/echo.js <command>
 
 ---
 
+## Install optional dependencies
+
+### ffmpeg (required for video adapter)
+
+```bash
+# Ubuntu/Debian
+sudo apt-get install ffmpeg
+
+# macOS
+brew install ffmpeg
+
+# Verify
+ffmpeg -version
+```
+
+### Whisper API key (required for audio/video adapters)
+
+```bash
+export WHISPER_API_KEY="sk-..."
+# or
+export OPENAI_API_KEY="sk-..."
+```
+
+Store persistently:
+
+```bash
+echo key set openai $OPENAI_API_KEY
+```
+
+### Check all dependencies
+
+```bash
+echo doctor
+```
+
+---
+
 ## First run
 
 ```bash
@@ -147,6 +185,8 @@ Edit `~/.echo/config.yaml` directly for advanced options. See [`ARCHITECTURE.md`
 | `Adapter not found for .ext`            | No adapter registered for that extension | Check [`ADAPTER_GUIDE.md`](ADAPTER_GUIDE.md) or install the adapter                                     |
 | `LLM provider timeout`                  | Provider unreachable or overloaded       | Check `llm.providers[].baseUrl`, increase `timeoutMs`, or verify API key with `echo key get <provider>` |
 | `CONFIG_SECRET_NOT_FOUND`               | Environment variable or secret missing   | Set with `echo key set <provider> <key>` or export the env var                                          |
+| `WHISPER_API_KEY not set`               | Missing Whisper API key                  | Set `WHISPER_API_KEY` or `OPENAI_API_KEY` env var, or run `echo key set openai <key>`                  |
+| `ffmpeg is required`                    | ffmpeg not installed                     | Install ffmpeg: `apt install ffmpeg` or `brew install ffmpeg`                                            |
 | `Module not found` after source install | Forgot `pnpm build`                      | Run `pnpm build`                                                                                        |
 
 For structured logging and health checks, see [`OPERATIONS.md`](OPERATIONS.md).

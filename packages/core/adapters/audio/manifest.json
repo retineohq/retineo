@@ -1,0 +1,8 @@
+{
+  "id": "audio",
+  "version": "1.0.0",
+  "mimeTypes": ["audio/mpeg", "audio/wav", "audio/mp4", "audio/ogg", "audio/flac", "audio/webm"],
+  "extensions": [".mp3", ".wav", ".m4a", ".ogg", ".flac", ".webm"],
+  "entry": "adapter.js",
+  "status": "stable"
+}

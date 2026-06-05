@@ -100,6 +100,13 @@ export function createCLI(deps: CLICommandsDeps): Command {
       await commands.keyList();
     });
 
+  program
+    .command('doctor')
+    .description('Check external dependencies (ffmpeg, tesseract, whisper key, ollama)')
+    .action(async () => {
+      await commands.doctor();
+    });
+
   return program;
 }
 

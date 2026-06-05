@@ -583,8 +583,10 @@ ECHO Core ships with the following built-in adapters:
 | `markdown` | stable | `.md` | Markdown with heading block detection |
 | `pdf` | stable | `.pdf` | Text extraction via `pdf-parse`, heading heuristics, encrypted PDF detection |
 | `image` | stable | `.png`, `.jpg`, `.jpeg`, `.tiff`, `.bmp`, `.webp` | OCR via `tesseract.js` with bbox + confidence |
-| `audio-mock` | mock | `.mp3`, `.wav` | Synthetic speech blocks for testing |
-| `video-mock` | mock | `.mp4`, `.avi` | Synthetic frame + speech blocks for testing |
+| `audio` | stable | `.mp3`, `.wav`, `.m4a`, `.ogg`, `.flac`, `.webm` | Speech-to-text via OpenAI Whisper API with heuristic speaker diarization |
+| `audio-mock` | mock | `.mp3`, `.wav` | Synthetic speech blocks for testing (fallback) |
+| `video` | stable | `.mp4`, `.avi`, `.mov`, `.mkv`, `.webm` | ffmpeg audio extract + Whisper transcription + key-frame timestamps |
+| `video-mock` | mock | `.mp4`, `.avi` | Synthetic frame + speech blocks for testing (fallback) |
 
 ### Determinism Is Strongly Recommended
 While not enforced, deterministic output (same file → same content) makes ECHO Core's deduplication and idempotency features work correctly. Use content-based seeds for any random or synthetic generation.
