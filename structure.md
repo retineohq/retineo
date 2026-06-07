@@ -75,7 +75,8 @@ echo-core/
 │   └── echo-mcp.js      # MCP server entry point (echo-mcp)
 ├── CHANGELOG.md         # Version history
 ├── structure.md         # This file
-├── package.json         # Dependencies: pino, pino-pretty, better-sqlite3, commander, etc.
+├── package.json         # Dependencies: pino, pino-pretty, better-sqlite3, commander, etc. ESLint 9 + typescript-eslint flat config.
+├── eslint.config.mjs    # Flat ESLint config: @eslint/js + typescript-eslint + globals
 ├── tsconfig.json
 └── README.md
 ```

@@ -135,7 +135,6 @@ export class DefaultLLMProviderFactory implements LLMProviderFactory {
   }
 
   private wrapWithCircuitBreaker(entry: ProviderEntry<LLMProvider>): LLMProvider {
-    const self = this;
     const original = entry.provider;
     const breaker = entry.breaker;
 
@@ -143,12 +142,12 @@ export class DefaultLLMProviderFactory implements LLMProviderFactory {
       get id() { return original.id; },
       get config() { return original.config; },
 
-      async generate(prompt: string, options?) {
+      generate: async (prompt: string, options?) => {
         try {
           return await breaker.call(() => original.generate(prompt, options));
         } catch (err) {
           if (breaker.getState() === 'open') {
-            const fallback = self.getFallback(original.id);
+            const fallback = this.getFallback(original.id);
             if (fallback) {
               return fallback.generate(prompt, options);
             }
@@ -158,7 +157,7 @@ export class DefaultLLMProviderFactory implements LLMProviderFactory {
         }
       },
 
-      stream(prompt: string, options?) {
+      stream: (prompt: string, options?) => {
         if (!original.stream) throw new Error('Provider does not support streaming');
         return original.stream(prompt, options);
       },
@@ -252,7 +251,6 @@ export class DefaultEmbeddingProviderFactory implements EmbeddingProviderFactory
   }
 
   private wrapWithCircuitBreaker(entry: ProviderEntry<EmbeddingProvider>): EmbeddingProvider {
-    const self = this;
     const original = entry.provider;
     const breaker = entry.breaker;
 
@@ -260,12 +258,12 @@ export class DefaultEmbeddingProviderFactory implements EmbeddingProviderFactory
       get id() { return original.id; },
       get config() { return original.config; },
 
-      async embed(texts: string[]) {
+      embed: async (texts: string[]) => {
         try {
           return await breaker.call(() => original.embed(texts));
         } catch (err) {
           if (breaker.getState() === 'open') {
-            const fallback = self.getFallback(original.id);
+            const fallback = this.getFallback(original.id);
             if (fallback) {
               return fallback.embed(texts);
             }

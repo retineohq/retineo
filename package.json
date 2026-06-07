@@ -21,7 +21,7 @@
   "scripts": {
     "build": "tsc && cp packages/core/src/storage/schema.sql dist/storage/",
     "test": "vitest --run",
-    "lint": "eslint src/**/*.ts",
+    "lint": "eslint packages/core/src/**/*.ts",
     "bundle:binary": "esbuild bin/echo-core.js --bundle --platform=node --outfile=dist/bundle.cjs --format=cjs",
     "package:binary": "pnpm bundle:binary && pkg dist/bundle.cjs --out-path=dist --targets=node18-linux-x64,node18-macos-x64,node18-win-x64"
   },
@@ -38,15 +38,18 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.4",
     "@types/better-sqlite3": "^7.6.13",
     "@types/franc": "^5.0.3",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.19.42",
     "@types/pdf-parse": "^1.1.5",
+    "@yao-pkg/pkg": "^6.20.0",
     "esbuild": "^0.28.0",
-    "eslint": "^8.57.1",
-    "pkg": "^5.8.1",
+    "eslint": "^9.39.4",
+    "globals": "^15.15.0",
     "typescript": "^5.9.3",
+    "typescript-eslint": "^8.60.1",
     "vitest": "^1.6.1"
   },
   "engines": {
