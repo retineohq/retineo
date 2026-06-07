@@ -36,8 +36,21 @@ async function main() {
     config = {
       dataDir,
       defaultAdapter: 'file',
-      llmProvider: 'openai',
-      embeddingModel: 'text-embedding-3-small',
+      llmProvider: 'ollama',
+      embeddingModel: 'nomic-embed-text',
+      llm: {
+        defaultProvider: 'ollama',
+        providers: [
+          { id: 'ollama', type: 'ollama', baseUrl: 'http://localhost:11434', model: 'rnj-1:8b-cloud', temperature: 0.3, maxTokens: 4096, concurrency: 1, timeoutMs: 60000 },
+        ],
+      },
+      embedding: {
+        defaultProvider: 'ollama',
+        providers: [
+          { id: 'ollama', type: 'ollama', baseUrl: 'http://localhost:11434', model: 'nomic-embed-text', concurrency: 1, timeoutMs: 60000, dimension: 768 },
+        ],
+      },
+      bridge: { host: '127.0.0.1', port: 37891 },
       search: {
         defaultLanguage: 'en',
         languageDetection: { provider: 'franc', fallback: 'heuristic', confidenceThreshold: 0.7 },

@@ -150,3 +150,7 @@ Exit code is `1` if any **critical** dependency is missing. Currently only Node.
 | `Adapter not found for .mp4` | `video` adapter not loaded | Verify `packages/core/adapters/video/` exists and `manifest.json` is valid |
 | Transcription is empty | Audio is silent or corrupted | Check file plays correctly; try re-encoding |
 | Frame extraction fails | Corrupted video or missing codec | Re-encode with ffmpeg: `ffmpeg -i in.mp4 -c:v libx264 out.mp4` |
+| Jobs stuck in `PENDING` forever | No worker is running | `echoc worker status` → if stopped, `echoc worker start` (or use `echoc daemon start` for bridge+worker) |
+| `echoc ingest` returns but no L1/L2/L3 generated | Worker is not draining the queue | Same as above. For a one-shot run, use `echoc ingest file.md --watch` — it starts an inline worker |
+| `worker.start` exits immediately | Missing `pnpm build` step | Run `pnpm build` so `dist/cli/worker-script.js` exists |
+| `daemon.start` exits immediately | Same as above | `pnpm build` first |

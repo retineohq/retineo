@@ -47,6 +47,12 @@ export interface Registry {
   releaseAllLeases(workerId: string): JobRecord[];
   getRunningJobs(workerId: string): JobRecord[];
   getPendingJobs(limit: number): JobRecord[];
+  getJobsBySource(nodeId: string): JobRecord[];
+  getJob(jobId: string): JobRecord | null;
+  getJobCounts(): { pending: number; running: number; completed: number; failed: number; dead: number };
+  getLastHeartbeat(workerId: string): string | null;
+  getRunningWorkerIds(): string[];
+  jobsByNodeHash(nodeHash: string): JobRecord[];
 
   insertOrphan(hash: Hash, sourceId: string, l2Path: string): void;
   getOrphan(hash: Hash): OrphanRecord | null;
@@ -283,7 +289,7 @@ export class SQLiteRegistry implements Registry {
   }
 
   failJob(jobId: string, error: string): void {
-    const job = this.getJob(jobId);
+    const job = this.getJobInternal(jobId);
     if (!job) return;
     const newStatus: JobStatus = job.attempts >= job.maxAttempts ? 'DEAD' : 'PENDING';
     const completedAt = newStatus === 'DEAD' ? new Date().toISOString() : null;
@@ -292,7 +298,7 @@ export class SQLiteRegistry implements Registry {
     ).run(newStatus, completedAt, jobId);
   }
 
-  private getJob(jobId: string): JobRecord | null {
+  private getJobInternal(jobId: string): JobRecord | null {
     const row = this.db.prepare('SELECT * FROM jobs WHERE id = ?').get(jobId) as
       | Record<string, unknown>
       | undefined;
@@ -337,6 +343,54 @@ export class SQLiteRegistry implements Registry {
       `SELECT * FROM jobs WHERE status = 'PENDING' ORDER BY priority DESC, created_at ASC LIMIT ?`
     ).all(limit) as Record<string, unknown>[];
     return rows.map(rowToJob);
+  }
+
+  getJobsBySource(nodeId: string): JobRecord[] {
+    const rows = this.db.prepare(
+      `SELECT * FROM jobs WHERE json_extract(payload, '$.nodeId') = ? ORDER BY created_at ASC`
+    ).all(nodeId) as Record<string, unknown>[];
+    return rows.map(rowToJob);
+  }
+
+  getJob(jobId: string): JobRecord | null {
+    return this.getJobInternal(jobId);
+  }
+
+  jobsByNodeHash(nodeHash: string): JobRecord[] {
+    return this.getJobsBySource(nodeHash);
+  }
+
+  getJobCounts(): { pending: number; running: number; completed: number; failed: number; dead: number } {
+    const row = this.db.prepare(
+      `SELECT
+         SUM(CASE WHEN status = 'PENDING' THEN 1 ELSE 0 END) as pending,
+         SUM(CASE WHEN status = 'RUNNING' THEN 1 ELSE 0 END) as running,
+         SUM(CASE WHEN status = 'COMPLETED' THEN 1 ELSE 0 END) as completed,
+         SUM(CASE WHEN status = 'FAILED' THEN 1 ELSE 0 END) as failed,
+         SUM(CASE WHEN status = 'DEAD' THEN 1 ELSE 0 END) as dead
+       FROM jobs`
+    ).get() as Record<string, unknown> | undefined;
+    return {
+      pending: (row?.pending as number | null) ?? 0,
+      running: (row?.running as number | null) ?? 0,
+      completed: (row?.completed as number | null) ?? 0,
+      failed: (row?.failed as number | null) ?? 0,
+      dead: (row?.dead as number | null) ?? 0,
+    };
+  }
+
+  getLastHeartbeat(workerId: string): string | null {
+    const row = this.db.prepare(
+      `SELECT heartbeat_at FROM jobs WHERE worker_id = ? AND heartbeat_at IS NOT NULL ORDER BY heartbeat_at DESC LIMIT 1`
+    ).get(workerId) as { heartbeat_at: string | null } | undefined;
+    return row?.heartbeat_at ?? null;
+  }
+
+  getRunningWorkerIds(): string[] {
+    const rows = this.db.prepare(
+      `SELECT DISTINCT worker_id FROM jobs WHERE status = 'RUNNING' AND worker_id IS NOT NULL`
+    ).all() as { worker_id: string }[];
+    return rows.map((r) => r.worker_id).filter((id): id is string => !!id);
   }
 
   // --- Orphans ---

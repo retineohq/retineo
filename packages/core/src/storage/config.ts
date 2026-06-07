@@ -62,6 +62,42 @@ export interface LoggingConfig {
   pretty: boolean;
 }
 
+/**
+ * Provider entry for LLM and embedding providers.
+ * Mirrors `ProviderConfig` in `src/llm/provider.ts` plus optional
+ * `fallback` (provider id to route to on circuit open) and
+ * `circuitBreaker` tuning.
+ */
+export interface ProviderConfigEntry {
+  id: string;
+  type: string;
+  baseUrl?: string;
+  apiKey?: string;
+  model: string;
+  temperature?: number;
+  maxTokens?: number;
+  concurrency?: number;
+  timeoutMs?: number;
+  dimension?: number;
+  fallback?: string;
+  circuitBreaker?: {
+    failureThreshold?: number;
+    recoveryTimeoutMs?: number;
+    halfOpenMaxCalls?: number;
+  };
+  [key: string]: unknown;
+}
+
+export interface LLMConfig {
+  defaultProvider: string;
+  providers: ProviderConfigEntry[];
+}
+
+export interface EmbeddingConfig {
+  defaultProvider: string;
+  providers: ProviderConfigEntry[];
+}
+
 export interface I18nPackConfig {
   code: string;
   file?: string;
@@ -78,6 +114,9 @@ export interface EchoConfig {
   defaultAdapter: string;
   llmProvider: string;
   embeddingModel: string;
+  llm: LLMConfig;
+  embedding: EmbeddingConfig;
+  bridge: { host: string; port: number };
   search: SearchConfig;
   i18n: I18nConfig;
   logging: LoggingConfig;
@@ -135,11 +174,47 @@ const DEFAULT_LOGGING_CONFIG: LoggingConfig = {
   pretty: false,
 };
 
+const DEFAULT_LLM_CONFIG: LLMConfig = {
+  defaultProvider: 'ollama',
+  providers: [
+    {
+      id: 'ollama',
+      type: 'ollama',
+      baseUrl: 'http://localhost:11434',
+      model: 'rnj-1:8b-cloud',
+      temperature: 0.3,
+      maxTokens: 4096,
+      concurrency: 1,
+      timeoutMs: 60000,
+    },
+  ],
+};
+
+const DEFAULT_EMBEDDING_CONFIG: EmbeddingConfig = {
+  defaultProvider: 'ollama',
+  providers: [
+    {
+      id: 'ollama',
+      type: 'ollama',
+      baseUrl: 'http://localhost:11434',
+      model: 'nomic-embed-text',
+      concurrency: 1,
+      timeoutMs: 60000,
+      dimension: 768,
+    },
+  ],
+};
+
+const DEFAULT_BRIDGE_CONFIG = { host: '127.0.0.1', port: 37891 };
+
 const DEFAULT_CONFIG: EchoConfig = {
   dataDir: path.join(os.homedir(), '.echo'),
   defaultAdapter: 'file',
-  llmProvider: 'openai',
-  embeddingModel: 'text-embedding-3-small',
+  llmProvider: 'ollama',
+  embeddingModel: 'nomic-embed-text',
+  llm: DEFAULT_LLM_CONFIG,
+  embedding: DEFAULT_EMBEDDING_CONFIG,
+  bridge: DEFAULT_BRIDGE_CONFIG,
   search: DEFAULT_SEARCH_CONFIG,
   i18n: DEFAULT_I18N_CONFIG,
   logging: DEFAULT_LOGGING_CONFIG,
@@ -202,6 +277,30 @@ function mergeLoggingConfig(raw: unknown): LoggingConfig {
   };
 }
 
+function mergeLLMConfig(raw: unknown): LLMConfig {
+  const l = (raw ?? {}) as { defaultProvider?: string; providers?: ProviderConfigEntry[] };
+  return {
+    defaultProvider: l.defaultProvider ?? DEFAULT_LLM_CONFIG.defaultProvider,
+    providers: Array.isArray(l.providers) && l.providers.length > 0 ? l.providers : DEFAULT_LLM_CONFIG.providers,
+  };
+}
+
+function mergeEmbeddingConfig(raw: unknown): EmbeddingConfig {
+  const e = (raw ?? {}) as { defaultProvider?: string; providers?: ProviderConfigEntry[] };
+  return {
+    defaultProvider: e.defaultProvider ?? DEFAULT_EMBEDDING_CONFIG.defaultProvider,
+    providers: Array.isArray(e.providers) && e.providers.length > 0 ? e.providers : DEFAULT_EMBEDDING_CONFIG.providers,
+  };
+}
+
+function mergeBridgeConfig(raw: unknown): { host: string; port: number } {
+  const b = (raw ?? {}) as { host?: string; port?: number };
+  return {
+    host: b.host ?? DEFAULT_BRIDGE_CONFIG.host,
+    port: typeof b.port === 'number' ? b.port : DEFAULT_BRIDGE_CONFIG.port,
+  };
+}
+
 function mergeI18nConfig(raw: unknown): I18nConfig {
   const i = (raw ?? {}) as Record<string, unknown>;
   const packs = (i.packs as I18nPackConfig[] | undefined) ?? DEFAULT_I18N_CONFIG.packs;
@@ -214,6 +313,7 @@ function mergeI18nConfig(raw: unknown): I18nConfig {
 export interface ConfigManager {
   getDataDir(): string;
   getConfigPath(): string;
+  configExists(): boolean;
   load(): Promise<EchoConfig>;
   save(config: EchoConfig): Promise<void>;
   initializeDataDir(): Promise<void>;
@@ -236,6 +336,10 @@ export class FileConfigManager implements ConfigManager {
     return this.configPath;
   }
 
+  configExists(): boolean {
+    return existsSync(this.configPath);
+  }
+
   async load(): Promise<EchoConfig> {
     if (!existsSync(this.configPath)) {
       await this.save(DEFAULT_CONFIG);
@@ -248,6 +352,9 @@ export class FileConfigManager implements ConfigManager {
       defaultAdapter: parsed.defaultAdapter ?? DEFAULT_CONFIG.defaultAdapter,
       llmProvider: parsed.llmProvider ?? DEFAULT_CONFIG.llmProvider,
       embeddingModel: parsed.embeddingModel ?? DEFAULT_CONFIG.embeddingModel,
+      llm: mergeLLMConfig(parsed.llm),
+      embedding: mergeEmbeddingConfig(parsed.embedding),
+      bridge: mergeBridgeConfig(parsed.bridge),
       search: mergeSearchConfig(parsed.search),
       i18n: mergeI18nConfig(parsed.i18n),
       logging: mergeLoggingConfig(parsed.logging),
@@ -258,10 +365,6 @@ export class FileConfigManager implements ConfigManager {
     await mkdir(this.dataDir, { recursive: true });
     const raw = yaml.dump(config);
     await writeFile(this.configPath, raw, 'utf-8');
-  }
-
-  private configExists(): boolean {
-    return existsSync(this.configPath);
   }
 
   async initializeDataDir(): Promise<void> {

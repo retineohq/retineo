@@ -41,6 +41,8 @@ npx echo-core <command>
 
 ### Initialize ECHO
 
+After install, run the setup wizard to configure ECHO Core:
+
 ```bash
 echoc init
 ```
@@ -49,10 +51,15 @@ echoc init
 
 What `init` does:
 
-1. Creates `~/.echo/` directory
-2. Writes default `config.yaml`
-3. Checks for optional dependencies (ffmpeg, tesseract)
-4. Verifies write permissions
+1. Detects Ollama on `localhost:11434` and lists installed models (or offers cloud/mock fallback)
+2. Lets you pick an LLM model and an embedding model
+3. Asks for a data directory (default `~/.echo`) and bridge port (default `37891`)
+4. Creates `~/.echo/` directory structure (`objects/`, `index/`, `adapters/`, `models/`, `logs/`)
+5. Writes `~/.echo/config.yaml` with the `llm.providers[]` and `embedding.providers[]` sections
+6. Initializes the SQLite database (`~/.echo/echo.sqlite`) with the schema
+7. Optionally starts a background worker (`echoc worker start`)
+
+For CI / scripts, use `echoc init --non-interactive` — it reads `ECHO_DATA_DIR`, `ECHO_LLM_MODEL`, `ECHO_EMBED_MODEL`, `ECHO_BRIDGE_PORT`, and `OLLAMA_BASE_URL` from the environment.
 
 ---
 
@@ -151,7 +158,10 @@ echoc doctor
 
 ## First run
 
+After `echoc init`, verify everything is wired up:
+
 ```bash
+echoc worker status
 echoc status
 ```
 

@@ -61,6 +61,11 @@ function makeDeps(): CLICommandsDeps {
     registry: {
       listSources: () => [],
       getPendingJobs: () => [],
+      getJobsBySource: () => [],
+      getJob: () => null,
+      getJobCounts: () => ({ pending: 0, running: 0, completed: 0, failed: 0, dead: 0 }),
+      getLastHeartbeat: () => null,
+      getRunningWorkerIds: () => [],
       recoverOrphan: vi.fn(),
       getOrphan: () => null,
     } as any,

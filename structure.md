@@ -109,8 +109,8 @@ echo-core/
 | File              | Exports                                                                                | Description                                                                                     |
 | ----------------- | -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
 | `cas.ts`          | `CASStorage`, `LocalCASStorage`, `NodeArtifacts`, `computeHash`, `getObjectPath`       | Content-Addressable Storage: SHA-256 keyed object filesystem.                                   |
-| `registry.ts`     | `Registry`, `SQLiteRegistry`, `OrphanRecord`                                           | SQLite-backed registry: sources, segments, jobs (lease model), orphans. Schema init uses `IF NOT EXISTS` for idempotent table/index creation. |
-| `config.ts`       | `ConfigManager`, `FileConfigManager`, `EchoConfig`, `LoggingConfig`                   | YAML config manager (`~/.echo/config.yaml`). Includes `initializeDataDir()` for first-run setup. `logging` section: level, console, file, filePath, pretty. |
+| `registry.ts`     | `Registry`, `SQLiteRegistry`, `OrphanRecord`                                           | SQLite-backed registry: sources, segments, jobs (lease model), orphans. Job queries: `getJobsBySource`, `getJob`, `getJobCounts`, `getLastHeartbeat`, `getRunningWorkerIds`. Schema init uses `IF NOT EXISTS` for idempotent table/index creation. |
+| `config.ts`       | `ConfigManager`, `FileConfigManager`, `EchoConfig`, `LoggingConfig`, `LLMConfig`, `EmbeddingConfig`, `ProviderConfigEntry` | YAML config manager (`~/.echo/config.yaml`). Includes `initializeDataDir()` for first-run setup. `logging` section: level, console, file, filePath, pretty. `llm.providers[]` and `embedding.providers[]` for multi-provider routing. `bridge: { host, port }` for HTTP API. |
 | `node-builder.ts` | `NodeBuilder`, `DefaultNodeBuilder`                                                    | Builds `ContextNode` trees + `BuildManifest` from adapter output.                               |
 | `secrets.ts`      | `SecretsManager`, `FileSecretsManager`, `resolveSecret`, `resolveConfigValue`          | AES-256-GCM encrypted secrets store (`~/.echo/secrets.json`).                                   |
 | `schema.sql`      | —                                                                                      | SQLite DDL: `sources`, `segments`, `jobs`, `orphaned_objects`, `encryption_keys`, `audit_logs`. |
@@ -187,10 +187,14 @@ echo-core/
 
 | File            | Exports                                                                                                         | Description                                                                           |
 | --------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `commands.ts`   | `CLICommands`, `CLICommandsDeps`, `IngestCLIOptions`, `SearchCLIOptions`                                        | CLI command implementations (init, ingest, search, status, compile, config, jobs, recover, doctor, key set/get/delete/list). |
+| `commands.ts`   | `CLICommands`, `CLICommandsDeps`, `IngestCLIOptions`, `SearchCLIOptions`, `CompileCLIOptions`, `InitCLIOptions` | CLI command implementations: `init` (interactive wizard + non-interactive), `ingest` (with `--watch` / `--timeout`), `search`, `status`, `compile` (with `--watch` / `--timeout`), `config`, `jobs`, `recover`, `doctor`, `key set/get/delete/list`, `worker start/stop/status/logs`, `bridge start/stop/status/logs`, `daemon start/stop/status/logs`. |
 | `doctor.ts`     | `runDoctor`, `formatDoctor`, `DoctorResult`, `DependencyCheck`                                                  | External dependency checker (ffmpeg, tesseract, whisper.cpp, whisper model, whisper key, ollama). |
 | `formatters.ts` | `formatSearchResult`, `formatStatus`, `formatJobs`, `formatIngestResult`, `formatConfig`, `formatRecoverResult` | Output formatters for CLI commands.                                                   |
-| `index.ts`      | `createCLI`                                                                                                     | Commander-based CLI entry point. Supports `-v, --verbose` global flag for debug output. |
+| `prompt.ts`     | `ask`, `choose`, `confirm`, `PromptOptions`, `ChoiceOptions`                                                    | Readline-based single-question prompts. No external deps. Used by the `init` wizard.  |
+| `process-manager.ts` | `dataDir`, `pidFilePath`, `logFilePath`, `readPidFile`, `writePidFile`, `removePidFile`, `isPidAlive`, `stopProcess`, `tailLog`, `streamLog`, `ensureDataDirs`, `fileExists` | PID-file lifecycle and log tail helpers used by `worker`/`bridge`/`daemon` start/stop/status/logs. |
+| `worker-script.ts` | `startWorkerServices`, `RunningServices`                                                                    | Standalone worker entry point used by `child_process.fork()` from `echoc worker start` and `echoc daemon start`. Wires SQLiteRegistry, CAS, adapters, pipeline, MockLLMProvider, `DefaultQueueWorker`. |
+| `daemon.ts`     | `startDaemonServices`, `runDaemon`, `DaemonServices`                                                           | All-in-one daemon: starts worker + bridge in one process. Graceful shutdown order: bridge → worker → registry. |
+| `index.ts`      | `createCLI`                                                                                                     | Commander-based CLI entry point. Supports `-v, --verbose` global flag for debug output. Wires all commands including service lifecycle subcommands. |
 
 ### `src/mcp/` — Model Context Protocol
 
@@ -294,6 +298,11 @@ echo-core/
 | ------------------ | ------------------------------------------------------------ | ---------------------------------- |
 | `commands.test.ts` | `ingest`, `status`, `config`, `recover` with mocked services | CLI command parsing and execution. |
 | `init.test.ts`     | `init` creates directories, config, SQLite schema; idempotent | First-run initialization.          |
+| `init-wizard.test.ts` | Non-interactive `init` writes Ollama-first config; honours `ECHO_DATA_DIR`, `ECHO_LLM_MODEL`, `ECHO_EMBED_MODEL`, `ECHO_BRIDGE_PORT`; bridge section defaults to `127.0.0.1:37891`; graceful fallback when Ollama is not running | Interactive + non-interactive init wizard. |
+| `worker-lifecycle.test.ts` | `writePidFile`/`readPidFile` round-trip; `isPidAlive` / `stopProcess`; `workerStatus` reports stopped/running based on PID file; `workerStart` is idempotent | Worker PID/lifecycle correctness. |
+| `bridge-lifecycle.test.ts` | `bridgeStatus` reports stopped when no PID file; `bridgeStop` no-op; `bridgeLogs` handles missing log file | Bridge PID/lifecycle correctness. |
+| `ingest-watch.test.ts` | `ingest` prints queued job ids; uses mock registry that completes after a few polls | `--watch` flag plumbing. |
+| `daemon.test.ts`  | `daemon` module exports `startDaemonServices`/`runDaemon`; `process-manager` exports lifecycle helpers; `worker-script` exports `startWorkerServices` | Daemon + worker-script contract tests. |
 | `key-list.test.ts` | `key list` empty state, masked output                        | Key management display.            |
 | `doctor.test.ts`   | `runDoctor`, `formatDoctor`, Node.js check, whisper.cpp check, whisper model check, output formatting | Dependency checker correctness.    |
 | `verbose.test.ts`  | `--verbose` flag sets debug level, pretty console output; config logging section defaults; `createLogger` with `logging` config | Verbose mode + config integration. |
@@ -390,6 +399,14 @@ echo-core/
 | **Run CLI commands**                                    | `CLICommands` + `createCLI`                    | `src/cli/commands.ts`, `src/cli/index.ts`           | `commander`, `bridge/types.ts`                                   |
 | **Manage encrypted API keys via CLI**                   | `CLICommands.keySet/get/delete/list`           | `src/cli/commands.ts`                               | `FileSecretsManager`, `echoc key`                                 |
 | **Add a new LLM provider type to factory**              | `DefaultLLMProviderFactory`                    | `src/llm/factory.ts`                                | Extend `createProvider` switch                                   |
+| **Run the first-time setup wizard**                     | `CLICommands.init`                             | `src/cli/commands.ts`                               | `probeOllama`, `prompt.ts` (`ask`/`choose`/`confirm`), `FileConfigManager.initializeDataDir` |
+| **Run ECHO with multi-provider LLM/embedding config**   | `DefaultLLMProviderFactory.loadFromConfig`     | `src/llm/factory.ts`                                | `EchoConfig.llm.providers[]`, `EchoConfig.embedding.providers[]` |
+| **Spawn/detach the worker as a background process**     | `CLICommands.workerStart`                      | `src/cli/commands.ts`                               | `process-manager.ts` (PID file), `worker-script.ts` (fork target) |
+| **Spawn/detach the bridge as a background process**     | `CLICommands.bridgeStart`                      | `src/cli/commands.ts`                               | `process-manager.ts`, `FastifyBridgeServer`                      |
+| **Run worker + bridge in a single process (daemon)**    | `runDaemon`                                    | `src/cli/daemon.ts`                                 | `DefaultQueueWorker`, `FastifyBridgeServer`, `DefaultShutdownManager` |
+| **Block until queued jobs for an ingested file finish** | `CLICommands.ingest` with `watch:true`         | `src/cli/commands.ts`                               | `Registry.getJobsBySource`, inline `startWorkerServices`         |
+| **Read/write PID files and tail logs**                  | `process-manager.ts`                           | `src/cli/process-manager.ts`                        | `isPidAlive`, `stopProcess`, `tailLog`, `streamLog`              |
+| **Prompt the user interactively (readline, no deps)**   | `ask`, `choose`, `confirm`                     | `src/cli/prompt.ts`                                 | Node `readline` (stdlib)                                        |
 
 ---
 
@@ -401,3 +418,25 @@ echo-core/
 4. **Barrel exports**: Every `src/{dir}/` must have an `index.ts` that re-exports public symbols. Tests and consumers import from the barrel, never deep-import.
 5. **Planned markers**: Directories or files not yet implemented must be marked `(planned)` in this file. Remove the marker only when code is merged and tested.
 6. **Test parity**: Every public export in `src/storage/` (and future layers) must have corresponding tests in `tests/{dir}/`. Update test tables when adding new test files.
+
+---
+
+## Service Lifecycle
+
+ECHO Core services are long-lived background processes. Each is tracked by a PID file in `~/.echo/`:
+
+| Service | PID file | Log file | Spawn script | Start command |
+|---------|----------|----------|--------------|---------------|
+| Worker  | `~/.echo/worker.pid`  | `~/.echo/logs/worker.log`  | `dist/cli/worker-script.js` | `echoc worker start` |
+| Bridge  | `~/.echo/bridge.pid`  | `~/.echo/logs/bridge.log`  | (spawned by daemon or via FastifyBridgeServer) | `echoc bridge start` |
+| Daemon  | `~/.echo/daemon.pid`  | `~/.echo/logs/daemon.log`  | `dist/cli/daemon.js` | `echoc daemon start` |
+
+**Lifecycle contract:**
+- `start`: spawn detached child, write JSON `{ pid, startedAt, service, logFile }` to PID file, wait 1s and verify the PID is alive (else raise + log tail).
+- `stop`: read PID, send `SIGTERM`, wait 5s for graceful exit, then `SIGKILL` if still alive. Remove PID file.
+- `status`: report running/stopped, PID, uptime, last heartbeat, job counts (from `Registry.getJobCounts`).
+- `logs`: `tail -n 50 <log>` (or `-f` to stream).
+
+**Watch flag**: `echoc ingest file.md --watch` blocks the CLI until all jobs for the ingested node are `COMPLETED` (or any fails / timeout). If no worker/daemon is running, it starts an inline worker in the same process so the user gets end-to-end behaviour without a separate `worker start` step. This is the recommended one-shot flow for interactive use.
+
+**Daemon vs separate services:** `echoc daemon start` runs worker + bridge in a single process under one PID. This is the recommended production layout. Use `echoc worker start` / `echoc bridge start` separately only when you need them on different machines or want independent restart cycles.

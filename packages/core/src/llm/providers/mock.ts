@@ -16,7 +16,8 @@ export class MockLLMProvider implements LLMProvider, EmbeddingProvider {
 
   constructor(config: ProviderConfig) {
     this.id = config.id;
-    this.config = config;
+    // Allow callers to omit `model` — the mock doesn't need it
+    this.config = { ...config, model: config.model ?? 'mock' };
   }
 
   async generate(prompt: string, options?: GenerateOptions): Promise<string> {

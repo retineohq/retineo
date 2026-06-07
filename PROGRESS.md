@@ -1,23 +1,20 @@
-# Progress: ECHO Core — Ingestion Bug Fix
+# Progress: ECHO Core — CLI Lifecycle & Setup Wizard
 
 ## ✅ Completed
-- [x] Diagnosed root cause: `bin/echo-core.js` used mock deps instead of real services
-- [x] Rewrote `bin/echo-core.js` to wire real services (SQLiteRegistry, CAS, IngestionService, Logger)
-- [x] Fixed `SQLiteRegistry.initSchema()` to use `IF NOT EXISTS` for CREATE TABLE/INDEX
-- [x] Fixed logger to create `~/.echo/logs/` directory before writing
-- [x] Fixed adapter CJS/ESM compatibility: renamed all adapters to `.cjs`
-- [x] Fixed `LineDelimitedJSONTransport` to set `NODE_PATH` for temp dir module resolution
-- [x] Updated all test files to reference `adapter.cjs`
-- [x] Updated inline test adapters to use CJS `require()` syntax
-- [x] All 305 tests pass
-- [x] Build clean
-- [x] All acceptance criteria verified
-
-## 🔄 In Progress
-- (none)
+- [x] Phase A: Registry job queries (getJobsBySource, getJob, getJobCounts, getLastHeartbeat, getRunningWorkerIds)
+- [x] Phase B: EchoConfig extended with llm.providers[], embedding.providers[], bridge{host,port}
+- [x] Phase C: Interactive init wizard + non-interactive mode
+- [x] Phase D: worker-script.ts + bridge-script.ts + daemon.ts (standalone fork targets)
+- [x] Phase E: worker/bridge/daemon lifecycle commands (start, stop, status, logs)
+- [x] Phase F: --watch and --timeout flags on ingest/compile (auto-spawns worker if none)
+- [x] Phase G: Registered all commands in cli/index.ts
+- [x] Phase H: Updated CLI.md, GETTING_STARTED.md, INSTALL.md, TROUBLESHOOTING.md, structure.md
+- [x] Phase I: 33 new tests across 5 files (init-wizard, worker-lifecycle, bridge-lifecycle, ingest-watch, daemon)
+- [x] Phase J: tsc --noEmit clean, 338/338 tests pass
+- [x] End-to-end acceptance verified: init → worker start → compile --watch → daemon start → health 200
 
 ## 📋 Next Steps
-- (none — task complete)
+- None — all deliverables complete.
 
 ## 📍 Current Status
-**DONE.** Ingestion pipeline fully functional. `echoc ingest` writes to SQLite, queues jobs, creates CAS objects, and writes structured JSON logs. Root cause was CLI entry point using mock services instead of real ones.
+Done. Build clean, 338/338 tests green, end-to-end flow verified manually.

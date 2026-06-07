@@ -6,79 +6,92 @@ This tutorial walks through your first ingestion, search, and API call.
 
 ---
 
-## 1. Initialize
+## 1. Run the Setup Wizard
 
-Verify installation:
+```bash
+echoc init
+```
+
+The wizard walks you through:
+
+1. **LLM model** — auto-detects Ollama on `localhost:11434` and lists installed models. Pick one (or use the cloud fallback).
+2. **Embedding model** — picks from embedding-capable models.
+3. **Data directory** — defaults to `~/.echo`.
+4. **HTTP API port** — defaults to `37891`.
+
+It writes `~/.echo/config.yaml`, initializes the SQLite database, creates the directory structure, and offers to start a background worker.
+
+For CI / scripts:
+
+```bash
+echoc init --non-interactive
+# Honours env vars: ECHO_DATA_DIR, ECHO_LLM_MODEL, ECHO_EMBED_MODEL,
+#                    ECHO_BRIDGE_PORT, OLLAMA_BASE_URL
+```
+
+---
+
+## 2. Verify It's Running
+
+```bash
+echoc worker status
+```
+
+Expected output (Ollama detected, worker started by the wizard):
+
+```
+worker: running
+  PID: 12345
+  Started: 2026-06-07T10:00:00.000Z
+  Uptime: 1m 23s
+  Log: /home/user/.echo/logs/worker.log
+  Jobs: pending=0 running=0 completed=0 failed=0 dead=0
+```
+
+Check the engine status:
 
 ```bash
 echoc status
 ```
 
-Expected output:
-
-```json
-{
-  "version": "0.1.0",
-  "nodeCount": 0,
-  "sourceCount": 0,
-  "jobCount": { "pending": 0, "running": 0, "completed": 0, "failed": 0 }
-}
-```
-
 ---
 
-## 2. Ingest Your First Files
+## 3. Ingest Your First File
+
+```bash
+echoc ingest ~/Documents/notes.md --watch
+```
+
+`--watch` blocks until all `GENERATE_L1` / `GENERATE_L2` / `GENERATE_L3` jobs are `COMPLETED` (or any fails). The worker processes them in the background.
+
+Expected output:
+
+```
+Source registered: notes.md → a1b2c3d4...
+Job abc-... queued for L1 generation
+Job def-... queued for L2 generation
+Job ghi-... queued for L3 generation
+⏳ Waiting for compilation...
+  [1/3] compilation progress
+  [2/3] compilation progress
+  [3/3] compilation progress
+✅ All 3 job(s) compiled in 12s
+```
+
+Without `--watch`, `ingest` returns immediately and jobs process in the background:
 
 ```bash
 echoc ingest ~/Documents/report.pdf
-echoc ingest ~/Documents/notes.md
-echoc ingest ~/Documents/podcast.mp3
-echoc ingest ~/Documents/meeting.mp4
+echoc jobs                            # see pending jobs
 ```
 
-> **Audio/video require:** `WHISPER_API_KEY` env var and `ffmpeg` (for video).
-> Run `echoc doctor` to verify dependencies.
-
-Expected output:
-
-```json
-{
-  "sourceId": "550e8400-e29b-41d4-a716-446655440000",
-  "rootHash": "a1b2c3d4...",
-  "status": "queued",
-  "jobs": ["job-uuid-1"]
-}
-```
-
-ECHO Core:
-1. Reads the file via the matching adapter
-2. Stores normalized content in CAS
-3. Registers the source in SQLite
-4. Queues `GENERATE_L1`, `GENERATE_L2`, `GENERATE_L3` jobs
-
----
-
-## 3. Check Compilation
-
-```bash
-echoc jobs
-```
-
-Watch for status changes:
-
-```
-PENDING → RUNNING → COMPLETED
-```
-
-Background pipeline:
+ECHO Core pipeline:
 
 | Job | What happens |
 |-----|--------------|
 | `GENERATE_L1` | Parse headings, build section tree |
 | `GENERATE_L2` | LLM extracts summary, concepts, entities |
 | `GENERATE_L3` | Generate embeddings, update HNSW index |
-
-When all jobs show `COMPLETED`, the file is fully searchable.
 
 ---
 
@@ -91,18 +104,13 @@ echoc search "pricing objections"
 Expected output:
 
 ```
-Query: pricing objections
-Language: en
-Intent: informational
-Results: 3
-
-[1] report.pdf — Section 4.2
-    "Common pricing objections include budget constraints..."
-    Score: 0.87
-
-[2] notes.md — Heading: Sales Playbook
-    "When the prospect pushes back on price..."
-    Score: 0.82
+Query: "pricing objections" (detected: en, intent: informational)
+───────────────────────────────
+[1] [[a1b2c3d4]]
+    L2: Common pricing objections include budget constraints...
+    Citation: lines 42-58
+───────────────────────────────
+Context: 320 tokens, 1 citations
 ```
 
 ---
@@ -119,12 +127,13 @@ See [`MULTILINGUAL.md`](MULTILINGUAL.md) for language pack details.
 
 ---
 
-## 6. Use HTTP API
+## 6. Use the HTTP API
 
-Start the bridge (or it runs automatically in the background):
+Start the bridge (or use `echoc daemon start` for bridge + worker in one process):
 
 ```bash
-curl http://localhost:37891/v1/status
+echoc bridge start
+curl http://localhost:37891/v1/health
 ```
 
 Search via HTTP:
@@ -184,3 +193,4 @@ Available tools:
 - Build a custom adapter: [`docs/ADAPTER_GUIDE.md`](ADAPTER_GUIDE.md)
 - Explore the HTTP API: [`docs/API.md`](API.md)
 - Add a new language: [`docs/MULTILINGUAL.md`](MULTILINGUAL.md)
+- Troubleshoot common issues: [`docs/TROUBLESHOOTING.md`](TROUBLESHOOTING.md)
