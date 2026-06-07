@@ -3,6 +3,6 @@
   "version": "1.0.0",
   "mimeTypes": ["application/pdf"],
   "extensions": [".pdf"],
-  "entry": "adapter.js",
+  "entry": "adapter.cjs",
   "status": "stable"
 }

@@ -21,7 +21,8 @@ afterEach(() => {
 
 function makeEchoAdapter(responseDelay = 0): string {
   const script = `
-const rl = require('readline').createInterface({ input: process.stdin });
+const readline = require('readline');
+const rl = readline.createInterface({ input: process.stdin });
 rl.on('line', (line) => {
   const req = JSON.parse(line);
   let result;
@@ -42,7 +43,7 @@ rl.on('line', (line) => {
   console.log(JSON.stringify({ jsonrpc: '2.0', id: req.id, result }));
 });
 `;
-  const p = path.join(tmpDir, 'echo-adapter.js');
+  const p = path.join(tmpDir, 'echo-adapter.cjs');
   writeFileSync(p, script);
   return p;
 }
@@ -98,10 +99,11 @@ describe('LineDelimitedJSONTransport', () => {
 
   it('rejects pending on process exit', async () => {
     const script = `
-const rl = require('readline').createInterface({ input: process.stdin });
+const readline = require('readline');
+const rl = readline.createInterface({ input: process.stdin });
 rl.on('line', () => process.exit(1));
 `;
-    const adapterPath = path.join(tmpDir, 'exit-adapter.js');
+    const adapterPath = path.join(tmpDir, 'exit-adapter.cjs');
     writeFileSync(adapterPath, script);
 
     const transport = new LineDelimitedJSONTransport(adapterPath);
@@ -124,10 +126,11 @@ rl.on('line', () => process.exit(1));
 
   it('calls onExit handler when process exits', async () => {
     const script = `
-const rl = require('readline').createInterface({ input: process.stdin });
+const readline = require('readline');
+const rl = readline.createInterface({ input: process.stdin });
 rl.on('line', () => process.exit(2));
 `;
-    const adapterPath = path.join(tmpDir, 'exit2-adapter.js');
+    const adapterPath = path.join(tmpDir, 'exit2-adapter.cjs');
     writeFileSync(adapterPath, script);
 
     const transport = new LineDelimitedJSONTransport(adapterPath);

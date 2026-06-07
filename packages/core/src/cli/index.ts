@@ -12,7 +12,19 @@ export function createCLI(deps: CLICommandsDeps): Command {
   const commands = new CLICommands(deps);
   const program = new Command();
 
-  program.name('echoc').description('ECHO Core CLI').version(deps.version);
+  program
+    .name('echoc')
+    .description('ECHO Core CLI')
+    .version(deps.version)
+    .option('-v, --verbose', 'Enable verbose debug output to console (pretty-printed)')
+    .hook('preAction', (thisCommand) => {
+      const verbose = thisCommand.opts().verbose;
+      if (verbose) {
+        process.env.ECHO_LOG_LEVEL = 'debug';
+        process.env.ECHO_LOG_CONSOLE = 'true';
+        process.env.ECHO_LOG_PRETTY = 'true';
+      }
+    });
 
   program
     .command('ingest <filePath>')
@@ -98,6 +110,13 @@ export function createCLI(deps: CLICommandsDeps): Command {
     .description('List all stored keys (masked)')
     .action(async () => {
       await commands.keyList();
+    });
+
+  program
+    .command('init')
+    .description('Initialize ECHO Core data directory and config')
+    .action(async () => {
+      await commands.init();
     });
 
   program

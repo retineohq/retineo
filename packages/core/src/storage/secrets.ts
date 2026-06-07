@@ -14,6 +14,7 @@ export interface SecretsManager {
   get(key: string): Promise<string | undefined>;
   delete(key: string): Promise<void>;
   list(): Promise<string[]>;
+  listMasked(): Promise<Record<string, string>>;
 }
 
 interface SecretsFile {

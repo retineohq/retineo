@@ -15,6 +15,18 @@ Add to Claude Desktop `claude_desktop_config.json`:
 }
 ```
 
+Or after `npm install -g echo-core`, use the `echo-mcp` command directly:
+
+```json
+{
+  "mcpServers": {
+    "echoc": {
+      "command": "echo-mcp"
+    }
+  }
+}
+```
+
 ## Tools
 
 ### `echo_search`

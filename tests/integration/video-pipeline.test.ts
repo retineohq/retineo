@@ -23,7 +23,7 @@ beforeEach(() => {
   mkdirSync(destDir);
   const { readFileSync } = require('fs');
   writeFileSync(path.join(destDir, 'manifest.json'), readFileSync(path.join(srcDir, 'manifest.json')));
-  writeFileSync(path.join(destDir, 'adapter.js'), readFileSync(path.join(srcDir, 'adapter.js')));
+  writeFileSync(path.join(destDir, 'adapter.cjs'), readFileSync(path.join(srcDir, 'adapter.cjs')));
 });
 
 afterEach(() => {

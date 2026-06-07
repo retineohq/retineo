@@ -4,6 +4,7 @@
  */
 
 import { spawn, type ChildProcess } from 'child_process';
+import path from 'path';
 import { createInterface, type Interface } from 'readline';
 import type {
   JSONRPCRequest,
@@ -38,9 +39,15 @@ export class LineDelimitedJSONTransport implements JSONRPCTransport {
     adapterPath: string,
     private timeoutMs = 30000
   ) {
+    // Resolve NODE_PATH from the adapter's directory upward so adapters
+    // copied to temp dirs (e.g. in tests) can still find node_modules.
+    const adapterDir = path.dirname(adapterPath);
+    const rootNodeModules = path.join(process.cwd(), 'node_modules');
+    const existingNodePath = process.env.NODE_PATH || '';
+    const nodePath = [rootNodeModules, existingNodePath].filter(Boolean).join(path.delimiter);
     this.process = spawn('node', [adapterPath], {
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env },
+      env: { ...process.env, NODE_PATH: nodePath },
     });
 
     this.rl = createInterface({ input: this.process.stdout! });

@@ -121,7 +121,12 @@ export class SQLiteRegistry implements Registry {
     const __dirname = path.dirname(fileURLToPath(import.meta.url));
     const schemaPath = path.join(__dirname, 'schema.sql');
     const sql = readFileSync(schemaPath, 'utf-8');
-    this.db.exec(sql);
+    // Split on CREATE TABLE/INDEX and add IF NOT EXISTS to avoid
+    // "table already exists" errors when init command already ran.
+    const patched = sql
+      .replace(/CREATE TABLE (\w+)/g, 'CREATE TABLE IF NOT EXISTS $1')
+      .replace(/CREATE INDEX (\w+)/g, 'CREATE INDEX IF NOT EXISTS $1');
+    this.db.exec(patched);
   }
 
   close(): void {

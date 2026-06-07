@@ -31,16 +31,16 @@ echo-core/
 │   ├── mcp/             # Model Context Protocol server
 │   ├── i18n/            # Language packs, detection, cross-lingual search
 │   └── utils/           # Shared helpers, logger, shutdown manager
-├── packages/core/adapters/  # Built-in adapter scripts (CommonJS)
-│   ├── text/                # Text adapter (.txt)
-│   ├── markdown/            # Markdown adapter (.md)
-│   ├── pdf/                 # PDF adapter (real, pdf-parse)
-│   ├── image/               # Image OCR adapter (real, tesseract.js)
-│   ├── audio/               # Real audio adapter (whisper.cpp primary → Whisper API fallback → graceful empty, .mp3/.wav/.m4a/.ogg/.flac/.webm)
-│   ├── audio-mock/          # Mock audio adapter (fallback for testing)
-│   ├── video/               # Real video adapter (ffmpeg + whisper.cpp primary → Whisper API fallback → graceful empty, .mp4/.avi/.mov/.mkv/.webm)
-│   ├── video-mock/          # Mock video adapter (fallback for testing)
-│   └── image-mock/          # Mock image adapter (deprecated, replaced by image/)
+├── packages/core/adapters/  # Built-in adapter scripts (CommonJS, .cjs extension)
+│   ├── text/                # Text adapter (.txt) — adapter.cjs
+│   ├── markdown/            # Markdown adapter (.md) — adapter.cjs
+│   ├── pdf/                 # PDF adapter (real, pdfjs-dist) — adapter.cjs
+│   ├── image/               # Image OCR adapter (real, tesseract.js) — adapter.cjs
+│   ├── audio/               # Real audio adapter (whisper.cpp primary → Whisper API fallback → graceful empty, .mp3/.wav/.m4a/.ogg/.flac/.webm) — adapter.cjs
+│   ├── audio-mock/          # Mock audio adapter (fallback for testing) — adapter.cjs
+│   ├── video/               # Real video adapter (ffmpeg + whisper.cpp primary → Whisper API fallback → graceful empty, .mp4/.avi/.mov/.mkv/.webm) — adapter.cjs
+│   ├── video-mock/          # Mock video adapter (fallback for testing) — adapter.cjs
+│   └── image-mock/          # Mock image adapter (deprecated, replaced by image/) — adapter.cjs
 ├── tests/
 │   ├── storage/         # CAS, Registry, NodeBuilder tests
 │   ├── adapters/        # Transport, Manager, Ingestion, Mock adapter tests
@@ -70,9 +70,12 @@ echo-core/
 │   │   ├── ci.yml       # CI: test on PR/push (Node 20, 22, pnpm)
 │   │   └── release.yml  # CD: publish npm + build binaries + GitHub Release
 │   └── release.yml      # Release notes category configuration
+├── bin/
+│   ├── echo-core.js     # CLI entry point (echoc) — wires real services: SQLiteRegistry, CAS, IngestionService, PinoLogger
+│   └── echo-mcp.js      # MCP server entry point (echo-mcp)
 ├── CHANGELOG.md         # Version history
 ├── structure.md         # This file
-├── package.json
+├── package.json         # Dependencies: pino, pino-pretty, better-sqlite3, commander, etc.
 ├── tsconfig.json
 └── README.md
 ```
@@ -94,7 +97,7 @@ echo-core/
 | File               | Exports                                                                                                                                                                                                                       | Description                                                       |
 | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
 | `protocol.ts`      | `JSONRPCRequest`, `JSONRPCResponse`, `JSONRPCError`, `AdapterErrorCodes`, `InitializeParams`, `InitializeResult`, `CapabilitiesResult`, `IngestParams`, `IngestResult`, `ShutdownParams`, `AdapterMethod`, `AdapterTransport` | JSON-RPC 2.0 protocol for adapter child processes.                |
-| `transport.ts`     | `JSONRPCTransport`, `LineDelimitedJSONTransport`                                                                                                                                                                              | LDJSON over stdin/stdout with timeout, error, exit handlers.      |
+| `transport.ts`     | `JSONRPCTransport`, `LineDelimitedJSONTransport`                                                                                                                                                                              | LDJSON over stdin/stdout with timeout, error, exit handlers. Sets `NODE_PATH` to project `node_modules` so adapters in temp dirs (tests) can resolve dependencies. |
 | `runner.ts`        | `AdapterProcessRunner`, `DefaultAdapterProcessRunner`                                                                                                                                                                         | Spawns adapter, auto-initializes, graceful shutdown.              |
 | `manager.ts`       | `AdapterManager`, `DefaultAdapterManager`                                                                                                                                                                                     | Loads built-in adapters, resolves by mimeType/extension, ingests. |
 | `ingestion.ts`     | `IngestionService`, `DefaultIngestionService`                                                                                                                                                                                 | Orchestrator: file → adapter → CAS → registry → ContextNode.      |
@@ -106,8 +109,8 @@ echo-core/
 | File              | Exports                                                                                | Description                                                                                     |
 | ----------------- | -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
 | `cas.ts`          | `CASStorage`, `LocalCASStorage`, `NodeArtifacts`, `computeHash`, `getObjectPath`       | Content-Addressable Storage: SHA-256 keyed object filesystem.                                   |
-| `registry.ts`     | `Registry`, `SQLiteRegistry`, `OrphanRecord`                                           | SQLite-backed registry: sources, segments, jobs (lease model), orphans.                         |
-| `config.ts`       | `ConfigManager`, `FileConfigManager`, `EchoConfig`                                     | YAML config manager (`~/.echo/config.yaml`).                                                    |
+| `registry.ts`     | `Registry`, `SQLiteRegistry`, `OrphanRecord`                                           | SQLite-backed registry: sources, segments, jobs (lease model), orphans. Schema init uses `IF NOT EXISTS` for idempotent table/index creation. |
+| `config.ts`       | `ConfigManager`, `FileConfigManager`, `EchoConfig`, `LoggingConfig`                   | YAML config manager (`~/.echo/config.yaml`). Includes `initializeDataDir()` for first-run setup. `logging` section: level, console, file, filePath, pretty. |
 | `node-builder.ts` | `NodeBuilder`, `DefaultNodeBuilder`                                                    | Builds `ContextNode` trees + `BuildManifest` from adapter output.                               |
 | `secrets.ts`      | `SecretsManager`, `FileSecretsManager`, `resolveSecret`, `resolveConfigValue`          | AES-256-GCM encrypted secrets store (`~/.echo/secrets.json`).                                   |
 | `schema.sql`      | —                                                                                      | SQLite DDL: `sources`, `segments`, `jobs`, `orphaned_objects`, `encryption_keys`, `audit_logs`. |
@@ -184,10 +187,10 @@ echo-core/
 
 | File            | Exports                                                                                                         | Description                                                                           |
 | --------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `commands.ts`   | `CLICommands`, `CLICommandsDeps`, `IngestCLIOptions`, `SearchCLIOptions`                                        | CLI command implementations (ingest, search, status, compile, config, jobs, recover, doctor). |
+| `commands.ts`   | `CLICommands`, `CLICommandsDeps`, `IngestCLIOptions`, `SearchCLIOptions`                                        | CLI command implementations (init, ingest, search, status, compile, config, jobs, recover, doctor, key set/get/delete/list). |
 | `doctor.ts`     | `runDoctor`, `formatDoctor`, `DoctorResult`, `DependencyCheck`                                                  | External dependency checker (ffmpeg, tesseract, whisper.cpp, whisper model, whisper key, ollama). |
 | `formatters.ts` | `formatSearchResult`, `formatStatus`, `formatJobs`, `formatIngestResult`, `formatConfig`, `formatRecoverResult` | Output formatters for CLI commands.                                                   |
-| `index.ts`      | `createCLI`                                                                                                     | Commander-based CLI entry point.                                                      |
+| `index.ts`      | `createCLI`                                                                                                     | Commander-based CLI entry point. Supports `-v, --verbose` global flag for debug output. |
 
 ### `src/mcp/` — Model Context Protocol
 
@@ -214,7 +217,7 @@ echo-core/
 
 | File               | Exports                                                                                                                                                                    | Description                                                          |
 | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| `logger.ts`        | `Logger`, `LogMeta`, `LoggerConfig`, `createLogger`, `setGlobalLogger`, `getGlobalLogger`                                                                                  | Pino-based structured JSON logging with redaction and child loggers. |
+| `logger.ts`        | `Logger`, `LogMeta`, `LoggerConfig`, `DualLogger`, `createLogger`, `setGlobalLogger`, `getGlobalLogger`                                                                    | Dual logger: console (stderr, pretty or JSON) + file (JSON). Console works even if file fails. `DualLogger` class for simultaneous output. |
 | `shutdown.ts`      | `ShutdownManager`, `ShutdownHandler`, `DefaultShutdownManager`, `installSignalHandlers`                                                                                    | SIGTERM/SIGINT handling with 12-step graceful shutdown.              |
 | `errors.ts`        | `EchoError`, `BaseEchoError`, `AdapterError`, `IngestError`, `LLMError`, `PipelineError`, `SearchError`, `BridgeError`, `ConfigError`, and factory functions for each code | Standardized error hierarchy with codes and HTTP status mapping.     |
 | `error-handler.ts` | `isEchoError`, `echoErrorFrom`, `sendErrorReply`, `formatCLIError`                                                                                                         | Unified error handling for HTTP (Fastify), CLI, and MCP.             |
@@ -290,7 +293,10 @@ echo-core/
 | File               | Tests                                                        | Description                        |
 | ------------------ | ------------------------------------------------------------ | ---------------------------------- |
 | `commands.test.ts` | `ingest`, `status`, `config`, `recover` with mocked services | CLI command parsing and execution. |
+| `init.test.ts`     | `init` creates directories, config, SQLite schema; idempotent | First-run initialization.          |
+| `key-list.test.ts` | `key list` empty state, masked output                        | Key management display.            |
 | `doctor.test.ts`   | `runDoctor`, `formatDoctor`, Node.js check, whisper.cpp check, whisper model check, output formatting | Dependency checker correctness.    |
+| `verbose.test.ts`  | `--verbose` flag sets debug level, pretty console output; config logging section defaults; `createLogger` with `logging` config | Verbose mode + config integration. |
 
 ### `tests/mcp/` — MCP Tests
 
@@ -298,12 +304,13 @@ echo-core/
 | ---------------- | ------------------------------------------------------------ | ------------------------------------ |
 | `server.test.ts` | `EchoMCPServer` construction                                 | MCP server initialization.           |
 | `tools.test.ts`  | `echo_search`, `echo_ingest`, `echo_status`, `echo_get_node` | Tool execution with mocked services. |
+| `bin.test.ts`    | `echo-mcp.js` exists, `EchoMCPServer` importable             | MCP binary entry point.              |
 
 ### `tests/utils/` — Utility Tests
 
 | File               | Tests                                                                       | Description                                 |
 | ------------------ | --------------------------------------------------------------------------- | ------------------------------------------- |
-| `logger.test.ts`   | Log levels, child loggers, redaction, traceId propagation                   | PinoLogger correctness.                     |
+| `logger.test.ts`   | Log levels, child loggers, redaction, traceId propagation, DualLogger (console+file, pretty mode, level filtering, file failure resilience) | DualLogger + PinoLogger correctness.                     |
 | `shutdown.test.ts` | SIGTERM handling, job release, adapter cleanup, timeout scenarios           | DefaultShutdownManager correctness.         |
 | `errors.test.ts`   | `BaseEchoError` hierarchy, `toJSON`, factory functions, status codes        | Standardized error codes and serialization. |
 | `cache.test.ts`    | `SimpleLRUCache` get/set/has/delete, TTL eviction, MRU reordering, max size | LRU cache correctness.                      |
@@ -349,6 +356,9 @@ echo-core/
 | **Discover mock multimodal adapters**                   | `MockAdapterRegistry`                          | `src/adapters/mock-registry.ts`                     | `MOCK_ADAPTERS`, `MockAdapterInfo`                               |
 | **Write a third-party adapter**                         | `ADAPTER_GUIDE.md`                             | `docs/ADAPTER_GUIDE.md`                             | `protocol.ts`, `types.ts`, `schemas.ts`                          |
 | **Add structured logging**                              | `createLogger`                                 | `src/utils/logger.ts`                               | `Logger`, `LogMeta`, `getGlobalLogger`                           |
+| **Write logs to console + file simultaneously**         | `DualLogger`                                   | `src/utils/logger.ts`                               | `LoggerConfig` with `console`, `file`, `pretty` flags. Console = stderr (pretty or JSON), file = JSON. Console works even if file fails. |
+| **Enable verbose debug output via CLI**                 | `--verbose` / `-v` flag                        | `src/cli/index.ts`, `bin/echo-core.js`              | Sets `ECHO_LOG_LEVEL=debug`, pretty console output. Checked via `process.argv` before logger creation. |
+| **Configure logging via config.yaml**                    | `logging` section in `EchoConfig`              | `src/storage/config.ts`                             | `LoggingConfig`: level, console, file, filePath, pretty. |
 | **Implement graceful shutdown**                         | `DefaultShutdownManager`                       | `src/utils/shutdown.ts`                             | `ShutdownHandler`, `installSignalHandlers`                       |
 | **Add a new adapter protocol method**                   | `protocol`                                     | `src/adapters/protocol.ts`                          | `AdapterMethod`, `JSONRPCRequest`                                |
 | **Implement a custom storage backend**                  | `CASStorage` interface                         | `src/storage/cas.ts`                                | Implement `write`, `read`, `exists`, `writeObject`, `readObject` |

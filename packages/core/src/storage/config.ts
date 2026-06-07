@@ -4,10 +4,12 @@
  */
 
 import { mkdir, readFile, writeFile } from 'fs/promises';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import path from 'path';
 import os from 'os';
 import yaml from 'js-yaml';
+import Database from 'better-sqlite3';
+import { fileURLToPath } from 'url';
 
 export interface SearchConfig {
   defaultLanguage: string;
@@ -52,6 +54,14 @@ export interface SearchConfig {
   };
 }
 
+export interface LoggingConfig {
+  level: 'debug' | 'info' | 'warn' | 'error';
+  console: boolean;
+  file: boolean;
+  filePath: string;
+  pretty: boolean;
+}
+
 export interface I18nPackConfig {
   code: string;
   file?: string;
@@ -70,6 +80,7 @@ export interface EchoConfig {
   embeddingModel: string;
   search: SearchConfig;
   i18n: I18nConfig;
+  logging: LoggingConfig;
 }
 
 const DEFAULT_SEARCH_CONFIG: SearchConfig = {
@@ -116,6 +127,14 @@ const DEFAULT_I18N_CONFIG: I18nConfig = {
   packs: [],
 };
 
+const DEFAULT_LOGGING_CONFIG: LoggingConfig = {
+  level: 'info',
+  console: true,
+  file: true,
+  filePath: path.join(os.homedir(), '.echo', 'logs', 'echo.log'),
+  pretty: false,
+};
+
 const DEFAULT_CONFIG: EchoConfig = {
   dataDir: path.join(os.homedir(), '.echo'),
   defaultAdapter: 'file',
@@ -123,6 +142,7 @@ const DEFAULT_CONFIG: EchoConfig = {
   embeddingModel: 'text-embedding-3-small',
   search: DEFAULT_SEARCH_CONFIG,
   i18n: DEFAULT_I18N_CONFIG,
+  logging: DEFAULT_LOGGING_CONFIG,
 };
 
 function mergeSearchConfig(raw: unknown): SearchConfig {
@@ -171,6 +191,17 @@ function mergeSearchConfig(raw: unknown): SearchConfig {
   };
 }
 
+function mergeLoggingConfig(raw: unknown): LoggingConfig {
+  const l = (raw ?? {}) as Record<string, unknown>;
+  return {
+    level: (l.level as LoggingConfig['level']) ?? DEFAULT_LOGGING_CONFIG.level,
+    console: (l.console as boolean) ?? DEFAULT_LOGGING_CONFIG.console,
+    file: (l.file as boolean) ?? DEFAULT_LOGGING_CONFIG.file,
+    filePath: (l.filePath as string) ?? DEFAULT_LOGGING_CONFIG.filePath,
+    pretty: (l.pretty as boolean) ?? DEFAULT_LOGGING_CONFIG.pretty,
+  };
+}
+
 function mergeI18nConfig(raw: unknown): I18nConfig {
   const i = (raw ?? {}) as Record<string, unknown>;
   const packs = (i.packs as I18nPackConfig[] | undefined) ?? DEFAULT_I18N_CONFIG.packs;
@@ -185,6 +216,7 @@ export interface ConfigManager {
   getConfigPath(): string;
   load(): Promise<EchoConfig>;
   save(config: EchoConfig): Promise<void>;
+  initializeDataDir(): Promise<void>;
 }
 
 export class FileConfigManager implements ConfigManager {
@@ -218,6 +250,7 @@ export class FileConfigManager implements ConfigManager {
       embeddingModel: parsed.embeddingModel ?? DEFAULT_CONFIG.embeddingModel,
       search: mergeSearchConfig(parsed.search),
       i18n: mergeI18nConfig(parsed.i18n),
+      logging: mergeLoggingConfig(parsed.logging),
     };
   }
 
@@ -225,5 +258,49 @@ export class FileConfigManager implements ConfigManager {
     await mkdir(this.dataDir, { recursive: true });
     const raw = yaml.dump(config);
     await writeFile(this.configPath, raw, 'utf-8');
+  }
+
+  private configExists(): boolean {
+    return existsSync(this.configPath);
+  }
+
+  async initializeDataDir(): Promise<void> {
+    await mkdir(this.dataDir, { recursive: true });
+    await mkdir(path.join(this.dataDir, 'objects'), { recursive: true });
+    await mkdir(path.join(this.dataDir, 'index'), { recursive: true });
+    await mkdir(path.join(this.dataDir, 'adapters'), { recursive: true });
+    await mkdir(path.join(this.dataDir, 'models'), { recursive: true });
+    await mkdir(path.join(this.dataDir, 'logs'), { recursive: true });
+
+    if (!this.configExists()) {
+      await this.save(DEFAULT_CONFIG);
+    }
+
+    await this.initializeDatabase();
+  }
+
+  private async initializeDatabase(): Promise<void> {
+    const dbPath = path.join(this.dataDir, 'echo.sqlite');
+    const db = new Database(dbPath);
+
+    const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as { name: string }[];
+    if (tables.length === 0) {
+      const schemaPath = this.resolveSchemaPath();
+      const schema = readFileSync(schemaPath, 'utf-8');
+      db.exec(schema);
+    }
+
+    db.close();
+  }
+
+  private resolveSchemaPath(): string {
+    const __dirname = path.dirname(fileURLToPath(import.meta.url));
+    const distPath = path.join(__dirname, 'schema.sql');
+    const srcPath = path.join(__dirname, '..', '..', '..', 'core', 'src', 'storage', 'schema.sql');
+
+    if (existsSync(distPath)) return distPath;
+    if (existsSync(srcPath)) return srcPath;
+
+    throw new Error('schema.sql not found. Expected at: ' + distPath);
   }
 }

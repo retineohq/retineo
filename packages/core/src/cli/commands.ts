@@ -163,10 +163,17 @@ export class CLICommands {
       console.log('No keys stored');
       return;
     }
-    const masked = await (this.deps.secretsManager as unknown as { listMasked(): Promise<Record<string, string>> }).listMasked?.() ?? {};
+    const masked = await this.deps.secretsManager.listMasked();
     for (const k of keys) {
       console.log(`${k}: ${masked[k] ?? '****'}`);
     }
+  }
+
+  async init(): Promise<void> {
+    const configManager = new (await import('../storage/config.js')).FileConfigManager();
+    await configManager.initializeDataDir();
+    console.log(`ECHO Core initialized at ${configManager.getDataDir()}`);
+    console.log('Run "echoc doctor" to check dependencies');
   }
 
   async doctor(): Promise<void> {

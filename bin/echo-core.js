@@ -1,88 +1,163 @@
 #!/usr/bin/env node
+/**
+ * ECHO Core — CLI Entry Point
+ * Wires real services: SQLite registry, CAS, ingestion, search, logger.
+ */
+
 import { createCLI } from '../dist/cli/index.js';
+import { FileConfigManager } from '../dist/storage/config.js';
+import { LocalCASStorage, computeHash } from '../dist/storage/cas.js';
+import { SQLiteRegistry } from '../dist/storage/registry.js';
+import { DefaultNodeBuilder } from '../dist/storage/node-builder.js';
+import { FileSecretsManager } from '../dist/storage/secrets.js';
+import { DefaultAdapterManager } from '../dist/adapters/manager.js';
+import { DefaultAdapterProcessRunner } from '../dist/adapters/runner.js';
+import { DefaultIngestionService } from '../dist/adapters/ingestion.js';
+import { DefaultQueryAnalyzer } from '../dist/search/query-analyzer.js';
+import { DefaultRetrievalService } from '../dist/search/retrieval-service.js';
+import { DefaultContextAssembler } from '../dist/search/context-assembler.js';
+import { MockLLMProvider } from '../dist/llm/providers/mock.js';
+import { DefaultCompilationPipeline } from '../dist/layers/pipeline.js';
+import { createLogger } from '../dist/utils/logger.js';
+import path from 'path';
+import os from 'os';
 
-// MVP: wire with mock deps for standalone execution
-// Real deployments should inject actual services via a bootstrap module
+const VERSION = '0.1.0';
 
-const mockDeps = {
-  version: '0.1.0',
-  ingestionService: {
-    async ingestFile(filePath) {
-      return {
-        id: 'mock-hash',
-        sourceRef: { protocol: 'file', uri: filePath, mimeType: 'text/plain' },
-        childrenIds: [],
-        depth: 0,
-        artifacts: {},
-        build: { schemaVersion: 1, nodeVersion: 1, rawHash: 'mock', contentHash: 'mock', generators: { l1: { id: '', version: '' }, l2: { id: '', version: '' }, embedding: { id: '', version: '' } }, buildTimestamp: new Date().toISOString() },
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-    },
-  },
-  retrievalService: {
-    async search() {
-      return {
-        query: '',
-        candidates: [],
-        selected: [],
-        citations: [],
-        trace: { steps: [], durationMs: 0 },
-      };
-    },
-  },
-  queryAnalyzer: {
-    async analyze(query) {
-      return {
-        originalQuery: query,
-        language: 'en',
-        confidence: 1,
-        intent: 'vague',
-        enrichedQuery: query,
-        entities: [],
-        signals: [],
-      };
-    },
-  },
-  contextAssembler: {
-    async assemble() {
-      return {
-        segments: [],
-        totalTokens: 0,
-        trace: { steps: [], budgetUsed: 0, budgetTotal: 0 },
-        citations: [],
-        language: 'en',
-      };
-    },
-  },
-  registry: {
-    listSources: () => [],
-    getPendingJobs: () => [],
-    recoverOrphan: () => {},
-    getOrphan: () => null,
-    getSource: () => null,
-  },
-  configManager: {
-    load: async () => ({
-      dataDir: '',
-      defaultAdapter: '',
-      llmProvider: '',
-      embeddingModel: '',
-      search: {},
-      i18n: {},
-    }),
-    save: async () => {},
-  },
-  pipeline: {
-    processJob: async () => {},
-    enqueueL1: () => {},
-    enqueueL2: () => {},
-    enqueueL3: () => {},
-  },
-};
+async function main() {
+  // --- Config (load first so we can use logging settings) ---
+  const configManager = new FileConfigManager();
+  let config;
+  try {
+    config = await configManager.load();
+  } catch {
+    // Not initialized yet — use defaults
+    const dataDir = path.join(os.homedir(), '.echo');
+    config = {
+      dataDir,
+      defaultAdapter: 'file',
+      llmProvider: 'openai',
+      embeddingModel: 'text-embedding-3-small',
+      search: {
+        defaultLanguage: 'en',
+        languageDetection: { provider: 'franc', fallback: 'heuristic', confidenceThreshold: 0.7 },
+        semantic: { topK: 100, threshold: 0.75, hybridWeight: 0.7 },
+        rerank: { topK: 10, weights: { concept: 1.0, claim: 0.5, summary: 0.8, language: 0.3 } },
+        cascade: { budgets: { vague: 500, section: 800, precision: 1500 } },
+        citations: { format: 'markdown', includeLineNumbers: true, includeTimestamps: true },
+        prompts: {},
+        crossLingual: { enabled: true },
+      },
+      i18n: { defaultLanguage: 'en', packs: [] },
+      logging: {
+        level: 'info',
+        console: true,
+        file: true,
+        filePath: path.join(dataDir, 'logs', 'echo.log'),
+        pretty: false,
+      },
+    };
+  }
 
-const program = createCLI(mockDeps);
-program.parseAsync(process.argv).catch((err) => {
-  console.error(err);
+  // --- Logger (DualLogger: console + file) ---
+  // Check for --verbose in process.argv before creating logger
+  const verbose = process.argv.includes('--verbose') || process.argv.includes('-v');
+  if (verbose) {
+    process.env.ECHO_LOG_LEVEL = 'debug';
+    process.env.ECHO_LOG_CONSOLE = 'true';
+    process.env.ECHO_LOG_PRETTY = 'true';
+  }
+  const logConfig = config.logging || {
+    level: 'info',
+    console: true,
+    file: true,
+    filePath: path.join(config.dataDir, 'logs', 'echo.log'),
+    pretty: false,
+  };
+  if (verbose) {
+    logConfig.level = 'debug';
+    logConfig.pretty = true;
+    logConfig.console = true;
+  }
+  const logger = createLogger(logConfig);
+
+  const resolvedDataDir = config.dataDir || dataDir;
+
+  // --- Storage ---
+  const cas = new LocalCASStorage(resolvedDataDir);
+  const dbPath = path.join(resolvedDataDir, 'echo.sqlite');
+  const registry = new SQLiteRegistry(dbPath);
+
+  // --- Node builder ---
+  const nodeBuilder = new DefaultNodeBuilder();
+
+  // --- Adapter manager ---
+  // Adapters live in the package directory, not cwd
+  const packageDir = path.resolve(path.dirname(new URL(import.meta.url).pathname));
+  const adaptersDir = path.join(packageDir, '..', 'packages', 'core', 'adapters');
+  const adapterRunner = new DefaultAdapterProcessRunner(resolvedDataDir, logger);
+  const adapterManager = new DefaultAdapterManager(adaptersDir, adapterRunner);
+  try {
+    await adapterManager.loadBuiltIn();
+  } catch {
+    // No adapters dir — ingestion will fail with clear error later
+  }
+
+  // --- Ingestion service (real) ---
+  const ingestionService = new DefaultIngestionService(
+    cas,
+    registry,
+    nodeBuilder,
+    adapterManager,
+    computeHash,
+    logger,
+  );
+
+  // --- Search ---
+  const secretsManager = new FileSecretsManager(path.join(resolvedDataDir, 'secrets.json'));
+  const queryAnalyzer = new DefaultQueryAnalyzer({ searchConfig: config.search });
+  const embedder = new MockLLMProvider({ id: 'mock-embedder', type: 'mock', dimension: 384 });
+  const retrievalService = new DefaultRetrievalService({
+    embeddingProvider: embedder,
+    casStorage: cas,
+    indexDir: path.join(resolvedDataDir, 'index'),
+    config: config.search,
+    logger,
+  });
+  const contextAssembler = new DefaultContextAssembler({ config: config.search });
+
+  // --- Pipeline ---
+  const pipeline = new DefaultCompilationPipeline({
+    registry,
+    cas,
+    nodeBuilder,
+    llmProvider: null,
+    logger,
+  });
+
+  // --- Wire CLI ---
+  const deps = {
+    version: VERSION,
+    ingestionService,
+    retrievalService,
+    queryAnalyzer,
+    contextAssembler,
+    registry,
+    configManager,
+    pipeline,
+    secretsManager,
+  };
+
+  const program = createCLI(deps);
+
+  try {
+    await program.parseAsync(process.argv);
+  } finally {
+    registry.close();
+  }
+}
+
+main().catch((err) => {
+  console.error('ECHO Core CLI error:', err.message);
   process.exit(1);
 });

@@ -55,12 +55,14 @@ function setupAdapters(): void {
   mkdirSync(textDir);
   writeFileSync(
     path.join(textDir, 'manifest.json'),
-    JSON.stringify({ id: 'text', version: '1.0.0', mimeTypes: ['text/plain'], extensions: ['.txt'], entry: 'adapter.js' })
+    JSON.stringify({ id: 'text', version: '1.0.0', mimeTypes: ['text/plain'], extensions: ['.txt'], entry: 'adapter.cjs' })
   );
   writeFileSync(
-    path.join(textDir, 'adapter.js'),
+    path.join(textDir, 'adapter.cjs'),
     `
-const rl = require('readline').createInterface({ input: process.stdin });
+const readline = require('readline');
+const fs = require('fs').promises;
+const rl = readline.createInterface({ input: process.stdin });
 rl.on('line', async (line) => {
   const req = JSON.parse(line);
   let result;
@@ -68,7 +70,6 @@ rl.on('line', async (line) => {
     case 'initialize': result = { adapterId: 'text', version: '1.0.0' }; break;
     case 'capabilities': result = { mimeTypes: ['text/plain'], extensions: ['.txt'] }; break;
     case 'ingest': {
-      const fs = require('fs').promises;
       const content = await fs.readFile(req.params.uri, 'utf-8');
       result = { content, metadata: { blocks: [{ type: 'heading', offset: 0, length: content.length }] } };
       break;
@@ -85,12 +86,14 @@ rl.on('line', async (line) => {
   mkdirSync(mdDir);
   writeFileSync(
     path.join(mdDir, 'manifest.json'),
-    JSON.stringify({ id: 'markdown', version: '1.0.0', mimeTypes: ['text/markdown'], extensions: ['.md'], entry: 'adapter.js' })
+    JSON.stringify({ id: 'markdown', version: '1.0.0', mimeTypes: ['text/markdown'], extensions: ['.md'], entry: 'adapter.cjs' })
   );
   writeFileSync(
-    path.join(mdDir, 'adapter.js'),
+    path.join(mdDir, 'adapter.cjs'),
     `
-const rl = require('readline').createInterface({ input: process.stdin });
+const readline = require('readline');
+const fs = require('fs').promises;
+const rl = readline.createInterface({ input: process.stdin });
 rl.on('line', async (line) => {
   const req = JSON.parse(line);
   let result;
@@ -98,7 +101,6 @@ rl.on('line', async (line) => {
     case 'initialize': result = { adapterId: 'markdown', version: '1.0.0' }; break;
     case 'capabilities': result = { mimeTypes: ['text/markdown'], extensions: ['.md'] }; break;
     case 'ingest': {
-      const fs = require('fs').promises;
       const content = await fs.readFile(req.params.uri, 'utf-8');
       const blocks = [];
       const lines = content.split('\\n');

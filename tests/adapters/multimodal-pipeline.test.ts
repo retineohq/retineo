@@ -61,8 +61,8 @@ function setupMockAdapters(): void {
       readFileSync(path.join(srcDir, 'manifest.json'))
     );
     writeFileSync(
-      path.join(destDir, 'adapter.js'),
-      readFileSync(path.join(srcDir, 'adapter.js'))
+      path.join(destDir, 'adapter.cjs'),
+      readFileSync(path.join(srcDir, 'adapter.cjs'))
     );
   }
 }

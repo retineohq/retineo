@@ -3,6 +3,6 @@
   "version": "1.0.0",
   "mimeTypes": ["image/png", "image/jpeg"],
   "extensions": [".png", ".jpg", ".jpeg"],
-  "entry": "adapter.js",
+  "entry": "adapter.cjs",
   "status": "mock"
 }

@@ -47,7 +47,7 @@ beforeEach(async () => {
   mkdirSync(pdfDest);
   const { readFileSync } = require('fs');
   writeFileSync(path.join(pdfDest, 'manifest.json'), readFileSync(path.join(pdfSrc, 'manifest.json')));
-  writeFileSync(path.join(pdfDest, 'adapter.js'), readFileSync(path.join(pdfSrc, 'adapter.js')));
+  writeFileSync(path.join(pdfDest, 'adapter.cjs'), readFileSync(path.join(pdfSrc, 'adapter.cjs')));
 
   const runner = new DefaultAdapterProcessRunner(tmpDir);
   const manager = new DefaultAdapterManager(adaptersDir, runner);
