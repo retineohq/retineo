@@ -150,3 +150,37 @@ describe('Ollama probe', () => {
     if (existsSync(testDir)) rmSync(testDir, { recursive: true });
   });
 });
+
+describe('init wizard — interactive exit', () => {
+  it('calls process.exit(0) after interactive init completes', async () => {
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    // Mock ask/choose/confirm to immediately return mock-mode selections
+    const promptMod = await import('../../packages/core/src/cli/prompt.js');
+    // ask needs to return '3' so choose picks the mock option (index 2)
+    const askSpy = vi.spyOn(promptMod, 'ask').mockResolvedValue('3');
+    const chooseSpy = vi.spyOn(promptMod, 'choose').mockResolvedValue('mock');
+    const confirmSpy = vi.spyOn(promptMod, 'confirm').mockResolvedValue(false);
+
+    const testDir = path.join(os.tmpdir(), 'echo-init-exit-' + Date.now());
+    process.env.ECHO_DATA_DIR = testDir;
+
+    const cmds = new CLICommands(makeDeps());
+    // interactive init will use mocked prompts and hit process.exit(0) at end
+    try {
+      await cmds.init({ nonInteractive: false });
+    } catch {
+      // process.exit may throw in test env
+    }
+
+    expect(exitSpy).toHaveBeenCalledWith(0);
+
+    exitSpy.mockRestore();
+    log.mockRestore();
+    askSpy.mockRestore();
+    chooseSpy.mockRestore();
+    confirmSpy.mockRestore();
+    if (existsSync(testDir)) rmSync(testDir, { recursive: true });
+  });
+});

@@ -91,6 +91,7 @@ export function ask(
     }
 
     rl.once('line', (line) => {
+      rl.close();
       const trimmed = line.trim();
       resolve(trimmed.length > 0 ? trimmed : (options.defaultValue ?? ''));
     });

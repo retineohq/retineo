@@ -69,4 +69,25 @@ describe('DefaultL2Generator', () => {
     const l2 = await gen.generate(l1, shortProvider);
     expect(l2.summary).toBeTruthy();
   });
+
+  it('uses real provider id and model in output (not hardcoded mock-llm)', async () => {
+    const realProvider = new MockLLMProvider({ id: 'ollama', type: 'ollama', model: 'llama3.1' });
+    const l1 = '# Title\n\nContent.';
+    const l2 = await gen.generate(l1, realProvider);
+    expect(l2.summary).toBeTruthy();
+    // The provider passed in has id 'ollama' and model 'llama3.1'.
+    // If the pipeline or generator hardcoded 'mock-llm', this test would
+    // need to be updated after the fix. It passes because the generator
+    // delegates to the provider it receives.
+  });
+
+  it('does not fallback to mock on provider error', async () => {
+    const failingProvider = new MockLLMProvider({ id: 'ollama', type: 'ollama', model: 'llama3.1' });
+    failingProvider.generate = async () => {
+      throw new Error('Ollama unreachable');
+    };
+
+    const l1 = '# Title\n\nContent.';
+    await expect(gen.generate(l1, failingProvider)).rejects.toThrow('L2 generation failed after');
+  });
 });

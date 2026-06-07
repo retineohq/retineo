@@ -422,6 +422,7 @@ export class CLICommands {
     console.log('  echoc ingest <file>     # Add documents');
     console.log('  echoc search <query>    # Search your knowledge base');
     console.log('  echoc worker status     # Check compilation progress');
+    process.exit(0);
   }
 
   private async initNonInteractive(): Promise<void> {

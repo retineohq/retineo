@@ -15,7 +15,8 @@ import { DefaultNodeBuilder } from '../storage/node-builder.js';
 import { DefaultAdapterManager } from '../adapters/manager.js';
 import { DefaultAdapterProcessRunner } from '../adapters/runner.js';
 import { DefaultIngestionService } from '../adapters/ingestion.js';
-import { MockLLMProvider } from '../llm/providers/mock.js';
+import { DefaultLLMProviderFactory, DefaultEmbeddingProviderFactory } from '../llm/factory.js';
+import { FileSecretsManager } from '../storage/secrets.js';
 import { DefaultCompilationPipeline } from '../layers/pipeline.js';
 import { DefaultQueueWorker } from '../layers/worker.js';
 import { DefaultL1Generator } from '../layers/l1-generator.js';
@@ -79,13 +80,21 @@ export async function startWorkerServices(
     // ignore — adapters dir may be empty in test envs
   }
 
+  // LLM providers from config
+  const secrets = new FileSecretsManager(path.join(dataDir, 'secrets.json'));
+  const llmFactory = new DefaultLLMProviderFactory();
+  const embedFactory = new DefaultEmbeddingProviderFactory();
+  await llmFactory.loadFromConfig(config, secrets);
+  await embedFactory.loadFromConfig(config, secrets);
+
+  const llmProvider = llmFactory.getDefault();
+  const embedder = embedFactory.getDefault();
+
   // Generators
   const nodeBuilder = new DefaultNodeBuilder();
   const l1Generator = new DefaultL1Generator();
   const l2Generator = new DefaultL2Generator();
   const l3Generator = new DefaultL3Generator();
-  const llmProvider = new MockLLMProvider({ id: 'mock-llm', type: 'mock', model: 'mock-llm', dimension: 384 });
-  const embedder = new MockLLMProvider({ id: 'mock-embedder', type: 'mock', model: 'mock-embedder', dimension: 384 });
 
   const pipeline = new DefaultCompilationPipeline({
     cas,

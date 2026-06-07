@@ -16,7 +16,8 @@ import { DefaultIngestionService } from '../adapters/ingestion.js';
 import { DefaultQueryAnalyzer } from '../search/query-analyzer.js';
 import { DefaultRetrievalService } from '../search/retrieval-service.js';
 import { DefaultContextAssembler } from '../search/context-assembler.js';
-import { MockLLMProvider } from '../llm/providers/mock.js';
+import { DefaultLLMProviderFactory, DefaultEmbeddingProviderFactory } from '../llm/factory.js';
+import { FileSecretsManager } from '../storage/secrets.js';
 import { FastifyBridgeServer } from '../bridge/server.js';
 import { DefaultHealthService } from '../bridge/health.js';
 import { DefaultMetricsService } from '../bridge/metrics.js';
@@ -56,8 +57,16 @@ export async function startBridgeServices(): Promise<RunningBridgeServices> {
   }
 
   const nodeBuilder = new DefaultNodeBuilder();
-  const llmProvider = new MockLLMProvider({ id: 'mock-llm', type: 'mock', model: 'mock-llm', dimension: 384 });
-  const embedder = new MockLLMProvider({ id: 'mock-embedder', type: 'mock', model: 'mock-embedder', dimension: 384 });
+
+  // LLM providers from config
+  const secrets = new FileSecretsManager(path.join(dataDir, 'secrets.json'));
+  const llmFactory = new DefaultLLMProviderFactory();
+  const embedFactory = new DefaultEmbeddingProviderFactory();
+  await llmFactory.loadFromConfig(config, secrets);
+  await embedFactory.loadFromConfig(config, secrets);
+
+  const llmProvider = llmFactory.getDefault();
+  const embedder = embedFactory.getDefault();
 
   const queryAnalyzer = new DefaultQueryAnalyzer({ searchConfig: config.search });
   const retrievalService = new DefaultRetrievalService({
