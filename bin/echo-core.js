@@ -187,6 +187,7 @@ async function main() {
     configManager,
     pipeline,
     secretsManager,
+    cas,
   };
 
   const program = createCLI(deps);

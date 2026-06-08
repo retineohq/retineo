@@ -39,14 +39,16 @@ function makeDeps(configOverride?: { llm?: { defaultProvider: string; providers:
     ingestionService: {
       async ingestFile(filePath: string) {
         return {
-          id: 'hash123',
-          sourceRef: { protocol: 'file' as const, uri: filePath, mimeType: 'text/plain' },
-          childrenIds: [],
-          depth: 0,
-          artifacts: {},
-          build: { schemaVersion: 1, nodeVersion: 1, rawHash: 'mock', contentHash: 'mock', generators: { l1: { id: '', version: '' }, l2: { id: '', version: '' }, embedding: { id: '', version: '' } }, buildTimestamp: new Date().toISOString() },
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
+          node: {
+            id: 'hash123',
+            sourceRef: { protocol: 'file' as const, uri: filePath, mimeType: 'text/plain' },
+            childrenIds: [],
+            depth: 0,
+            artifacts: {},
+            build: { schemaVersion: 1, nodeVersion: 1, rawHash: 'mock', contentHash: 'mock', generators: { l1: { id: '', version: '' }, l2: { id: '', version: '' }, embedding: { id: '', version: '' } }, buildTimestamp: new Date().toISOString() },
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
         };
       },
     },
@@ -96,6 +98,7 @@ function makeDeps(configOverride?: { llm?: { defaultProvider: string; providers:
       list: async () => [],
       listMasked: async () => ({}),
     } as any,
+    cas: { getObjectPath: () => '/tmp/echo/objects/ab/cdef', read: async () => Buffer.from(''), exists: () => false, write: async () => '', delete: async () => {}, writeObject: async () => {}, readObject: async () => ({ node: {} as any, artifacts: { content: '', meta: {} as any } }) },
   };
 }
 

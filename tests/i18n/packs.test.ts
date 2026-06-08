@@ -81,8 +81,8 @@ describe('DefaultLanguagePackRegistry', () => {
 });
 
 describe('Pack search tuning', () => {
-  it('English has default threshold 0.75', () => {
-    expect(enPack.search.defaultThreshold).toBe(0.75);
+  it('English has default threshold 0.5', () => {
+    expect(enPack.search.defaultThreshold).toBe(0.5);
   });
 
   it('Russian has lower threshold 0.72', () => {

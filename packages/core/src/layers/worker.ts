@@ -93,6 +93,10 @@ export class DefaultQueueWorker implements QueueWorker {
       const msg = err instanceof Error ? err.message : String(err);
       this.opts.logger.error('job.fail', { jobId: job.id, type: job.type, error: msg });
       this.opts.registry.failJob(job.id, msg);
+      // Graceful retry delay for L3 to give embedding provider time to warm up
+      if (job.type === 'GENERATE_L3') {
+        await sleep(2000);
+      }
     } finally {
       this.currentJobId = null;
     }

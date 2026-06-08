@@ -29,6 +29,7 @@ export interface Registry {
   getSource(id: string): SourceRecord | null;
   getSourceByRawHash(rawHash: Hash): SourceRecord | null;
   getSourceByRootHash(rootHash: Hash): SourceRecord | null;
+  getSourcesByRootHash(rootHash: Hash): SourceRecord[];
   updateSource(id: string, updates: Partial<SourceRecord>): void;
   updateSourcePath(id: string, uri: string): void;
   deleteSource(id: string): void;
@@ -49,6 +50,7 @@ export interface Registry {
   releaseAllLeases(workerId: string): JobRecord[];
   getRunningJobs(workerId: string): JobRecord[];
   getPendingJobs(limit: number): JobRecord[];
+  getDeadJobs(limit: number): JobRecord[];
   getJobsBySource(nodeId: string): JobRecord[];
   getJob(jobId: string): JobRecord | null;
   getJobCounts(): { pending: number; running: number; completed: number; failed: number; dead: number };
@@ -179,6 +181,11 @@ export class SQLiteRegistry implements Registry {
       | Record<string, unknown>
       | undefined;
     return row ? rowToSource(row) : null;
+  }
+
+  getSourcesByRootHash(rootHash: Hash): SourceRecord[] {
+    const rows = this.db.prepare('SELECT * FROM sources WHERE root_hash = ?').all(rootHash) as Record<string, unknown>[];
+    return rows.map(rowToSource);
   }
 
   updateSource(id: string, updates: Partial<SourceRecord>): void {
@@ -356,6 +363,13 @@ export class SQLiteRegistry implements Registry {
   getPendingJobs(limit: number): JobRecord[] {
     const rows = this.db.prepare(
       `SELECT * FROM jobs WHERE status = 'PENDING' ORDER BY priority DESC, created_at ASC LIMIT ?`
+    ).all(limit) as Record<string, unknown>[];
+    return rows.map(rowToJob);
+  }
+
+  getDeadJobs(limit: number): JobRecord[] {
+    const rows = this.db.prepare(
+      `SELECT * FROM jobs WHERE status = 'DEAD' ORDER BY created_at ASC LIMIT ?`
     ).all(limit) as Record<string, unknown>[];
     return rows.map(rowToJob);
   }

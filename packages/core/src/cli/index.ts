@@ -137,8 +137,10 @@ export function createCLI(deps: CLICommandsDeps): Command {
     .command('init')
     .description('Initialize ECHO Core (interactive setup wizard)')
     .option('--non-interactive', 'Initialize using environment variables (no prompts)')
-    .action(async (options: { nonInteractive?: boolean }) => {
-      await commands.init({ nonInteractive: options.nonInteractive });
+    .option('--llm-model <model>', 'LLM model name (required with --non-interactive)')
+    .option('--embed-model <model>', 'Embedding model name (required with --non-interactive)')
+    .action(async (options: { nonInteractive?: boolean; llmModel?: string; embedModel?: string }) => {
+      await commands.init({ nonInteractive: options.nonInteractive, llmModel: options.llmModel, embedModel: options.embedModel });
     });
 
   program

@@ -23,6 +23,7 @@ export interface CircuitBreaker {
   getFailureCount(): number;
   recordSuccess(): void;
   recordFailure(): void;
+  reset(): void;
 }
 
 export class DefaultCircuitBreaker implements CircuitBreaker {
@@ -71,6 +72,13 @@ export class DefaultCircuitBreaker implements CircuitBreaker {
     } else if (this.state === 'closed' && this.failureCount >= this.config.failureThreshold) {
       this.state = 'open';
     }
+  }
+
+  reset(): void {
+    this.state = 'closed';
+    this.failureCount = 0;
+    this.successCount = 0;
+    this.lastFailureTime = 0;
   }
 
   async call<T>(fn: () => Promise<T>): Promise<T> {

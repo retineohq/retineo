@@ -12,14 +12,16 @@ function makeDeps(): CLICommandsDeps {
     ingestionService: {
       async ingestFile(filePath: string) {
         return {
-          id: 'hash123',
-          sourceRef: { protocol: 'file' as const, uri: filePath, mimeType: 'text/plain' },
-          childrenIds: [],
-          depth: 0,
-          artifacts: {},
-          build: { schemaVersion: 1, nodeVersion: 1, rawHash: 'mock', contentHash: 'mock', generators: { l1: { id: '', version: '' }, l2: { id: '', version: '' }, embedding: { id: '', version: '' } }, buildTimestamp: new Date().toISOString() },
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
+          node: {
+            id: 'hash123',
+            sourceRef: { protocol: 'file' as const, uri: filePath, mimeType: 'text/plain' },
+            childrenIds: [],
+            depth: 0,
+            artifacts: {},
+            build: { schemaVersion: 1, nodeVersion: 1, rawHash: 'mock', contentHash: 'mock', generators: { l1: { id: '', version: '' }, l2: { id: '', version: '' }, embedding: { id: '', version: '' } }, buildTimestamp: new Date().toISOString() },
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
         };
       },
     },
@@ -69,6 +71,8 @@ function makeDeps(): CLICommandsDeps {
       recoverOrphan: vi.fn(),
       getOrphan: () => null,
       getSourceByRootHash: () => null,
+      getSourceByRawHash: () => null,
+      getSourcesByRootHash: () => [],
     } as any,
     configManager: {
       load: async () => ({
@@ -87,6 +91,7 @@ function makeDeps(): CLICommandsDeps {
       enqueueL2: () => {},
       enqueueL3: () => {},
     },
+    cas: { getObjectPath: () => '/tmp/echo/objects/ab/cdef', read: async () => Buffer.from(''), exists: () => false, write: async () => '', delete: async () => {}, writeObject: async () => {}, readObject: async () => ({ node: {} as any, artifacts: { content: '', meta: {} as any } }) },
   };
 }
 
@@ -119,12 +124,42 @@ describe('CLICommands', () => {
     log.mockRestore();
   });
 
-  it('recover calls registry.recoverOrphan', async () => {
+  it('recover prints not found when hash missing', async () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     const deps = makeDeps();
     const cmds = new CLICommands(deps);
     await cmds.recover('deadbeef');
-    expect(deps.registry.recoverOrphan).toHaveBeenCalledWith('deadbeef');
+    expect(log).toHaveBeenCalledWith('Recover failed: deadbeef — not found in registry');
     log.mockRestore();
+  });
+
+  it('recover prints already valid when file exists and hash matches', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const fs = await import('fs');
+    const crypto = await import('crypto');
+    const tmpFile = '/tmp/echo-recover-test-' + Date.now() + '.md';
+    const content = 'hello world';
+    fs.writeFileSync(tmpFile, content);
+    const hash = crypto.createHash('sha256').update(content).digest('hex');
+
+    const deps = makeDeps();
+    deps.registry.getSourcesByRootHash = () => [{
+      id: 'src1',
+      protocol: 'file',
+      uri: tmpFile,
+      mimeType: 'text/markdown',
+      adapterId: 'markdown',
+      rawHash: hash,
+      rootHash: hash,
+      lastSeenAt: new Date().toISOString(),
+    }];
+    deps.cas.getObjectPath = () => '/tmp/echo/objects/ab/cdef';
+
+    const cmds = new CLICommands(deps);
+    await cmds.recover(hash);
+    expect(log).toHaveBeenCalledWith(`Already valid: ${hash} → ${tmpFile}`);
+
+    log.mockRestore();
+    fs.unlinkSync(tmpFile);
   });
 });

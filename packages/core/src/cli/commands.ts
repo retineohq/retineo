@@ -3,6 +3,7 @@
  * Phase 8: Interactive init wizard, worker/bridge/daemon lifecycle, --watch.
  */
 
+import type { CASStorage } from '../storage/cas.js';
 import type { IngestionService } from '../adapters/ingestion.js';
 import type { RetrievalService } from '../search/retrieval-service.js';
 import type { QueryAnalyzer } from '../search/query-analyzer.js';
@@ -56,6 +57,8 @@ export interface SearchCLIOptions {
 
 export interface InitCLIOptions {
   nonInteractive?: boolean;
+  llmModel?: string;
+  embedModel?: string;
 }
 
 export interface CLICommandsDeps {
@@ -67,6 +70,7 @@ export interface CLICommandsDeps {
   configManager: ConfigManager;
   pipeline: CompilationPipeline;
   secretsManager: SecretsManager;
+  cas: CASStorage;
   version: string;
 }
 
@@ -78,13 +82,15 @@ export class CLICommands {
   }
 
   async ingest(filePath: string, options?: IngestCLIOptions): Promise<void> {
-    const node = await this.deps.ingestionService.ingestFile(filePath);
-    const jobs = this.deps.registry.getJobsBySource(node.id);
-    const jobIds = jobs.map((j) => j.id);
-    console.log(formatIngestResult(node.sourceRef.uri, node.id, jobIds));
+    const result = await this.deps.ingestionService.ingestFile(filePath);
+    if (!result.skipped) {
+      const jobs = this.deps.registry.getJobsBySource(result.node.id);
+      const jobIds = jobs.map((j) => j.id);
+      console.log(formatIngestResult(result.node.sourceRef.uri, result.node.id, jobIds));
+    }
 
     if (options?.watch) {
-      await this.watchJobs(node.id, { timeoutSec: options.timeout ?? 1800 });
+      await this.watchJobs(result.node.id, { timeoutSec: options.timeout ?? 1800 });
     }
   }
 
@@ -113,10 +119,12 @@ export class CLICommands {
     const allJobIds: string[] = [];
     for (const fp of expanded) {
       try {
-        const node = await this.deps.ingestionService.ingestFile(fp);
-        const jobs = this.deps.registry.getJobsBySource(node.id);
-        allJobIds.push(...jobs.map((j) => j.id));
-        console.log(`  ✓ ${fp} → ${node.id.slice(0, 12)}...`);
+        const res = await this.deps.ingestionService.ingestFile(fp);
+        if (!res.skipped) {
+          const jobs = this.deps.registry.getJobsBySource(res.node.id);
+          allJobIds.push(...jobs.map((j) => j.id));
+        }
+        console.log(`  ✓ ${fp} → ${res.node.id.slice(0, 12)}...`);
       } catch (err) {
         console.error(`  ✗ ${fp}: ${err instanceof Error ? err.message : String(err)}`);
       }
@@ -206,17 +214,56 @@ export class CLICommands {
     }
 
     if (filePath) {
-      const node = await this.deps.ingestionService.ingestFile(filePath);
-      console.log(`Compiled: ${filePath} → ${node.id}`);
+      const res = await this.deps.ingestionService.ingestFile(filePath);
+      if (res.skipped) {
+        console.log(`Skipped: already ingested (hash: ${res.node.id})`);
+      } else {
+        console.log(`Compiled: ${filePath} → ${res.node.id}`);
+      }
       if (options?.watch) {
-        await this.watchJobs(node.id, { timeoutSec: options.timeout ?? 1800 });
+        await this.watchJobs(res.node.id, { timeoutSec: options.timeout ?? 1800 });
       }
     } else {
       const pending = this.deps.registry.getPendingJobs(100);
       console.log(`Compiling ${pending.length} pending jobs...`);
+
+      // Recover DEAD L3 jobs (e.g. after Ollama outage)
+      const dead = this.deps.registry.getDeadJobs(100);
+      const deadL3 = dead.filter((j) => j.type === 'GENERATE_L3');
+      for (const job of deadL3) {
+        const payload = JSON.parse(job.payload) as { nodeId: string };
+        this.deps.pipeline.enqueueL3(payload.nodeId);
+      }
+      if (deadL3.length > 0) {
+        console.log(`Recovered ${deadL3.length} dead L3 job(s)`);
+      }
+
+      // Find nodes with L2 complete but no L3 job at all
+      const { existsSync } = await import('fs');
+      const pathMod = await import('path');
+      const sources = this.deps.registry.listSources();
+      let missingL3 = 0;
+      for (const src of sources) {
+        const nodeHash = src.rootHash;
+        if (!nodeHash) continue;
+        const jobs = this.deps.registry.getJobsBySource(nodeHash);
+        const hasL3Job = jobs.some((j) => j.type === 'GENERATE_L3');
+        if (!hasL3Job) {
+          const objPath = this.deps.cas.getObjectPath(nodeHash);
+          if (existsSync(pathMod.join(objPath, 'L2.json'))) {
+            this.deps.pipeline.enqueueL3(nodeHash);
+            missingL3++;
+          }
+        }
+      }
+      if (missingL3 > 0) {
+        console.log(`Queued ${missingL3} missing L3 job(s)`);
+      }
+
       if (options?.watch) {
-        // Watch all pending jobs
-        const startIds = new Set(pending.map((j) => j.id));
+        // Watch all pending jobs (including newly queued)
+        const allPending = this.deps.registry.getPendingJobs(100);
+        const startIds = new Set(allPending.map((j) => j.id));
         await this.watchAnyJobCompletion(startIds, { timeoutSec: options.timeout ?? 1800 });
       }
     }
@@ -252,13 +299,65 @@ export class CLICommands {
   }
 
   async recover(hash: string): Promise<void> {
-    this.deps.registry.recoverOrphan(hash);
-    const source = this.deps.registry.getSourceByRootHash(hash);
-    if (source) {
-      console.log(formatRecoverResult(hash, source.uri));
-    } else {
-      console.log(formatRecoverResult(hash, 'source path not found in registry'));
+    const { readFileSync, writeFileSync, mkdirSync, existsSync } = await import('fs');
+    const pathMod = await import('path');
+    const crypto = await import('crypto');
+
+    // 1. Find source(s) by hash (try rootHash first, then rawHash)
+    let sources = this.deps.registry.getSourcesByRootHash(hash);
+    if (sources.length === 0) {
+      const byRaw = this.deps.registry.getSourceByRawHash(hash);
+      if (byRaw) {
+        sources = [byRaw];
+      }
     }
+    if (sources.length === 0) {
+      console.log(`Recover failed: ${hash} — not found in registry`);
+      return;
+    }
+    const sourceRecord = sources[0]!;
+    const sourcePath = sourceRecord.uri;
+    const contentHash = sourceRecord.rootHash || sourceRecord.rawHash;
+
+    // 2. Check if file exists at sourcePath and hash matches
+    if (existsSync(sourcePath)) {
+      const fileBuf = readFileSync(sourcePath);
+      const fileHash = crypto.createHash('sha256').update(fileBuf).digest('hex');
+      if (fileHash === sourceRecord.rawHash || fileHash === contentHash) {
+        console.log(`Already valid: ${hash} → ${sourcePath}`);
+        this.deps.registry.recoverOrphan(contentHash);
+        return;
+      }
+    }
+
+    // 3. Try to restore from CAS (content.md inside object dir)
+    const casObjPath = this.deps.cas.getObjectPath(contentHash);
+    const contentPath = pathMod.join(casObjPath, 'content.md');
+    if (existsSync(contentPath)) {
+      mkdirSync(pathMod.dirname(sourcePath), { recursive: true });
+      writeFileSync(sourcePath, readFileSync(contentPath));
+      console.log(`Recovered: ${hash} → ${sourcePath} (file restored from CAS)`);
+      this.deps.registry.recoverOrphan(contentHash);
+      return;
+    }
+
+    // 4. File exists at different path with same hash?
+    for (const src of sources) {
+      if (src.uri !== sourcePath && existsSync(src.uri)) {
+        const fileBuf = readFileSync(src.uri);
+        const fileHash = crypto.createHash('sha256').update(fileBuf).digest('hex');
+        if (fileHash === src.rawHash || fileHash === src.rootHash) {
+          // Update registry to point to existing file
+          this.deps.registry.updateSourcePath(sourceRecord.id, src.uri);
+          console.log(`Recovered: ${hash} → ${src.uri} (path updated to existing file)`);
+          this.deps.registry.recoverOrphan(contentHash);
+          return;
+        }
+      }
+    }
+
+    // 5. CAS content not found
+    console.log(`Recover failed: ${hash} — content not found in CAS storage`);
   }
 
   // --- Key management ---
@@ -297,7 +396,7 @@ export class CLICommands {
 
   async init(options?: InitCLIOptions): Promise<void> {
     if (options?.nonInteractive) {
-      await this.initNonInteractive();
+      await this.initNonInteractive(options);
       return;
     }
     await this.initInteractive();
@@ -504,12 +603,20 @@ export class CLICommands {
     process.exit(0);
   }
 
-  private async initNonInteractive(): Promise<void> {
+  private async initNonInteractive(options?: InitCLIOptions): Promise<void> {
     const { FileConfigManager } = await import('../storage/config.js');
 
     const dataDir = process.env.ECHO_DATA_DIR ?? path.join(os.homedir(), '.echo');
-    const llmModel = process.env.ECHO_LLM_MODEL ?? 'rnj-1:8b-cloud';
-    const embedModel = process.env.ECHO_EMBED_MODEL ?? 'nomic-embed-text';
+    const llmModel = options?.llmModel ?? process.env.ECHO_LLM_MODEL;
+    const embedModel = options?.embedModel ?? process.env.ECHO_EMBED_MODEL;
+
+    if (!llmModel || !embedModel) {
+      console.error('Error: --non-interactive requires --llm-model and --embed-model.');
+      console.error('Usage: echoc init --non-interactive --llm-model <model> --embed-model <model>');
+      process.exitCode = 1;
+      return;
+    }
+
     const port = parseInt(process.env.ECHO_BRIDGE_PORT ?? '37891', 10);
     const ollamaBaseUrl = process.env.OLLAMA_BASE_URL ?? 'http://localhost:11434';
 
@@ -1000,7 +1107,7 @@ async function ensureDataDirsForDataDir(dataDir: string): Promise<void> {
 const DEFAULT_SEARCH: EchoConfig['search'] = {
   defaultLanguage: 'en',
   languageDetection: { provider: 'franc', fallback: 'heuristic', confidenceThreshold: 0.7 },
-  semantic: { topK: 100, threshold: 0.75, hybridWeight: 0.7 },
+  semantic: { topK: 100, threshold: 0.5, hybridWeight: 0.7 },
   rerank: { topK: 10, weights: { concept: 1.0, claim: 0.5, summary: 0.8, language: 0.3 } },
   cascade: { budgets: { vague: 500, section: 800, precision: 1500 } },
   citations: { format: 'markdown', includeLineNumbers: true, includeTimestamps: true },

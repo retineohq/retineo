@@ -55,7 +55,7 @@ Rules:
 - Prioritize exact matches over summaries`,
   },
   search: {
-    defaultThreshold: 0.75,
+    defaultThreshold: 0.5,
     keywordBoost: 1.0,
     semanticBoost: 1.0,
   },

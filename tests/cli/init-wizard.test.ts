@@ -39,6 +39,7 @@ function makeDeps() {
     } as any,
     pipeline: { processJob: async () => {}, enqueueL1: () => {}, enqueueL2: () => {}, enqueueL3: () => {} },
     secretsManager: { set: async () => {}, get: async () => undefined, delete: async () => {}, list: async () => [], listMasked: async () => ({}) },
+    cas: { getObjectPath: () => '/tmp/echo/objects/ab/cdef', read: async () => Buffer.from(''), exists: () => false, write: async () => '', delete: async () => {}, writeObject: async () => {}, readObject: async () => ({ node: {} as any, artifacts: { content: '', meta: {} as any } }) },
   };
 }
 
@@ -59,12 +60,10 @@ describe('init wizard — non-interactive', () => {
 
   it('writes Ollama-first config and initializes data dir', async () => {
     process.env.ECHO_DATA_DIR = testDir;
-    process.env.ECHO_LLM_MODEL = 'rnj-1:8b-cloud';
-    process.env.ECHO_EMBED_MODEL = 'nomic-embed-text';
 
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     const cmds = new CLICommands(makeDeps());
-    await cmds.init({ nonInteractive: true });
+    await cmds.init({ nonInteractive: true, llmModel: 'gemma4:31b-cloud', embedModel: 'nomic-embed-text-v2-moe:latest' });
 
     expect(existsSync(path.join(testDir, 'config.yaml'))).toBe(true);
     expect(existsSync(path.join(testDir, 'echo.sqlite'))).toBe(true);
@@ -78,16 +77,31 @@ describe('init wizard — non-interactive', () => {
     expect(llm.defaultProvider).toBe('ollama');
     expect(llm.providers.length).toBeGreaterThan(0);
     expect(llm.providers[0].type).toBe('ollama');
-    expect(llm.providers[0].model).toBe('rnj-1:8b-cloud');
+    expect(llm.providers[0].model).toBe('gemma4:31b-cloud');
 
     expect(embedding.defaultProvider).toBe('ollama-embed');
-    expect(embedding.providers[0].model).toBe('nomic-embed-text');
+    expect(embedding.providers[0].model).toBe('nomic-embed-text-v2-moe:latest');
 
     log.mockRestore();
   });
 
-  it('falls back to defaults when env vars are not set', async () => {
+  it('requires --llm-model and --embed-model in non-interactive mode', async () => {
     process.env.ECHO_DATA_DIR = testDir;
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const cmds = new CLICommands(makeDeps());
+    await cmds.init({ nonInteractive: true });
+
+    expect(errorLog).toHaveBeenCalledWith('Error: --non-interactive requires --llm-model and --embed-model.');
+    expect(process.exitCode).toBe(1);
+    errorLog.mockRestore();
+    process.exitCode = 0;
+  });
+
+  it('falls back to env vars when flags are not set', async () => {
+    process.env.ECHO_DATA_DIR = testDir;
+    process.env.ECHO_LLM_MODEL = 'gemma4:31b-cloud';
+    process.env.ECHO_EMBED_MODEL = 'nomic-embed-text-v2-moe:latest';
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
 
     const cmds = new CLICommands(makeDeps());
@@ -97,8 +111,8 @@ describe('init wizard — non-interactive', () => {
     const llm = cfg.llm as { providers: Array<Record<string, unknown>> };
     const embedding = cfg.embedding as { providers: Array<Record<string, unknown>> };
 
-    expect(llm.providers[0].model).toBe('rnj-1:8b-cloud');
-    expect(embedding.providers[0].model).toBe('nomic-embed-text');
+    expect(llm.providers[0].model).toBe('gemma4:31b-cloud');
+    expect(embedding.providers[0].model).toBe('nomic-embed-text-v2-moe:latest');
     log.mockRestore();
   });
 
@@ -107,7 +121,7 @@ describe('init wizard — non-interactive', () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
 
     const cmds = new CLICommands(makeDeps());
-    await cmds.init({ nonInteractive: true });
+    await cmds.init({ nonInteractive: true, llmModel: 'gemma4:31b-cloud', embedModel: 'nomic-embed-text-v2-moe:latest' });
 
     const cfg = yaml.load(readFileSync(path.join(testDir, 'config.yaml'), 'utf-8')) as Record<string, unknown>;
     const bridge = cfg.bridge as { host: string; port: number };
@@ -123,10 +137,23 @@ describe('init wizard — non-interactive', () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
 
     const cmds = new CLICommands(makeDeps());
-    await cmds.init({ nonInteractive: true });
+    await cmds.init({ nonInteractive: true, llmModel: 'gemma4:31b-cloud', embedModel: 'nomic-embed-text-v2-moe:latest' });
 
     const cfg = yaml.load(readFileSync(path.join(testDir, 'config.yaml'), 'utf-8')) as Record<string, unknown>;
     expect((cfg.bridge as { port: number }).port).toBe(40000);
+    log.mockRestore();
+  });
+
+  it('sets search.semantic.threshold to 0.5', async () => {
+    process.env.ECHO_DATA_DIR = testDir;
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    const cmds = new CLICommands(makeDeps());
+    await cmds.init({ nonInteractive: true, llmModel: 'gemma4:31b-cloud', embedModel: 'nomic-embed-text-v2-moe:latest' });
+
+    const cfg = yaml.load(readFileSync(path.join(testDir, 'config.yaml'), 'utf-8')) as Record<string, unknown>;
+    const search = cfg.search as { semantic: { threshold: number } };
+    expect(search.semantic.threshold).toBe(0.5);
     log.mockRestore();
   });
 });
@@ -135,7 +162,7 @@ describe('Ollama probe', () => {
   it('returns null when Ollama is not running', async () => {
     // The internal probe fetches http://localhost:11434/api/tags
     // If Ollama isn't running in the test env, the probe returns null.
-    // This test simply asserts the non-interactive flow still completes.
+    // This test simply asserts the non-interactive flow still completes with explicit flags.
     const testDir = path.join(os.tmpdir(), 'echo-no-ollama-' + Date.now());
     if (existsSync(testDir)) rmSync(testDir, { recursive: true });
 
@@ -143,7 +170,7 @@ describe('Ollama probe', () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
 
     const cmds = new CLICommands(makeDeps());
-    await cmds.init({ nonInteractive: true });
+    await cmds.init({ nonInteractive: true, llmModel: 'gemma4:31b-cloud', embedModel: 'nomic-embed-text-v2-moe:latest' });
 
     expect(existsSync(path.join(testDir, 'config.yaml'))).toBe(true);
     log.mockRestore();

@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.2] - 2026-06-08
+
+### Fixed
+- `init --non-interactive` now requires explicit `--llm-model` and `--embed-model` flags instead of auto-selecting broken defaults
+- Ingest deduplication: duplicate ingestion now returns early and does not queue any jobs
+- Default `search.semantic.threshold` is now consistently `0.5` across all config paths (was `0.75` in `enPack`)
+- `recover` now accepts both `rootHash` and `rawHash`, uses correct CAS object path, and validates file hash against either hash
+
 ## [0.1.1] - 2026-06-08
 
 ### Fixed

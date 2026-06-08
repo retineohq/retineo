@@ -19,9 +19,14 @@ import type { AdapterManager } from './manager.js';
 import type { Logger } from '../utils/logger.js';
 import { getGlobalLogger } from '../utils/logger.js';
 
+export interface IngestFileResult {
+  node: ContextNode;
+  skipped?: boolean;
+}
+
 export interface IngestionService {
-  ingestFile(filePath: string): Promise<ContextNode>;
-  ingestBatch(filePaths: string[]): Promise<ContextNode[]>;
+  ingestFile(filePath: string): Promise<IngestFileResult>;
+  ingestBatch(filePaths: string[]): Promise<IngestFileResult[]>;
 }
 
 export class DefaultIngestionService implements IngestionService {
@@ -48,7 +53,7 @@ export class DefaultIngestionService implements IngestionService {
     this.logger = logger ?? getGlobalLogger().child({ layer: 'ingestion' });
   }
 
-  async ingestFile(filePath: string): Promise<ContextNode> {
+  async ingestFile(filePath: string): Promise<IngestFileResult> {
     const absolutePath = path.resolve(filePath);
     this.logger.info('ingest.start', { sourcePath: absolutePath });
     const rawBuffer = await readFile(absolutePath);
@@ -77,18 +82,21 @@ export class DefaultIngestionService implements IngestionService {
         const rootHash = existing.rootHash || contentHash;
         if (this.cas.exists(rootHash)) {
           const obj = await this.cas.readObject(rootHash);
-          return obj.node;
+          return { node: obj.node, skipped: true };
         }
         // CAS missing but source exists — return minimal node
         return {
-          id: rootHash,
-          sourceRef: { protocol: 'file', uri: absolutePath, mimeType: existing.mimeType },
-          childrenIds: [],
-          depth: 0,
-          artifacts: {},
-          build: { schemaVersion: 1, nodeVersion: 1, rawHash, contentHash, generators: { l1: { id: '', version: '' }, l2: { id: '', version: '' }, embedding: { id: '', version: '' } }, buildTimestamp: existing.lastSeenAt },
-          createdAt: existing.lastSeenAt,
-          updatedAt: existing.lastSeenAt,
+          node: {
+            id: rootHash,
+            sourceRef: { protocol: 'file', uri: absolutePath, mimeType: existing.mimeType },
+            childrenIds: [],
+            depth: 0,
+            artifacts: {},
+            build: { schemaVersion: 1, nodeVersion: 1, rawHash, contentHash, generators: { l1: { id: '', version: '' }, l2: { id: '', version: '' }, embedding: { id: '', version: '' } }, buildTimestamp: existing.lastSeenAt },
+            createdAt: existing.lastSeenAt,
+            updatedAt: existing.lastSeenAt,
+          },
+          skipped: true,
         };
       } else {
         // Same content, different path — update sourcePath
@@ -98,17 +106,20 @@ export class DefaultIngestionService implements IngestionService {
         const rootHash = existing.rootHash || contentHash;
         if (this.cas.exists(rootHash)) {
           const obj = await this.cas.readObject(rootHash);
-          return obj.node;
+          return { node: obj.node, skipped: true };
         }
         return {
-          id: rootHash,
-          sourceRef: { protocol: 'file', uri: absolutePath, mimeType: existing.mimeType },
-          childrenIds: [],
-          depth: 0,
-          artifacts: {},
-          build: { schemaVersion: 1, nodeVersion: 1, rawHash, contentHash, generators: { l1: { id: '', version: '' }, l2: { id: '', version: '' }, embedding: { id: '', version: '' } }, buildTimestamp: existing.lastSeenAt },
-          createdAt: existing.lastSeenAt,
-          updatedAt: existing.lastSeenAt,
+          node: {
+            id: rootHash,
+            sourceRef: { protocol: 'file', uri: absolutePath, mimeType: existing.mimeType },
+            childrenIds: [],
+            depth: 0,
+            artifacts: {},
+            build: { schemaVersion: 1, nodeVersion: 1, rawHash, contentHash, generators: { l1: { id: '', version: '' }, l2: { id: '', version: '' }, embedding: { id: '', version: '' } }, buildTimestamp: existing.lastSeenAt },
+            createdAt: existing.lastSeenAt,
+            updatedAt: existing.lastSeenAt,
+          },
+          skipped: true,
         };
       }
     }
@@ -219,11 +230,11 @@ export class DefaultIngestionService implements IngestionService {
       this.registry.insertJob(childJob);
     }
 
-    return rootNode;
+    return { node: rootNode };
   }
 
-  async ingestBatch(filePaths: string[]): Promise<ContextNode[]> {
-    const results: ContextNode[] = [];
+  async ingestBatch(filePaths: string[]): Promise<IngestFileResult[]> {
+    const results: IngestFileResult[] = [];
     for (const fp of filePaths) {
       results.push(await this.ingestFile(fp));
     }

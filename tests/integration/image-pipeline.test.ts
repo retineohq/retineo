@@ -117,7 +117,8 @@ describe('Image Pipeline', () => {
     const filePath = path.join(tmpDir, 'blank.png');
     writeFileSync(filePath, createMinimalPNG());
 
-    const node = await service.ingestFile(filePath);
+    const result = await service.ingestFile(filePath);
+    const node = result.node;
     expect(node.id).toMatch(/^[a-f0-9]{64}$/);
     expect(node.depth).toBe(0);
     expect(node.childrenIds.length).toBe(0); // atomic
@@ -136,7 +137,8 @@ describe('Image Pipeline', () => {
     const filePath = path.join(tmpDir, 'blank.png');
     writeFileSync(filePath, createMinimalPNG());
 
-    const node = await service.ingestFile(filePath);
+    const result = await service.ingestFile(filePath);
+    const node = result.node;
 
     // L1
     const l1Job = registry.acquireLease('worker-1', 60000)!;

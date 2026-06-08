@@ -47,12 +47,12 @@ export function createHandlers(deps: MCPHandlersDeps) {
     },
 
     async echo_ingest(args: { sourcePath: string; mimeType?: string }) {
-      const node = await deps.ingestionService.ingestFile(args.sourcePath);
+      const result = await deps.ingestionService.ingestFile(args.sourcePath);
       return {
         content: [
           {
             type: 'text',
-            text: JSON.stringify({ sourceId: node.sourceRef.uri, rootHash: node.id, jobs: [] }, null, 2),
+            text: JSON.stringify({ sourceId: result.node.sourceRef.uri, rootHash: result.node.id, jobs: [], skipped: result.skipped ?? false }, null, 2),
           },
         ],
       };

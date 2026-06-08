@@ -115,14 +115,14 @@ export function createHandlers(deps: BridgeHandlersDeps) {
         return errorReply(reply, 400, 'INVALID_REQUEST', 'sourcePath is required');
       }
       try {
-        const node = await deps.ingestionService.ingestFile(sourcePath);
-        const sourceId = node.sourceRef.uri; // simplistic mapping
+        const result = await deps.ingestionService.ingestFile(sourcePath);
+        const sourceId = result.node.sourceRef.uri; // simplistic mapping
         const jobs: string[] = [];
         // Jobs were queued inside ingestion service; we don't have IDs here in MVP
         return reply.send({
           sourceId,
-          rootHash: node.id,
-          status: 'queued',
+          rootHash: result.node.id,
+          status: result.skipped ? 'skipped' : 'queued',
           jobs,
         });
       } catch (err) {

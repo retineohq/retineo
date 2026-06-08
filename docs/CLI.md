@@ -23,20 +23,22 @@ The wizard detects Ollama (or lets you enter a cloud API key), picks a chat mode
 For CI / scripted installs, use:
 
 ```bash
-echoc init --non-interactive
+echoc init --non-interactive --llm-model gemma4:31b-cloud --embed-model nomic-embed-text-v2-moe:latest
 # Honours: ECHO_DATA_DIR, ECHO_LLM_MODEL, ECHO_EMBED_MODEL,
 # ECHO_BRIDGE_PORT, OLLAMA_BASE_URL
 ```
 
+> **Note:** `--non-interactive` requires explicit `--llm-model` and `--embed-model` flags. If omitted, it prints an error and exits with code 1.
+
 ## Commands
 
-### `echoc init [--non-interactive]`
+### `echoc init [--non-interactive --llm-model <m> --embed-model <m>]`
 
-Run the interactive setup wizard (or non-interactive with `--non-interactive`).
+Run the interactive setup wizard (or non-interactive with explicit model flags).
 
 ```bash
 echoc init                          # interactive wizard
-echoc init --non-interactive        # use env vars, no prompts
+echoc init --non-interactive --llm-model gemma4:31b-cloud --embed-model nomic-embed-text-v2-moe:latest
 ```
 
 ### `echoc ingest <filePath> [--watch] [--timeout <sec>]`
@@ -49,7 +51,10 @@ echoc ingest ./doc.pdf --adapter pdf
 echoc ingest ~/test.md --watch --timeout 600
 ```
 
-**Idempotency:** `ingest` is idempotent. If the same file (same content hash) is ingested again from the same path, the second run prints `Skipped: already ingested` and does not create duplicate sources or jobs. If the same content is ingested from a different path, the source path is updated and no new jobs are queued.
+**Idempotency:** `ingest` is idempotent.
+- Same content hash + same path → prints `Skipped: already ingested (hash: ...)` and does **not** queue any jobs.
+- Same content hash + different path → updates the source path in the registry, prints `Updated source path`, and does **not** queue any jobs.
+- New content hash → full ingest + `GENERATE_L1` jobs queued as usual.
 
 When `watch` is enabled, `ingest` checks if a background worker is running; if not, it starts an inline worker in the same process. It polls the jobs table every 5 seconds and exits with code `1` if any job fails or the timeout (default 1800s) elapses.
 
@@ -81,6 +86,10 @@ echoc compile ./notes.md --provider ollama   # override config provider for this
 echoc compile ./notes.md --provider mock     # explicitly use mock for testing
 ```
 
+When run without a file path, `compile` also:
+- **Recovers dead L3 jobs** — scans for `GENERATE_L3` jobs in `DEAD` status and re-queues them.
+- **Queues missing L3 jobs** — finds nodes that have completed L2 but have no L3 job (pending, running, completed, or dead) and enqueues `GENERATE_L3`.
+
 The `--provider` flag overrides the configured `llm.defaultProvider` for this compilation only. If the provider id is not found in `config.yaml`, the command exits with an error listing available providers.
 
 ### `echoc config set|get|list`
@@ -103,13 +112,18 @@ echoc jobs
 
 ### `echoc recover <hash>`
 
-Recover an orphaned node. The original source path is looked up from the SQLite registry.
+Recover a file from CAS storage back to its original source path, or update the registry to point to an existing copy. Accepts either the content hash (`rootHash`) or the raw file hash (`rawHash`).
 
 ```bash
 echoc recover deadbeef...
 ```
 
-If the source path is found in the registry, the output shows `Recovered: <hash> → <path>`. If the source path is not found, it shows `Recovered: <hash> → source path not found in registry`.
+**Behavior:**
+- Looks up the source by `rootHash` first, then falls back to `rawHash`.
+- If the file already exists at the registered path and its SHA-256 matches → prints `Already valid: <hash> → <path>`.
+- If the file is missing but CAS content exists → restores `content.md` from the object store to the source path (creating parent directories if needed) and prints `Recovered: <hash> → <path> (file restored from CAS)`.
+- If the file exists at a different registered path with the same hash → updates the registry `sourcePath` and prints `Recovered: <hash> → <path> (path updated to existing file)`.
+- If CAS content is missing → prints `Recover failed: <hash> — content not found in CAS storage`.
 
 ### `echoc key set/get/delete/list`
 

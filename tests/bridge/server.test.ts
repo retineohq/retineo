@@ -46,14 +46,16 @@ function makeMockDeps(): BridgeHandlersDeps {
     ingestionService: {
       async ingestFile(filePath: string) {
         return {
-          id: 'mock-hash',
-          sourceRef: { protocol: 'file' as const, uri: filePath, mimeType: 'text/plain' },
-          childrenIds: [],
-          depth: 0,
-          artifacts: {},
-          build: { schemaVersion: 1, nodeVersion: 1, rawHash: 'mock', contentHash: 'mock', generators: { l1: { id: '', version: '' }, l2: { id: '', version: '' }, embedding: { id: '', version: '' } }, buildTimestamp: new Date().toISOString() },
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
+          node: {
+            id: 'mock-hash',
+            sourceRef: { protocol: 'file' as const, uri: filePath, mimeType: 'text/plain' },
+            childrenIds: [],
+            depth: 0,
+            artifacts: {},
+            build: { schemaVersion: 1, nodeVersion: 1, rawHash: 'mock', contentHash: 'mock', generators: { l1: { id: '', version: '' }, l2: { id: '', version: '' }, embedding: { id: '', version: '' } }, buildTimestamp: new Date().toISOString() },
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
         };
       },
     },

@@ -52,7 +52,7 @@ function makeDeps(opts: { jobsAfterDelay?: FakeJob[] } = {}) {
       version: '0.1.0',
       ingestionService: {
         async ingestFile() {
-          return { id: 'node-1', sourceRef: { uri: '/tmp/test.txt' } } as any;
+          return { node: { id: 'node-1', sourceRef: { uri: '/tmp/test.txt' } } } as any;
         },
       },
       retrievalService: { async search() { return {} as any; } },
@@ -62,6 +62,7 @@ function makeDeps(opts: { jobsAfterDelay?: FakeJob[] } = {}) {
       configManager: { load: async () => ({ dataDir: '' }), save: async () => {} } as any,
       pipeline: { processJob: async () => {}, enqueueL1: () => {}, enqueueL2: () => {}, enqueueL3: () => {} },
       secretsManager: { set: async () => {}, get: async () => undefined, delete: async () => {}, list: async () => [], listMasked: async () => ({}) },
+      cas: { getObjectPath: () => '/tmp/echo/objects/ab/cdef', read: async () => Buffer.from(''), exists: () => false, write: async () => '', delete: async () => {}, writeObject: async () => {}, readObject: async () => ({ node: {} as any, artifacts: { content: '', meta: {} as any } }) },
     } as any,
     pollCount: () => pollCount,
   };

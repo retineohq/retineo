@@ -157,27 +157,66 @@ Exit code is `1` if any **critical** dependency is missing. Currently only Node.
 | L2 shows `"Mock summary for prompt hash..."` | `compile --watch` used inline worker without loading real providers from config | Verify `echoc worker status` shows running; or run `echoc daemon start` first; or re-run `echoc init` to ensure config has real provider |
 | `LLM provider not configured` error | No providers loaded from config | Run `echoc init` to create `~/.echo/config.yaml` with Ollama or cloud provider |
 | `Provider 'xxx' not found` error | `--provider` flag specifies id not in config | Check `echoc config get llm.providers` for available ids |
+| `--non-interactive requires --llm-model and --embed-model` | Missing required flags | Pass both flags: `echoc init --non-interactive --llm-model <model> --embed-model <model>` |
+| `Ingest shows duplicate jobs` | Running an older version | Upgrade to v0.1.2+ where duplicate ingestion is fully skipped |
 
 ---
 
 ## Duplicate ingestion
 
-**Symptom:** Running `echoc ingest same-file.md` twice creates duplicate rows in the `sources` table.
+**Symptom:** Running `echoc ingest same-file.md` twice creates duplicate rows in the `sources` table, or prints `Job ... queued for L1 generation` after `Skipped: already ingested`.
 
-**Fix:** This is resolved in v0.1.1. Ingestion is now idempotent:
-- Same content hash + same path → skipped with `Skipped: already ingested`
+**Fix:** This is resolved in v0.1.2. Ingestion is now fully idempotent:
+- Same content hash + same path → skipped with `Skipped: already ingested (hash: ...)` — **no jobs queued**
 - Same content hash + different path → source path updated, no new jobs queued
 - New content hash → full ingest + jobs queued as before
 
-If you see duplicates from older versions, run `echoc doctor` to verify your install version.
+If you see duplicates or extra job lines from older versions, run `echoc doctor` to verify your install version.
 
 ---
 
-## Recovering orphaned nodes
+## L3 jobs stuck in DEAD status
 
-**Symptom:** `echoc recover <hash>` shows `unknown` or cannot find the original file path.
+**Symptom:** After `echoc ingest`, L3 embedding jobs fail with `Ollama embed model not responding — check model settings and ensure Ollama is running`, retry 3 times, then become `DEAD`. `echoc status` shows `0 vectors` and the index is empty.
 
-**Fix:** The `recover` command now queries the SQLite `sources` table by content hash to retrieve the original `sourcePath`. Ensure your registry database is intact at `~/.echo/echo.sqlite`. If the source was never registered (e.g., manual CAS insertion), `recover` will report `source path not found in registry`.
+**Cause:** When Ollama is not ready (model not loaded in memory), the embedding request fails. The circuit breaker opens, retries happen instantly, and the job exhausts its attempts.
+
+**Fix:**
+1. Ensure Ollama is running and the embedding model is available:
+   ```bash
+   ollama list
+   ollama pull nomic-embed-text
+   ```
+2. Restart the worker to reset the circuit breaker:
+   ```bash
+   echoc worker stop
+   echoc worker start
+   ```
+3. Run `echoc compile` to re-queue dead L3 jobs and find any missing L3 work:
+   ```bash
+   echoc compile
+   ```
+4. If you started via daemon, restart the daemon instead:
+   ```bash
+   echoc daemon stop
+   echoc daemon start
+   ```
+
+Starting in v0.1.1, the worker automatically resets all circuit breakers on startup, and `compile` recovers both dead L3 jobs and nodes that are missing L3 entirely.
+
+---
+
+## Recovering files from CAS
+
+**Symptom:** `echoc recover <hash>` prints success but the file does not exist at the reported path, or you deleted a source file accidentally.
+
+**Fix:** `echoc recover` now performs a full restore:
+- Verifies the file at the registered path — if present and hash matches, prints `Already valid`.
+- If missing, reads the normalized content (`content.md`) from the CAS object store and writes it back to the source path.
+- If another copy exists at a different registered path, updates the registry to point there.
+- If CAS content is missing (e.g., object store was cleaned), prints a clear error: `Recover failed: <hash> — content not found in CAS storage`.
+
+If the registry entry itself is missing, `recover` reports `not found in registry`.
 
 ---
 

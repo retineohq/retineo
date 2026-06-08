@@ -118,7 +118,8 @@ describe('PDF Pipeline', () => {
   it('ingests PDF and queues GENERATE_L1 job', async () => {
     const filePath = makePDFWithText('ECHO PDF Pipeline Test');
 
-    const node = await service.ingestFile(filePath);
+    const result = await service.ingestFile(filePath);
+    const node = result.node;
     expect(node.id).toMatch(/^[a-f0-9]{64}$/);
     expect(node.depth).toBe(0);
 
@@ -134,7 +135,8 @@ describe('PDF Pipeline', () => {
   it('processes GENERATE_L1 → L2 → L3 pipeline', async () => {
     const filePath = makePDFWithText('Machine learning is a subset of artificial intelligence.');
 
-    const node = await service.ingestFile(filePath);
+    const result = await service.ingestFile(filePath);
+    const node = result.node;
 
     // Process L1
     const l1Job = registry.acquireLease('worker-1', 60000)!;

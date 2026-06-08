@@ -128,12 +128,14 @@ describe('DefaultIngestionService', () => {
     const filePath = path.join(tmpDir, 'hello.txt');
     writeFileSync(filePath, 'Hello ECHO');
 
-    const node = await service.ingestFile(filePath);
+    const result = await service.ingestFile(filePath);
+    const node = result.node;
 
     expect(node.id).toMatch(/^[a-f0-9]{64}$/);
     expect(node.depth).toBe(0);
     expect(node.artifacts.l0).toBeDefined();
     expect(node.artifacts.l0!.wordCount).toBe(2);
+    expect(result.skipped).toBeUndefined();
 
     // CAS has object (readObject verifies content.md + node.json)
     const obj = await cas.readObject(node.id);
@@ -156,9 +158,9 @@ describe('DefaultIngestionService', () => {
     const filePath = path.join(tmpDir, 'doc.md');
     writeFileSync(filePath, '# Title\n\nBody text here.\n');
 
-    const node = await service.ingestFile(filePath);
-    expect(node.id).toMatch(/^[a-f0-9]{64}$/);
-    const obj = await cas.readObject(node.id);
+    const result = await service.ingestFile(filePath);
+    expect(result.node.id).toMatch(/^[a-f0-9]{64}$/);
+    const obj = await cas.readObject(result.node.id);
     expect(obj.artifacts.content).toContain('# Title');
   });
 
@@ -166,10 +168,11 @@ describe('DefaultIngestionService', () => {
     const filePath = path.join(tmpDir, 'dup.txt');
     writeFileSync(filePath, 'Same content');
 
-    const node1 = await service.ingestFile(filePath);
-    const node2 = await service.ingestFile(filePath);
+    const result1 = await service.ingestFile(filePath);
+    const result2 = await service.ingestFile(filePath);
 
-    expect(node1.id).toBe(node2.id);
+    expect(result1.node.id).toBe(result2.node.id);
+    expect(result2.skipped).toBe(true);
 
     // Only one source record
     const rawHash = computeHash(Buffer.from('Same content'));
@@ -183,18 +186,18 @@ describe('DefaultIngestionService', () => {
     writeFileSync(f1, 'File A');
     writeFileSync(f2, 'File B');
 
-    const nodes = await service.ingestBatch([f1, f2]);
-    expect(nodes.length).toBe(2);
-    expect(nodes[0].id).not.toBe(nodes[1].id);
+    const results = await service.ingestBatch([f1, f2]);
+    expect(results.length).toBe(2);
+    expect(results[0].node.id).not.toBe(results[1].node.id);
   });
 
   it('queues GENERATE_L1 job for each ingested file', async () => {
     const filePath = path.join(tmpDir, 'job.txt');
     writeFileSync(filePath, 'Queue me');
 
-    const node = await service.ingestFile(filePath);
+    const result = await service.ingestFile(filePath);
     const jobs = registry.getPendingJobs(10);
-    const matching = jobs.filter((j) => j.payload.includes(node.id));
+    const matching = jobs.filter((j) => j.payload.includes(result.node.id));
     expect(matching.length).toBe(1);
     expect(matching[0].type).toBe('GENERATE_L1');
   });

@@ -72,7 +72,8 @@ describe('Multimodal Pipeline', () => {
     const filePath = path.join(tmpDir, 'podcast.mp3');
     writeFileSync(filePath, Buffer.alloc(1024 * 600)); // 600 KB ≈ 10 min
 
-    const node = await service.ingestFile(filePath);
+    const result = await service.ingestFile(filePath);
+    const node = result.node;
 
     expect(node.id).toMatch(/^[a-f0-9]{64}$/);
     expect(node.depth).toBe(0);
@@ -114,7 +115,8 @@ describe('Multimodal Pipeline', () => {
     const filePath = path.join(tmpDir, 'lecture.mp4');
     writeFileSync(filePath, Buffer.alloc(1024 * 1024 * 4)); // 4 MB ≈ 400s = 2 segments
 
-    const node = await service.ingestFile(filePath);
+    const result = await service.ingestFile(filePath);
+    const node = result.node;
 
     expect(node.id).toMatch(/^[a-f0-9]{64}$/);
     expect(node.depth).toBe(0);
@@ -142,7 +144,8 @@ describe('Multimodal Pipeline', () => {
     const filePath = path.join(tmpDir, 'scan.png');
     writeFileSync(filePath, Buffer.alloc(1024));
 
-    const node = await service.ingestFile(filePath);
+    const result = await service.ingestFile(filePath);
+    const node = result.node;
 
     expect(node.id).toMatch(/^[a-f0-9]{64}$/);
     expect(node.depth).toBe(0);
@@ -173,12 +176,12 @@ describe('Multimodal Pipeline', () => {
     writeFileSync(audioPath, Buffer.alloc(1024 * 300));
     writeFileSync(imagePath, Buffer.alloc(1024));
 
-    const nodes = await service.ingestBatch([audioPath, imagePath]);
-    expect(nodes.length).toBe(2);
-    expect(nodes[0].id).not.toBe(nodes[1].id);
+    const results = await service.ingestBatch([audioPath, imagePath]);
+    expect(results.length).toBe(2);
+    expect(results[0].node.id).not.toBe(results[1].node.id);
 
     // Audio has segments, image does not
-    expect(nodes[0].childrenIds.length).toBeGreaterThan(0);
-    expect(nodes[1].childrenIds.length).toBe(0);
+    expect(results[0].node.childrenIds.length).toBeGreaterThan(0);
+    expect(results[1].node.childrenIds.length).toBe(0);
   });
 });

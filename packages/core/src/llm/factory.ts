@@ -12,7 +12,7 @@ import { OpenAICompatibleProvider } from './providers/openai-compatible.js';
 import { MockLLMProvider } from './providers/mock.js';
 import { DefaultCircuitBreaker, type CircuitBreaker, type CircuitBreakerConfig } from './circuit-breaker.js';
 import { resolveConfigValue } from '../storage/secrets.js';
-import { LLMCircuitOpen } from '../utils/errors.js';
+import { LLMCircuitOpen, LLMError } from '../utils/errors.js';
 
 export interface LLMProviderFactory {
   loadFromConfig(config: EchoConfig, secrets?: SecretsManager): Promise<void>;
@@ -22,6 +22,7 @@ export interface LLMProviderFactory {
   register(id: string, provider: LLMProvider): void;
   getRateLimiter(): RateLimiter;
   getCircuitBreaker(id: string): CircuitBreaker;
+  resetCircuitBreaker(id: string): void;
   getFallback(id: string): LLMProvider | undefined;
 }
 
@@ -33,6 +34,7 @@ export interface EmbeddingProviderFactory {
   register(id: string, provider: EmbeddingProvider): void;
   getRateLimiter(): RateLimiter;
   getCircuitBreaker(id: string): CircuitBreaker;
+  resetCircuitBreaker(id: string): void;
   getFallback(id: string): EmbeddingProvider | undefined;
 }
 
@@ -124,6 +126,10 @@ export class DefaultLLMProviderFactory implements LLMProviderFactory {
 
   getCircuitBreaker(id: string): CircuitBreaker {
     return this.providers.get(id)?.breaker ?? new DefaultCircuitBreaker();
+  }
+
+  resetCircuitBreaker(id: string): void {
+    this.providers.get(id)?.breaker.reset();
   }
 
   getFallback(id: string): LLMProvider | undefined {
@@ -242,6 +248,10 @@ export class DefaultEmbeddingProviderFactory implements EmbeddingProviderFactory
     return this.providers.get(id)?.breaker ?? new DefaultCircuitBreaker();
   }
 
+  resetCircuitBreaker(id: string): void {
+    this.providers.get(id)?.breaker.reset();
+  }
+
   getFallback(id: string): EmbeddingProvider | undefined {
     const entry = this.providers.get(id);
     if (!entry?.fallbackId) return undefined;
@@ -267,7 +277,10 @@ export class DefaultEmbeddingProviderFactory implements EmbeddingProviderFactory
             if (fallback) {
               return fallback.embed(texts);
             }
-            throw LLMCircuitOpen(original.id, err instanceof Error ? err : undefined);
+            const message = original.id.includes('ollama')
+              ? `Ollama embed model not responding — check model settings and ensure Ollama is running`
+              : `LLM provider circuit breaker open: ${original.id}`;
+            throw new LLMError('LLM_CIRCUIT_OPEN', message, 503, { providerId: original.id }, err instanceof Error ? err : undefined);
           }
           throw err;
         }

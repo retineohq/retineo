@@ -34,7 +34,7 @@ search:
     confidenceThreshold: 0.7
   semantic:
     topK: 100
-    threshold: 0.75
+    threshold: 0.5
     hybridWeight: 0.7
   rerank:
     topK: 10

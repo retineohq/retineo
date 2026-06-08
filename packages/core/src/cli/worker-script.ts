@@ -90,6 +90,14 @@ export async function startWorkerServices(
   const llmProvider = llmFactory.getDefault();
   const embedder = embedFactory.getDefault();
 
+  // Reset circuit breakers on worker start so transient failures (e.g. Ollama not warm) recover
+  for (const id of llmFactory.list()) {
+    llmFactory.resetCircuitBreaker(id);
+  }
+  for (const id of embedFactory.list()) {
+    embedFactory.resetCircuitBreaker(id);
+  }
+
   // Generators
   const nodeBuilder = new DefaultNodeBuilder();
   const l1Generator = new DefaultL1Generator();
