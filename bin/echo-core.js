@@ -106,8 +106,25 @@ async function main() {
 
   // --- Adapter manager ---
   // Adapters live in the package directory, not cwd
+  // Try multiple locations: dev (packages/core/adapters), installed (dist/adapters), global (../packages/core/adapters)
   const packageDir = path.resolve(path.dirname(new URL(import.meta.url).pathname));
-  const adaptersDir = path.join(packageDir, '..', 'packages', 'core', 'adapters');
+  const possibleAdapterDirs = [
+    path.join(packageDir, '..', 'packages', 'core', 'adapters'),
+    path.join(packageDir, '..', 'dist', 'adapters'),
+    path.join(packageDir, '..', 'adapters'),
+  ];
+  let adaptersDir = possibleAdapterDirs[0];
+  for (const dir of possibleAdapterDirs) {
+    try {
+      const { existsSync } = await import('fs');
+      if (existsSync(dir)) {
+        adaptersDir = dir;
+        break;
+      }
+    } catch {
+      // ignore
+    }
+  }
   const adapterRunner = new DefaultAdapterProcessRunner(resolvedDataDir, logger);
   const adapterManager = new DefaultAdapterManager(adaptersDir, adapterRunner);
   try {
