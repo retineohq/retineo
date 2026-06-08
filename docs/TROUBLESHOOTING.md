@@ -154,3 +154,37 @@ Exit code is `1` if any **critical** dependency is missing. Currently only Node.
 | `echoc ingest` returns but no L1/L2/L3 generated | Worker is not draining the queue | Same as above. For a one-shot run, use `echoc ingest file.md --watch` — it starts an inline worker |
 | `worker.start` exits immediately | Missing `pnpm build` step | Run `pnpm build` so `dist/cli/worker-script.js` exists |
 | `daemon.start` exits immediately | Same as above | `pnpm build` first |
+| L2 shows `"Mock summary for prompt hash..."` | `compile --watch` used inline worker without loading real providers from config | Verify `echoc worker status` shows running; or run `echoc daemon start` first; or re-run `echoc init` to ensure config has real provider |
+| `LLM provider not configured` error | No providers loaded from config | Run `echoc init` to create `~/.echo/config.yaml` with Ollama or cloud provider |
+| `Provider 'xxx' not found` error | `--provider` flag specifies id not in config | Check `echoc config get llm.providers` for available ids |
+
+---
+
+## Duplicate ingestion
+
+**Symptom:** Running `echoc ingest same-file.md` twice creates duplicate rows in the `sources` table.
+
+**Fix:** This is resolved in v0.1.1. Ingestion is now idempotent:
+- Same content hash + same path → skipped with `Skipped: already ingested`
+- Same content hash + different path → source path updated, no new jobs queued
+- New content hash → full ingest + jobs queued as before
+
+If you see duplicates from older versions, run `echoc doctor` to verify your install version.
+
+---
+
+## Recovering orphaned nodes
+
+**Symptom:** `echoc recover <hash>` shows `unknown` or cannot find the original file path.
+
+**Fix:** The `recover` command now queries the SQLite `sources` table by content hash to retrieve the original `sourcePath`. Ensure your registry database is intact at `~/.echo/echo.sqlite`. If the source was never registered (e.g., manual CAS insertion), `recover` will report `source path not found in registry`.
+
+---
+
+## Daemon lifecycle
+
+**Symptom:** `echoc daemon stop` reports the daemon is not running even though it was started.
+
+**Fix:** Starting in v0.1.1, the PID file is written immediately when `daemon start` spawns the process. If the daemon exits immediately (e.g., port conflict or missing build), the PID file is cleaned up and a clear error is shown. Check logs with `echoc daemon logs` to diagnose startup failures.
+
+Graceful shutdown order on `daemon stop`: bridge → worker → registry. The stop command sends SIGTERM, waits up to 5 seconds, then sends SIGKILL if needed.

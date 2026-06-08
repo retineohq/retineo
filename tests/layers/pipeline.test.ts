@@ -177,4 +177,72 @@ describe('DefaultCompilationPipeline', () => {
     expect(require('fs').existsSync(path.join(dataDir, 'index', 'bm25.json'))).toBe(true);
     expect(require('fs').existsSync(path.join(dataDir, 'index', 'hnsw.manifest.json'))).toBe(true);
   });
+
+  it('fails with clear error when LLM provider is null on L2 job', async () => {
+    const noLlmPipeline = new DefaultCompilationPipeline({
+      cas,
+      registry,
+      l1Generator: new DefaultL1Generator(),
+      l2Generator: new DefaultL2Generator(),
+      l3Generator: new DefaultL3Generator(),
+      llmProvider: null,
+      embeddingProvider,
+      dataDir,
+    });
+
+    const hash = seedNode('# Title\n\nBody.');
+    // Pre-generate L1
+    await noLlmPipeline.processJob({
+      id: 'j1', type: 'GENERATE_L1', payload: JSON.stringify({ nodeId: hash }),
+      priority: 0, attempts: 0, maxAttempts: 3, status: 'RUNNING',
+      leaseUntil: null, workerId: null, heartbeatAt: null,
+      createdAt: new Date().toISOString(), startedAt: null, completedAt: null,
+    });
+
+    await expect(
+      noLlmPipeline.processJob({
+        id: 'j2', type: 'GENERATE_L2', payload: JSON.stringify({ nodeId: hash }),
+        priority: 0, attempts: 0, maxAttempts: 3, status: 'RUNNING',
+        leaseUntil: null, workerId: null, heartbeatAt: null,
+        createdAt: new Date().toISOString(), startedAt: null, completedAt: null,
+      })
+    ).rejects.toThrow('LLM provider not configured');
+  });
+
+  it('fails with clear error when embedding provider is null on L3 job', async () => {
+    const noEmbedPipeline = new DefaultCompilationPipeline({
+      cas,
+      registry,
+      l1Generator: new DefaultL1Generator(),
+      l2Generator: new DefaultL2Generator(),
+      l3Generator: new DefaultL3Generator(),
+      llmProvider,
+      embeddingProvider: null,
+      dataDir,
+    });
+
+    const hash = seedNode('# Title\n\nBody.');
+    // Pre-generate L1 and L2
+    await noEmbedPipeline.processJob({
+      id: 'j1', type: 'GENERATE_L1', payload: JSON.stringify({ nodeId: hash }),
+      priority: 0, attempts: 0, maxAttempts: 3, status: 'RUNNING',
+      leaseUntil: null, workerId: null, heartbeatAt: null,
+      createdAt: new Date().toISOString(), startedAt: null, completedAt: null,
+    });
+    await noEmbedPipeline.processJob({
+      id: 'j2', type: 'GENERATE_L2', payload: JSON.stringify({ nodeId: hash }),
+      priority: 0, attempts: 0, maxAttempts: 3, status: 'RUNNING',
+      leaseUntil: null, workerId: null, heartbeatAt: null,
+      createdAt: new Date().toISOString(), startedAt: null, completedAt: null,
+    });
+
+    await expect(
+      noEmbedPipeline.processJob({
+        id: 'j3', type: 'GENERATE_L3', payload: JSON.stringify({ nodeId: hash }),
+        priority: 0, attempts: 0, maxAttempts: 3, status: 'RUNNING',
+        leaseUntil: null, workerId: null, heartbeatAt: null,
+        createdAt: new Date().toISOString(), startedAt: null, completedAt: null,
+      })
+    ).rejects.toThrow('Embedding provider not configured');
+  });
 });

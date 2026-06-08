@@ -94,10 +94,25 @@ export class DefaultL3Generator implements L3Generator {
 
     await mkdir(indexDir, { recursive: true });
 
-    // Append to embeddings.jsonl
+    // Append to embeddings.jsonl (with dedup: replace existing entry for same hash)
     const embeddingsPath = path.join(indexDir, 'embeddings.jsonl');
     const line = JSON.stringify({ hash: contentHash, vector });
-    await writeFile(embeddingsPath, line + '\n', { flag: 'a' });
+    if (existsSync(embeddingsPath)) {
+      const existing = await readFile(embeddingsPath, 'utf-8');
+      const existingLines = existing.trim().split('\n').filter((l) => l.trim());
+      const filtered = existingLines.filter((l) => {
+        try {
+          const rec = JSON.parse(l) as { hash: string };
+          return rec.hash !== contentHash;
+        } catch {
+          return true;
+        }
+      });
+      filtered.push(line);
+      await writeFile(embeddingsPath, filtered.join('\n') + '\n');
+    } else {
+      await writeFile(embeddingsPath, line + '\n');
+    }
 
     // Update BM25 inverted index
     const bm25Path = path.join(indexDir, 'bm25.json');

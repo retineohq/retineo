@@ -37,14 +37,36 @@ async function main() {
 
   const nodeBuilder = new DefaultNodeBuilder();
   const adapterRunner = new DefaultAdapterProcessRunner(dataDir);
-  const adapterManager = new DefaultAdapterManager(path.join(process.cwd(), 'adapters'), adapterRunner);
-  await adapterManager.loadBuiltIn();
+  // Resolve adapters relative to this script, not cwd
+  const here = path.dirname(new URL(import.meta.url).pathname);
+  const adaptersDir = path.join(here, '..', 'packages', 'core', 'adapters');
+  const adapterManager = new DefaultAdapterManager(adaptersDir, adapterRunner);
+  try {
+    await adapterManager.loadBuiltIn();
+  } catch {
+    // fallback: try relative to cwd
+    const fallbackDir = path.join(process.cwd(), 'packages', 'core', 'adapters');
+    const fallbackManager = new DefaultAdapterManager(fallbackDir, adapterRunner);
+    try {
+      await fallbackManager.loadBuiltIn();
+    } catch {
+      // no adapters — ingestion will fail with clear error
+    }
+  }
 
   const ingestionService = new DefaultIngestionService(cas, registry, nodeBuilder, adapterManager, computeHash, logger);
 
   const queryAnalyzer = new DefaultQueryAnalyzer({ searchConfig: config.search });
 
-  const embedder = new MockLLMProvider({ id: 'mock-embedder', type: 'mock', dimension: 384 });
+  // Load real embedding provider from config (same as echo-core.js)
+  const { DefaultEmbeddingProviderFactory } = await import('../dist/llm/factory.js');
+  const embedFactory = new DefaultEmbeddingProviderFactory();
+  try {
+    await embedFactory.loadFromConfig(config, secretsManager);
+  } catch {
+    // fallback to mock
+  }
+  const embedder = embedFactory.list().length > 0 ? embedFactory.getDefault() : new MockLLMProvider({ id: 'mock-embedder', type: 'mock', dimension: 384 });
   const retrievalService = new DefaultRetrievalService({
     embeddingProvider: embedder,
     casStorage: cas,

@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.1] - 2026-06-08
+
+### Fixed
+- Ingest deduplication: idempotent ingestion by content hash + source path
+- Recover now looks up source path from SQLite registry
+- Config command uses subcommands (set/get/list)
+- Daemon PID file written immediately for stable lifecycle
+
 ## [0.1.0] - 2026-06-05
 
 ### Features

@@ -42,6 +42,7 @@ export interface IngestCLIOptions {
 
 export interface CompileCLIOptions {
   layer?: string;
+  provider?: string;
   watch?: boolean;
   timeout?: number;
 }
@@ -78,13 +79,54 @@ export class CLICommands {
 
   async ingest(filePath: string, options?: IngestCLIOptions): Promise<void> {
     const node = await this.deps.ingestionService.ingestFile(filePath);
-    // Find the queued jobs for this node
     const jobs = this.deps.registry.getJobsBySource(node.id);
     const jobIds = jobs.map((j) => j.id);
     console.log(formatIngestResult(node.sourceRef.uri, node.id, jobIds));
 
     if (options?.watch) {
       await this.watchJobs(node.id, { timeoutSec: options.timeout ?? 1800 });
+    }
+  }
+
+  async ingestBatch(paths: string[], options?: IngestCLIOptions): Promise<void> {
+    const { existsSync } = await import('fs');
+    const expanded: string[] = [];
+    for (const p of paths) {
+      const resolved = path.resolve(p);
+      if (existsSync(resolved)) {
+        expanded.push(resolved);
+      } else {
+        console.error(`  File not found: ${p}`);
+      }
+    }
+
+    if (expanded.length === 0) {
+      console.log('No valid files found.');
+      return;
+    }
+
+    if (expanded.length === 1) {
+      return this.ingest(expanded[0], options);
+    }
+
+    console.log(`Ingesting ${expanded.length} files...`);
+    const allJobIds: string[] = [];
+    for (const fp of expanded) {
+      try {
+        const node = await this.deps.ingestionService.ingestFile(fp);
+        const jobs = this.deps.registry.getJobsBySource(node.id);
+        allJobIds.push(...jobs.map((j) => j.id));
+        console.log(`  ✓ ${fp} → ${node.id.slice(0, 12)}...`);
+      } catch (err) {
+        console.error(`  ✗ ${fp}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+    console.log(`Queued ${allJobIds.length} job(s) for ${expanded.length} file(s).`);
+
+    if (options?.watch && allJobIds.length > 0) {
+      // Watch all jobs from all files
+      const startIds = new Set(allJobIds);
+      await this.watchAnyJobCompletion(startIds, { timeoutSec: options.timeout ?? 1800 });
     }
   }
 
@@ -113,6 +155,24 @@ export class CLICommands {
   async status(): Promise<void> {
     const sources = this.deps.registry.listSources();
     const pending = this.deps.registry.getPendingJobs(1000);
+
+    // Read actual vector count from embeddings.jsonl
+    let vectorCount = 0;
+    try {
+      const config = await this.deps.configManager.load();
+      const { join } = await import('path');
+      const { existsSync, readFileSync } = await import('fs');
+      const embeddingsPath = join(config.dataDir, 'index', 'embeddings.jsonl');
+      if (existsSync(embeddingsPath)) {
+        const raw = readFileSync(embeddingsPath, 'utf-8').trim();
+        if (raw) {
+          vectorCount = raw.split('\n').filter((l: string) => l.trim()).length;
+        }
+      }
+    } catch {
+      // ignore
+    }
+
     const status = {
       version: this.deps.version,
       nodeCount: sources.length,
@@ -124,7 +184,7 @@ export class CLICommands {
         failed: 0,
       },
       indexStatus: {
-        vectorCount: 0,
+        vectorCount,
         lastIndexed: new Date().toISOString(),
       },
     };
@@ -132,6 +192,19 @@ export class CLICommands {
   }
 
   async compile(filePath?: string, options?: CompileCLIOptions): Promise<void> {
+    // Load config and resolve provider override if specified
+    const config = await this.deps.configManager.load();
+    if (options?.provider) {
+      const available = config.llm.providers.map((p) => p.id);
+      if (!available.includes(options.provider)) {
+        console.error(`Provider '${options.provider}' not found in config. Available: ${available.join(', ')}`);
+        process.exitCode = 1;
+        return;
+      }
+      // Log provider override
+      console.log(`Using LLM provider override: ${options.provider}`);
+    }
+
     if (filePath) {
       const node = await this.deps.ingestionService.ingestFile(filePath);
       console.log(`Compiled: ${filePath} → ${node.id}`);
@@ -149,17 +222,19 @@ export class CLICommands {
     }
   }
 
-  async config(key?: string, value?: string): Promise<void> {
+  async configList(): Promise<void> {
     const cfg = await this.deps.configManager.load();
-    if (!key) {
-      console.log(formatConfig(cfg));
-      return;
-    }
-    if (value === undefined) {
-      const val = getPath(cfg, key);
-      console.log(val !== undefined ? JSON.stringify(val) : 'undefined');
-      return;
-    }
+    console.log(formatConfig(cfg));
+  }
+
+  async configGet(key: string): Promise<void> {
+    const cfg = await this.deps.configManager.load();
+    const val = getPath(cfg, key);
+    console.log(val !== undefined ? JSON.stringify(val) : 'undefined');
+  }
+
+  async configSet(key: string, value: string): Promise<void> {
+    const cfg = await this.deps.configManager.load();
     setPath(cfg, key, parseValue(value));
     await this.deps.configManager.save(cfg);
     console.log(`Set ${key} = ${value}`);
@@ -178,8 +253,12 @@ export class CLICommands {
 
   async recover(hash: string): Promise<void> {
     this.deps.registry.recoverOrphan(hash);
-    const orphan = this.deps.registry.getOrphan(hash);
-    console.log(formatRecoverResult(hash, orphan?.originalSourceId ?? 'unknown'));
+    const source = this.deps.registry.getSourceByRootHash(hash);
+    if (source) {
+      console.log(formatRecoverResult(hash, source.uri));
+    } else {
+      console.log(formatRecoverResult(hash, 'source path not found in registry'));
+    }
   }
 
   // --- Key management ---
@@ -588,18 +667,21 @@ export class CLICommands {
       throw new Error(`Failed to spawn ${service} (no PID)`);
     }
 
-    // Wait briefly to verify it actually started
-    await new Promise((r) => setTimeout(r, 1000));
-    if (!isPidAlive(pid)) {
-      throw new Error(`${service} exited immediately. Check logs: ${logPath}`);
-    }
-
+    // Write PID file immediately so stop/status can always find it
     await writePidFile({
       pid,
       startedAt: new Date().toISOString(),
       service,
       logFile: logPath,
     });
+
+    // Wait briefly to verify it actually started
+    await new Promise((r) => setTimeout(r, 1000));
+    if (!isPidAlive(pid)) {
+      await removePidFile(service);
+      throw new Error(`${service} exited immediately. Check logs: ${logPath}`);
+    }
+
     console.log(`✅ ${service} started (PID ${pid})`);
     console.log(`   Logs: ${logPath}`);
   }

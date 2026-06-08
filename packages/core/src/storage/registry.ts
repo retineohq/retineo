@@ -28,7 +28,9 @@ export interface Registry {
   insertSource(source: SourceRecord): void;
   getSource(id: string): SourceRecord | null;
   getSourceByRawHash(rawHash: Hash): SourceRecord | null;
+  getSourceByRootHash(rootHash: Hash): SourceRecord | null;
   updateSource(id: string, updates: Partial<SourceRecord>): void;
+  updateSourcePath(id: string, uri: string): void;
   deleteSource(id: string): void;
   listSources(): SourceRecord[];
 
@@ -172,6 +174,13 @@ export class SQLiteRegistry implements Registry {
     return row ? rowToSource(row) : null;
   }
 
+  getSourceByRootHash(rootHash: Hash): SourceRecord | null {
+    const row = this.db.prepare('SELECT * FROM sources WHERE root_hash = ?').get(rootHash) as
+      | Record<string, unknown>
+      | undefined;
+    return row ? rowToSource(row) : null;
+  }
+
   updateSource(id: string, updates: Partial<SourceRecord>): void {
     const sets: string[] = [];
     const values: unknown[] = [];
@@ -186,6 +195,12 @@ export class SQLiteRegistry implements Registry {
     values.push(id);
     const stmt = this.db.prepare(`UPDATE sources SET ${sets.join(', ')} WHERE id = ?`);
     stmt.run(...values);
+  }
+
+  updateSourcePath(id: string, uri: string): void {
+    this.db.prepare(
+      `UPDATE sources SET uri = ?, updated_at = datetime('now') WHERE id = ?`
+    ).run(uri, id);
   }
 
   deleteSource(id: string): void {

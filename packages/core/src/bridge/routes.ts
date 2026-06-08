@@ -16,6 +16,7 @@ export async function registerRoutes(fastify: FastifyInstance, deps: BridgeHandl
   fastify.post('/v1/search/stream', handlers.searchStream);
   fastify.post('/v1/ingest', handlers.ingest);
   fastify.get('/v1/status', handlers.status);
+  fastify.get('/v1/nodes', handlers.listNodes);
   fastify.get('/v1/nodes/:hash', handlers.getNode);
   fastify.get('/v1/sources/:id', handlers.getSource);
   fastify.get('/v1/jobs/:id', handlers.getJob);

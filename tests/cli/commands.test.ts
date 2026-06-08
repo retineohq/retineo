@@ -68,6 +68,7 @@ function makeDeps(): CLICommandsDeps {
       getRunningWorkerIds: () => [],
       recoverOrphan: vi.fn(),
       getOrphan: () => null,
+      getSourceByRootHash: () => null,
     } as any,
     configManager: {
       load: async () => ({
@@ -113,7 +114,7 @@ describe('CLICommands', () => {
   it('config get prints value', async () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     const cmds = new CLICommands(makeDeps());
-    await cmds.config('search.defaultLanguage');
+    await cmds.configGet('search.defaultLanguage');
     expect(log).toHaveBeenCalled();
     log.mockRestore();
   });

@@ -54,16 +54,6 @@ export class DefaultIngestionService implements IngestionService {
     const rawBuffer = await readFile(absolutePath);
     const rawHash = this.computeHash(rawBuffer);
 
-    const existing = this.registry.getSourceByRawHash(rawHash);
-    if (existing) {
-      this.logger.info('ingest.duplicate', { sourcePath: absolutePath, rawHash });
-      const rootHash = existing.rootHash || rawHash;
-      if (this.cas.exists(rootHash)) {
-        const obj = await this.cas.readObject(rootHash);
-        return obj.node;
-      }
-    }
-
     // Resolve mimeType from extension
     const ext = path.extname(absolutePath).toLowerCase();
     let mimeType: string | undefined;
@@ -77,6 +67,51 @@ export class DefaultIngestionService implements IngestionService {
     this.logger.info('adapter.ingest.complete', { sourcePath: absolutePath, adapterId, contentLength: normalized.content.length });
 
     const contentHash = this.computeHash(normalized.content);
+
+    // Deduplication by contentHash + sourcePath
+    const existing = this.registry.getSourceByRootHash(contentHash);
+    if (existing) {
+      if (existing.uri === absolutePath) {
+        this.logger.info('ingest.skip.duplicate', { sourcePath: absolutePath, contentHash });
+        console.log(`Skipped: already ingested (hash: ${contentHash})`);
+        const rootHash = existing.rootHash || contentHash;
+        if (this.cas.exists(rootHash)) {
+          const obj = await this.cas.readObject(rootHash);
+          return obj.node;
+        }
+        // CAS missing but source exists — return minimal node
+        return {
+          id: rootHash,
+          sourceRef: { protocol: 'file', uri: absolutePath, mimeType: existing.mimeType },
+          childrenIds: [],
+          depth: 0,
+          artifacts: {},
+          build: { schemaVersion: 1, nodeVersion: 1, rawHash, contentHash, generators: { l1: { id: '', version: '' }, l2: { id: '', version: '' }, embedding: { id: '', version: '' } }, buildTimestamp: existing.lastSeenAt },
+          createdAt: existing.lastSeenAt,
+          updatedAt: existing.lastSeenAt,
+        };
+      } else {
+        // Same content, different path — update sourcePath
+        this.logger.info('ingest.update.path', { sourcePath: absolutePath, oldPath: existing.uri, contentHash });
+        this.registry.updateSourcePath(existing.id, absolutePath);
+        console.log(`Updated source path: ${existing.uri} → ${absolutePath}`);
+        const rootHash = existing.rootHash || contentHash;
+        if (this.cas.exists(rootHash)) {
+          const obj = await this.cas.readObject(rootHash);
+          return obj.node;
+        }
+        return {
+          id: rootHash,
+          sourceRef: { protocol: 'file', uri: absolutePath, mimeType: existing.mimeType },
+          childrenIds: [],
+          depth: 0,
+          artifacts: {},
+          build: { schemaVersion: 1, nodeVersion: 1, rawHash, contentHash, generators: { l1: { id: '', version: '' }, l2: { id: '', version: '' }, embedding: { id: '', version: '' } }, buildTimestamp: existing.lastSeenAt },
+          createdAt: existing.lastSeenAt,
+          updatedAt: existing.lastSeenAt,
+        };
+      }
+    }
 
     // Build source record
     const sourceId = randomUUID();

@@ -27,13 +27,13 @@ export function createCLI(deps: CLICommandsDeps): Command {
     });
 
   program
-    .command('ingest <filePath>')
-    .description('Ingest a file into the knowledge base')
+    .command('ingest <paths...>')
+    .description('Ingest one or more files into the knowledge base (supports globs)')
     .option('-a, --adapter <id>', 'Force specific adapter')
     .option('-w, --watch', 'Block until all jobs for this file are COMPLETED')
     .option('-t, --timeout <seconds>', 'Watch timeout in seconds (default 1800)', parseInt)
-    .action(async (filePath: string, options: { adapter?: string; watch?: boolean; timeout?: number }) => {
-      await commands.ingest(filePath, { adapter: options.adapter, watch: options.watch, timeout: options.timeout });
+    .action(async (paths: string[], options: { adapter?: string; watch?: boolean; timeout?: number }) => {
+      await commands.ingestBatch(paths, { adapter: options.adapter, watch: options.watch, timeout: options.timeout });
     });
 
   program
@@ -58,17 +58,34 @@ export function createCLI(deps: CLICommandsDeps): Command {
     .command('compile [filePath]')
     .description('Compile pending jobs or a specific file')
     .option('--layer <layer>', 'Compile only specific layer')
+    .option('--provider <id>', 'Override LLM provider for this compilation')
     .option('-w, --watch', 'Block until all queued jobs are COMPLETED')
     .option('-t, --timeout <seconds>', 'Watch timeout in seconds (default 1800)', parseInt)
-    .action(async (filePath?: string, options?: { layer?: string; watch?: boolean; timeout?: number }) => {
-      await commands.compile(filePath, { layer: options?.layer, watch: options?.watch, timeout: options?.timeout });
+    .action(async (filePath?: string, options?: { layer?: string; provider?: string; watch?: boolean; timeout?: number }) => {
+      await commands.compile(filePath, { layer: options?.layer, provider: options?.provider, watch: options?.watch, timeout: options?.timeout });
     });
 
-  program
-    .command('config [key] [value]')
-    .description('Read or write configuration values')
-    .action(async (key?: string, value?: string) => {
-      await commands.config(key, value);
+  const configCmd = program.command('config').description('Read or write configuration values');
+
+  configCmd
+    .command('set <key> <value>')
+    .description('Set a configuration value')
+    .action(async (key: string, value: string) => {
+      await commands.configSet(key, value);
+    });
+
+  configCmd
+    .command('get <key>')
+    .description('Get a configuration value')
+    .action(async (key: string) => {
+      await commands.configGet(key);
+    });
+
+  configCmd
+    .command('list')
+    .description('List all configuration values')
+    .action(async () => {
+      await commands.configList();
     });
 
   program

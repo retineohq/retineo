@@ -28,8 +28,8 @@ export interface CompilationPipelineDeps {
   l1Generator: L1Generator;
   l2Generator: L2Generator;
   l3Generator: L3Generator;
-  llmProvider: LLMProvider;
-  embeddingProvider: EmbeddingProvider;
+  llmProvider: LLMProvider | null;
+  embeddingProvider: EmbeddingProvider | null;
   dataDir: string;
   logger?: Logger;
 }
@@ -91,6 +91,22 @@ export class DefaultCompilationPipeline implements CompilationPipeline {
     }
   }
 
+  private ensureLLMProvider(): LLMProvider {
+    const provider = this.deps.llmProvider;
+    if (!provider) {
+      throw new Error('LLM provider not configured. Run "echoc init" to set up a provider (e.g. Ollama).');
+    }
+    return provider;
+  }
+
+  private ensureEmbeddingProvider(): EmbeddingProvider {
+    const provider = this.deps.embeddingProvider;
+    if (!provider) {
+      throw new Error('Embedding provider not configured. Run "echoc init" to set up a provider (e.g. Ollama).');
+    }
+    return provider;
+  }
+
   private async processL1(nodeHash: string): Promise<void> {
     const { cas, l1Generator } = this.deps;
     const objPath = cas.getObjectPath(nodeHash);
@@ -113,7 +129,8 @@ export class DefaultCompilationPipeline implements CompilationPipeline {
   }
 
   private async processL2(nodeHash: string): Promise<void> {
-    const { cas, l2Generator, llmProvider } = this.deps;
+    const { cas, l2Generator } = this.deps;
+    const llmProvider = this.ensureLLMProvider();
     const objPath = cas.getObjectPath(nodeHash);
     const { readFile, writeFile } = await import('fs/promises');
 
@@ -133,7 +150,8 @@ export class DefaultCompilationPipeline implements CompilationPipeline {
   }
 
   private async processL3(nodeHash: string): Promise<void> {
-    const { cas, l3Generator, embeddingProvider, dataDir } = this.deps;
+    const { cas, l3Generator, dataDir } = this.deps;
+    const embeddingProvider = this.ensureEmbeddingProvider();
     const objPath = cas.getObjectPath(nodeHash);
     const { readFile } = await import('fs/promises');
 

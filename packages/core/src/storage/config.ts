@@ -131,7 +131,7 @@ const DEFAULT_SEARCH_CONFIG: SearchConfig = {
   },
   semantic: {
     topK: 100,
-    threshold: 0.75,
+    threshold: 0.5,
     hybridWeight: 0.7,
   },
   rerank: {
@@ -324,7 +324,7 @@ export class FileConfigManager implements ConfigManager {
   private dataDir: string;
 
   constructor(dataDir?: string) {
-    this.dataDir = dataDir ?? DEFAULT_CONFIG.dataDir;
+    this.dataDir = dataDir ?? process.env.ECHO_DATA_DIR ?? DEFAULT_CONFIG.dataDir;
     this.configPath = path.join(this.dataDir, 'config.yaml');
   }
 

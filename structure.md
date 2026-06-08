@@ -110,7 +110,7 @@ echo-core/
 | File              | Exports                                                                                | Description                                                                                     |
 | ----------------- | -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
 | `cas.ts`          | `CASStorage`, `LocalCASStorage`, `NodeArtifacts`, `computeHash`, `getObjectPath`       | Content-Addressable Storage: SHA-256 keyed object filesystem.                                   |
-| `registry.ts`     | `Registry`, `SQLiteRegistry`, `OrphanRecord`                                           | SQLite-backed registry: sources, segments, jobs (lease model), orphans. Job queries: `getJobsBySource`, `getJob`, `getJobCounts`, `getLastHeartbeat`, `getRunningWorkerIds`. Schema init uses `IF NOT EXISTS` for idempotent table/index creation. |
+| `registry.ts`     | `Registry`, `SQLiteRegistry`, `OrphanRecord`                                           | SQLite-backed registry: sources, segments, jobs (lease model), orphans. Job queries: `getJobsBySource`, `getJob`, `getJobCounts`, `getLastHeartbeat`, `getRunningWorkerIds`. Source deduplication: `getSourceByRootHash`, `updateSourcePath`. Schema init uses `IF NOT EXISTS` for idempotent table/index creation. |
 | `config.ts`       | `ConfigManager`, `FileConfigManager`, `EchoConfig`, `LoggingConfig`, `LLMConfig`, `EmbeddingConfig`, `ProviderConfigEntry` | YAML config manager (`~/.echo/config.yaml`). Includes `initializeDataDir()` for first-run setup. `logging` section: level, console, file, filePath, pretty. `llm.providers[]` and `embedding.providers[]` for multi-provider routing. `bridge: { host, port }` for HTTP API. |
 | `node-builder.ts` | `NodeBuilder`, `DefaultNodeBuilder`                                                    | Builds `ContextNode` trees + `BuildManifest` from adapter output.                               |
 | `secrets.ts`      | `SecretsManager`, `FileSecretsManager`, `resolveSecret`, `resolveConfigValue`          | AES-256-GCM encrypted secrets store (`~/.echo/secrets.json`).                                   |
@@ -130,7 +130,7 @@ echo-core/
 | File                   | Exports                                                                                                        | Description                                                                       |
 | ---------------------- | -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | `query-analyzer.ts`    | `QueryAnalyzer`, `DefaultQueryAnalyzer`, `AnalyzedQuery`, `QueryIntent`, `QuerySignal`, `SessionContext`       | Language detection, intent classification, entity extraction, pronoun resolution. |
-| `retrieval-service.ts` | `RetrievalService`, `DefaultRetrievalService`, `CandidateNode`, `RetrievalResult`, `Citation`, `SearchOptions` | L3 semantic/keyword/hybrid search, L2 rerank, L1/L0 cascade.                      |
+| `retrieval-service.ts` | `RetrievalService`, `DefaultRetrievalService`, `CandidateNode`, `RetrievalResult`, `Citation`, `SearchOptions` | L3 semantic/keyword/hybrid search, L2 rerank, L1/L0 cascade. Default threshold 0.5. |
 | `context-assembler.ts` | `ContextAssembler`, `DefaultContextAssembler`, `AssembledContext`, `ContextSegment`                            | Token budget allocation, citation generation, drill-down segments.                |
 | `index.ts`             | Barrel export of `query-analyzer.js`, `retrieval-service.js`, `context-assembler.js`                           | Public search API entrypoint.                                                     |
 
@@ -153,8 +153,8 @@ echo-core/
 | ----------------- | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
 | `l1-generator.ts` | `L1Generator`, `DefaultL1Generator`, `L1Result`, `L1Index`, `Section`, `Chunk`                            | Rule-based markdown structural parser.                         |
 | `l2-generator.ts` | `L2Generator`, `DefaultL2Generator`                                                                       | LLM-powered semantic extraction with Zod validation and retry. |
-| `l3-generator.ts` | `L3Generator`, `DefaultL3Generator`, `L3Result`, `L3Metadata`, `bruteForceSearch`, `BatchEmbeddingConfig` | Embedding indexer with batch embedding support.                |
-| `pipeline.ts`     | `CompilationPipeline`, `DefaultCompilationPipeline`, `CompilationPipelineDeps`                            | Orchestrates L1→L2→L3 via job queue.                           |
+| `l3-generator.ts` | `L3Generator`, `DefaultL3Generator`, `L3Result`, `L3Metadata`, `bruteForceSearch`, `BatchEmbeddingConfig` | Embedding indexer with batch embedding support. Deduplicates embeddings by hash on write. |
+| `pipeline.ts`     | `CompilationPipeline`, `DefaultCompilationPipeline`, `CompilationPipelineDeps`                            | Orchestrates L1→L2→L3 via job queue. `llmProvider` and `embeddingProvider` are nullable; pipeline throws clear error if null when L2/L3 job processed. |
 | `worker.ts`       | `QueueWorker`, `DefaultQueueWorker`, `QueueWorkerOptions`                                                 | Lease-based job processor with heartbeat.                      |
 | `index.ts`        | Barrel export of `l1-generator.js`, `l2-generator.js`, `l3-generator.js`, `pipeline.js`, `worker.js`      | Public layers API entrypoint.                                  |
 
@@ -176,8 +176,8 @@ echo-core/
 | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
 | `types.ts`         | `SearchRequest`, `SearchResponse`, `IngestRequest`, `IngestResponse`, `StatusResponse`, `NodeResponse`, `SourceResponse`, `JobResponse`, `BridgeError`, `BridgeConfig` | HTTP API request/response types.                                   |
 | `server.ts`        | `BridgeServer`, `FastifyBridgeServer`, `BridgeServerOptions`                                                                                                           | Fastify-based localhost-only HTTP server with shutdown hook.       |
-| `routes.ts`        | `registerRoutes`                                                                                                                                                       | Route registration (search, ingest, status, nodes, sources, jobs). |
-| `handlers.ts`      | `BridgeHandlersDeps`, `createHandlers`                                                                                                                                 | Request handlers calling core services.                            |
+| `routes.ts`        | `registerRoutes`                                                                                                                                                       | Route registration (search, ingest, status, nodes list, nodes/:hash, sources, jobs). |
+| `handlers.ts`      | `BridgeHandlersDeps`, `createHandlers`                                                                                                                                 | Request handlers calling core services. Status reads real vectorCount. listNodes endpoint. |
 | `sse.ts`           | `SSEStream`, `createSSEStream`                                                                                                                                         | Server-Sent Events for job progress and search streaming.          |
 | `health.ts`        | `HealthService`, `DefaultHealthService`, `HealthResult`, `ReadyResult`, `HealthServiceDeps`                                                                            | Liveness/readiness probes with SQLite, CAS, LLM, worker checks.    |
 | `metrics.ts`       | `MetricsService`, `DefaultMetricsService`, `MetricsSnapshot`, `MetricsCounters`, `MetricsServiceDeps`, `formatPrometheus`, `createMetricsCounters`                     | Operational metrics collection and Prometheus text export.         |
@@ -188,7 +188,7 @@ echo-core/
 
 | File            | Exports                                                                                                         | Description                                                                           |
 | --------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `commands.ts`   | `CLICommands`, `CLICommandsDeps`, `IngestCLIOptions`, `SearchCLIOptions`, `CompileCLIOptions`, `InitCLIOptions` | CLI command implementations: `init` (interactive wizard + non-interactive), `ingest` (with `--watch` / `--timeout`), `search`, `status`, `compile` (with `--watch` / `--timeout`), `config`, `jobs`, `recover`, `doctor`, `key set/get/delete/list`, `worker start/stop/status/logs`, `bridge start/stop/status/logs`, `daemon start/stop/status/logs`. |
+| `commands.ts`   | `CLICommands`, `CLICommandsDeps`, `IngestCLIOptions`, `SearchCLIOptions`, `CompileCLIOptions`, `InitCLIOptions` | CLI command implementations: `init` (interactive wizard + non-interactive), `ingest` (with `--watch` / `--timeout`), `search`, `status`, `compile` (with `--watch` / `--timeout` / `--provider`), `config`, `jobs`, `recover`, `doctor`, `key set/get/delete/list`, `worker start/stop/status/logs`, `bridge start/stop/status/logs`, `daemon start/stop/status/logs`. |
 | `doctor.ts`     | `runDoctor`, `formatDoctor`, `DoctorResult`, `DependencyCheck`                                                  | External dependency checker (ffmpeg, tesseract, whisper.cpp, whisper model, whisper key, ollama). |
 | `formatters.ts` | `formatSearchResult`, `formatStatus`, `formatJobs`, `formatIngestResult`, `formatConfig`, `formatRecoverResult` | Output formatters for CLI commands.                                                   |
 | `prompt.ts`     | `ask`, `choose`, `confirm`, `PromptOptions`, `ChoiceOptions`                                                    | Readline-based single-question prompts. No external deps. Used by the `init` wizard. `ask` closes the readline interface before resolving. |
@@ -299,6 +299,7 @@ echo-core/
 | File               | Tests                                                        | Description                        |
 | ------------------ | ------------------------------------------------------------ | ---------------------------------- |
 | `commands.test.ts` | `ingest`, `status`, `config`, `recover` with mocked services | CLI command parsing and execution. |
+| `compile-provider.test.ts` | `compile` with `--provider` override: accepts valid provider, rejects invalid with available list | Provider override validation and error messages. |
 | `prompt.test.ts` | `ask` closes readline after line input; returns default on empty input | Prompt helper correctness. |
 | `init.test.ts`     | `init` creates directories, config, SQLite schema; idempotent | First-run initialization.          |
 | `init-wizard.test.ts` | Non-interactive `init` writes Ollama-first config; honours `ECHO_DATA_DIR`, `ECHO_LLM_MODEL`, `ECHO_EMBED_MODEL`, `ECHO_BRIDGE_PORT`; bridge section defaults to `127.0.0.1:37891`; graceful fallback when Ollama is not running; interactive `init` calls `process.exit(0)` on completion | Interactive + non-interactive init wizard. |
@@ -331,7 +332,8 @@ echo-core/
 
 | File                      | Tests                                                                              | Description                                   |
 | ------------------------- | ---------------------------------------------------------------------------------- | --------------------------------------------- |
-| `end-to-end.test.ts`      | CLI ingest → HTTP search → MCP status                                              | Full UI layer integration.                    |
+| `end-to-end.test.ts`      | CLI ingest → HTTP search → MCP status                                              | Full UI layer integration (mocked).           |
+| `end-to-end-real.test.ts` | Config validation, L3 index integrity, dedup, search (EN/RU/cross-lingual), L2 quality, compile --provider, BM25 | Real Ollama + SQLite integration. No mocks.   |
 | `pdf-pipeline.test.ts`    | Ingest real PDF → L1/L2/L3 compilation → verify artifacts                          | End-to-end PDF pipeline.                      |
 | `image-pipeline.test.ts`  | Ingest real image → L1/L2/L3 compilation → verify artifacts                        | End-to-end image OCR pipeline.                |
 | `audio-pipeline.test.ts`  | Ingest audio → verify speech blocks, timestamps, speaker labels                    | End-to-end audio transcription pipeline.      |
@@ -375,7 +377,7 @@ echo-core/
 | **Add a new adapter protocol method**                   | `protocol`                                     | `src/adapters/protocol.ts`                          | `AdapterMethod`, `JSONRPCRequest`                                |
 | **Implement a custom storage backend**                  | `CASStorage` interface                         | `src/storage/cas.ts`                                | Implement `write`, `read`, `exists`, `writeObject`, `readObject` |
 | **Track orphaned objects for later GC**                 | `Registry` (orphans)                           | `src/storage/registry.ts`                           | `insertOrphan`, `recoverOrphan`, `purgeOrphansOlderThan`         |
-| **Build a search index over compiled nodes**            | `DefaultL3Generator` + `bruteForceSearch`      | `src/layers/l3-generator.ts`                        | `EmbeddingProvider`, `hnsw.manifest.json`                        |
+| **Build a search index over compiled nodes**            | `DefaultL3Generator` + `bruteForceSearch`      | `src/layers/l3-generator.ts`                        | `EmbeddingProvider`, `hnsw.manifest.json`. Deduplicates by hash on append. |
 | **Generate vector embeddings for a node**               | `EmbeddingProvider`                            | `src/llm/provider.ts`                               | `DefaultL3Generator`, `MockLLMProvider`                          |
 | **Use HNSW for fast approximate nearest neighbors**     | `createHNSWIndex`                              | `src/embeddings/hnsw-index.ts`                      | `loadOrBuildHNSW`, `BruteForceHNSW`                              |
 | **Store embeddings in Parquet/JSONL**                   | `createEmbeddingStore`                         | `src/embeddings/parquet-store.ts`                   | `JSONLEmbeddingStore`, `EmbeddingRecord`                         |

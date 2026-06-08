@@ -135,8 +135,23 @@ export function createHandlers(deps: BridgeHandlersDeps) {
       try {
         const sources = deps.registry.listSources();
         const pending = deps.registry.getPendingJobs(1000);
-        // Registry lacks direct status counts; approximate
-        const allJobs = pending; // MVP: only pending exposed directly
+        const allJobs = pending;
+
+        // Read actual vector count from embeddings.jsonl
+        let vectorCount = 0;
+        try {
+          const embeddingsPath = path.join(deps.indexDir, 'embeddings.jsonl');
+          if (existsSync(embeddingsPath)) {
+            const { readFileSync } = await import('fs');
+            const raw = readFileSync(embeddingsPath, 'utf-8').trim();
+            if (raw) {
+              vectorCount = raw.split('\n').filter((l: string) => l.trim()).length;
+            }
+          }
+        } catch {
+          // ignore — index may not exist yet
+        }
+
         const body: StatusResponse = {
           version: deps.version,
           nodeCount: sources.length,
@@ -148,7 +163,7 @@ export function createHandlers(deps: BridgeHandlersDeps) {
             failed: 0,
           },
           indexStatus: {
-            vectorCount: 0,
+            vectorCount,
             lastIndexed: new Date().toISOString(),
           },
         };
@@ -175,6 +190,26 @@ export function createHandlers(deps: BridgeHandlersDeps) {
         if (existsSync(path.join(objPath, 'L2.json'))) artifacts.l2 = path.join(objPath, 'L2.json');
         const buildRaw = await readFileAsync(path.join(objPath, 'node.json'), 'utf-8');
         return reply.send({ node, artifacts, build: JSON.parse(buildRaw) });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return errorReply(reply, 500, 'INTERNAL_ERROR', msg);
+      }
+    },
+
+    async listNodes(_request: FastifyRequest, reply: FastifyReply) {
+      try {
+        const sources = deps.registry.listSources();
+        const nodes: Array<{ hash: string; uri: string; lastSeenAt: string }> = [];
+        for (const src of sources) {
+          if (src.rootHash) {
+            nodes.push({
+              hash: src.rootHash,
+              uri: src.uri,
+              lastSeenAt: src.lastSeenAt,
+            });
+          }
+        }
+        return reply.send({ nodes, total: nodes.length });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         return errorReply(reply, 500, 'INTERNAL_ERROR', msg);

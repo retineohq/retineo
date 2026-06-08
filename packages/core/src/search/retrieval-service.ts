@@ -162,7 +162,7 @@ export class DefaultRetrievalService implements RetrievalService {
     this.config = deps.config ?? {
       defaultLanguage: 'en',
       languageDetection: { provider: 'franc', fallback: 'heuristic', confidenceThreshold: 0.7 },
-      semantic: { topK: 100, threshold: 0.75, hybridWeight: 0.7 },
+      semantic: { topK: 100, threshold: 0.5, hybridWeight: 0.7 },
       rerank: { topK: 10, weights: { concept: 1, claim: 0.5, summary: 0.8, language: 0.3 } },
       cascade: { budgets: { vague: 500, section: 800, precision: 1500 } },
       citations: { format: 'markdown', includeLineNumbers: true, includeTimestamps: true },

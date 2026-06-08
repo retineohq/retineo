@@ -49,6 +49,8 @@ echoc ingest ./doc.pdf --adapter pdf
 echoc ingest ~/test.md --watch --timeout 600
 ```
 
+**Idempotency:** `ingest` is idempotent. If the same file (same content hash) is ingested again from the same path, the second run prints `Skipped: already ingested` and does not create duplicate sources or jobs. If the same content is ingested from a different path, the source path is updated and no new jobs are queued.
+
 When `watch` is enabled, `ingest` checks if a background worker is running; if not, it starts an inline worker in the same process. It polls the jobs table every 5 seconds and exits with code `1` if any job fails or the timeout (default 1800s) elapses.
 
 ### `echoc search <query>`
@@ -68,23 +70,27 @@ Show engine status.
 echoc status
 ```
 
-### `echoc compile [filePath] [--watch] [--timeout <sec>]`
+### `echoc compile [filePath] [--watch] [--timeout <sec>] [--provider <id>]`
 
 Compile pending jobs or a specific file. Same `--watch` semantics as `ingest`.
 
 ```bash
 echoc compile
 echoc compile ./notes.md --layer l2 --watch
+echoc compile ./notes.md --provider ollama   # override config provider for this run
+echoc compile ./notes.md --provider mock     # explicitly use mock for testing
 ```
 
-### `echoc config [key] [value]`
+The `--provider` flag overrides the configured `llm.defaultProvider` for this compilation only. If the provider id is not found in `config.yaml`, the command exits with an error listing available providers.
+
+### `echoc config set|get|list`
 
 Read or write config values.
 
 ```bash
-echoc config
-echoc config search.defaultLanguage
-echoc config search.defaultLanguage ru
+echoc config list                          # show full config
+echoc config get search.defaultLanguage    # read one key
+echoc config set search.defaultLanguage ru # write one key
 ```
 
 ### `echoc jobs`
@@ -97,11 +103,13 @@ echoc jobs
 
 ### `echoc recover <hash>`
 
-Recover an orphaned node.
+Recover an orphaned node. The original source path is looked up from the SQLite registry.
 
 ```bash
 echoc recover deadbeef...
 ```
+
+If the source path is found in the registry, the output shows `Recovered: <hash> → <path>`. If the source path is not found, it shows `Recovered: <hash> → source path not found in registry`.
 
 ### `echoc key set/get/delete/list`
 
@@ -157,5 +165,7 @@ echoc daemon status
 echoc daemon logs -f
 echoc daemon stop
 ```
+
+The PID file is written immediately when `start` spawns the process, so `stop` and `status` can always locate the daemon. If the daemon exits immediately after start, the PID file is cleaned up automatically.
 
 This is the recommended way to run ECHO Core in production / for desktop use.

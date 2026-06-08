@@ -16,7 +16,7 @@ import { DefaultIngestionService } from '../dist/adapters/ingestion.js';
 import { DefaultQueryAnalyzer } from '../dist/search/query-analyzer.js';
 import { DefaultRetrievalService } from '../dist/search/retrieval-service.js';
 import { DefaultContextAssembler } from '../dist/search/context-assembler.js';
-import { MockLLMProvider } from '../dist/llm/providers/mock.js';
+import { DefaultLLMProviderFactory, DefaultEmbeddingProviderFactory } from '../dist/llm/factory.js';
 import { DefaultCompilationPipeline } from '../dist/layers/pipeline.js';
 import { createLogger } from '../dist/utils/logger.js';
 import path from 'path';
@@ -54,7 +54,7 @@ async function main() {
       search: {
         defaultLanguage: 'en',
         languageDetection: { provider: 'franc', fallback: 'heuristic', confidenceThreshold: 0.7 },
-        semantic: { topK: 100, threshold: 0.75, hybridWeight: 0.7 },
+        semantic: { topK: 100, threshold: 0.5, hybridWeight: 0.7 },
         rerank: { topK: 10, weights: { concept: 1.0, claim: 0.5, summary: 0.8, language: 0.3 } },
         cascade: { budgets: { vague: 500, section: 800, precision: 1500 } },
         citations: { format: 'markdown', includeLineNumbers: true, includeTimestamps: true },
@@ -129,9 +129,29 @@ async function main() {
   // --- Search ---
   const secretsManager = new FileSecretsManager(path.join(resolvedDataDir, 'secrets.json'));
   const queryAnalyzer = new DefaultQueryAnalyzer({ searchConfig: config.search });
-  const embedder = new MockLLMProvider({ id: 'mock-embedder', type: 'mock', dimension: 384 });
+
+  // --- LLM / Embedding providers from config ---
+  const llmFactory = new DefaultLLMProviderFactory();
+  const embedFactory = new DefaultEmbeddingProviderFactory();
+  try {
+    await llmFactory.loadFromConfig(config, secretsManager);
+    await embedFactory.loadFromConfig(config, secretsManager);
+  } catch (err) {
+    logger.warn('cli.providerLoadFailed', { error: err instanceof Error ? err.message : String(err) });
+  }
+
+  const llmProvider = llmFactory.list().length > 0 ? llmFactory.getDefault() : null;
+  const embedder = embedFactory.list().length > 0 ? embedFactory.getDefault() : null;
+
+  if (!llmProvider) {
+    logger.warn('cli.noLlmProvider', { message: 'No LLM provider configured. L2 generation will fail. Run echoc init to configure.' });
+  }
+  if (!embedder) {
+    logger.warn('cli.noEmbedProvider', { message: 'No embedding provider configured. L3 generation will fail. Run echoc init to configure.' });
+  }
+
   const retrievalService = new DefaultRetrievalService({
-    embeddingProvider: embedder,
+    embeddingProvider: embedder || new (await import('../dist/llm/providers/mock.js')).MockLLMProvider({ id: 'mock-embedder', type: 'mock', dimension: 384 }),
     casStorage: cas,
     indexDir: path.join(resolvedDataDir, 'index'),
     config: config.search,
@@ -140,11 +160,19 @@ async function main() {
   const contextAssembler = new DefaultContextAssembler({ config: config.search });
 
   // --- Pipeline ---
+  const l1Generator = new (await import('../dist/layers/l1-generator.js')).DefaultL1Generator();
+  const l2Generator = new (await import('../dist/layers/l2-generator.js')).DefaultL2Generator();
+  const l3Generator = new (await import('../dist/layers/l3-generator.js')).DefaultL3Generator();
+
   const pipeline = new DefaultCompilationPipeline({
-    registry,
     cas,
-    nodeBuilder,
-    llmProvider: null,
+    registry,
+    l1Generator,
+    l2Generator,
+    l3Generator,
+    llmProvider,
+    embeddingProvider: embedder,
+    dataDir: resolvedDataDir,
     logger,
   });
 
