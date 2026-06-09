@@ -13,6 +13,8 @@ import type { ConfigManager, EchoConfig, ProviderConfigEntry } from '../storage/
 import type { CompilationPipeline } from '../layers/pipeline.js';
 import type { SecretsManager } from '../storage/secrets.js';
 import { formatSearchResult, formatStatus, formatJobs, formatIngestResult, formatConfig, formatRecoverResult } from './formatters.js';
+import { DefaultGhostRecoveryService } from '../ghost/recovery-service.js';
+import type { L1Index } from '../layers/l1-generator.js';
 import { runDoctor, formatDoctor } from './doctor.js';
 import { ask, choose, confirm } from './prompt.js';
 import {
@@ -148,6 +150,50 @@ export class CLICommands {
     const assembled = await this.deps.contextAssembler.assemble(analyzed, results.selected, {
       maxTokens: 8000,
     });
+
+    // Build DocumentHits with L1 navigation trees
+    const l1Indices = new Map<string, L1Index>();
+    const { readFile } = await import('fs/promises');
+    const { existsSync } = await import('fs');
+    const { join } = await import('path');
+
+    // Build document hits directly from selected candidates
+    const docHits: Array<{
+      sourceHash: string;
+      sourcePath: string;
+      score: number;
+      l2Summary: string;
+      navTree: L1Index['sections'] | null;
+    }> = [];
+    for (const c of results.selected) {
+      const sources = this.deps.registry.listSources();
+      const source = sources.find((s) => s.rootHash === c.nodeId);
+      const sourcePath = source?.uri ?? c.nodeId;
+
+      // Load L1 index for navigation tree
+      let sections: L1Index['sections'] | null = null;
+      if (!l1Indices.has(c.nodeId)) {
+        try {
+          const objPath = this.deps.cas.getObjectPath(c.nodeId);
+          const l1Path = join(objPath, 'L1.index.json');
+          if (existsSync(l1Path)) {
+            l1Indices.set(c.nodeId, JSON.parse(await readFile(l1Path, 'utf-8')) as L1Index);
+          }
+        } catch {
+          // skip
+        }
+      }
+      sections = l1Indices.get(c.nodeId)?.sections ?? null;
+
+      docHits.push({
+        sourceHash: c.nodeId,
+        sourcePath,
+        score: c.score,
+        l2Summary: c.l2Summary ?? '',
+        navTree: sections,
+      });
+    }
+
     const payload = {
       query,
       language: analyzed.language,
@@ -156,6 +202,7 @@ export class CLICommands {
       assembled,
       citations: results.citations,
       durationMs: results.trace.durationMs,
+      documentHits: docHits,
     };
     console.log(formatSearchResult(payload, { json: options?.json }));
   }
@@ -964,6 +1011,41 @@ export class CLICommands {
     // registry while the worker drains the queue. This is identical to
     // running `echoc worker start` programmatically.
     await this.startService('worker');
+  }
+
+  // --- Ghost System ---
+
+  async ghostList(): Promise<void> {
+    const ghost = new DefaultGhostRecoveryService(this.deps.registry, this.deps.cas);
+    const orphans = await ghost.listGhosts();
+    if (orphans.length === 0) {
+      console.log('No orphaned objects found.');
+      return;
+    }
+    console.log(`Found ${orphans.length} orphaned object(s):\n`);
+    for (const o of orphans) {
+      console.log(`  Hash:     ${o.hash}`);
+      console.log(`  Source:   ${o.originalSourceId}`);
+      console.log(`  Path:     ${o.l2Path ?? '(unknown)'}`);
+      console.log(`  Orphaned: ${o.orphanedAt}`);
+      console.log('');
+    }
+  }
+
+  async ghostRecover(hash: string, targetPath?: string): Promise<void> {
+    const ghost = new DefaultGhostRecoveryService(this.deps.registry, this.deps.cas);
+    try {
+      await ghost.recover(hash, targetPath);
+      console.log(`✅ Recovered ${hash}`);
+    } catch (err) {
+      console.error(`❌ Recovery failed: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+
+  async ghostPurge(days: number): Promise<void> {
+    const ghost = new DefaultGhostRecoveryService(this.deps.registry, this.deps.cas);
+    const purged = await ghost.purge(days);
+    console.log(`Purged ${purged} orphaned object(s) older than ${days} day(s).`);
   }
 }
 

@@ -249,6 +249,31 @@ export function createCLI(deps: CLICommandsDeps): Command {
       await commands.daemonLogs({ follow: options.follow, lines: options.lines });
     });
 
+  // --- Ghost System ---
+  const ghostCmd = program.command('ghost').description('Manage orphaned objects (deleted/modified sources)');
+
+  ghostCmd
+    .command('list')
+    .description('List all orphaned objects')
+    .action(async () => {
+      await commands.ghostList();
+    });
+
+  ghostCmd
+    .command('recover <hash>')
+    .description('Recover an orphaned object from CAS')
+    .option('-t, --target <path>', 'Target path for recovery')
+    .action(async (hash: string, options: { target?: string }) => {
+      await commands.ghostRecover(hash, options.target);
+    });
+
+  ghostCmd
+    .command('purge <days>')
+    .description('Remove orphaned objects older than N days')
+    .action(async (days: string) => {
+      await commands.ghostPurge(parseInt(days, 10));
+    });
+
   return program;
 }
 

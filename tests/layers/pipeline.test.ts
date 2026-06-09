@@ -9,6 +9,7 @@ import os from 'os';
 import { DefaultCompilationPipeline } from '../../packages/core/src/layers/pipeline.js';
 import { LocalCASStorage, computeHash } from '../../packages/core/src/storage/cas.js';
 import { SQLiteRegistry } from '../../packages/core/src/storage/registry.js';
+import { DefaultContextNodeRepository } from '../../packages/core/src/storage/context-node-repository.js';
 import { DefaultL1Generator } from '../../packages/core/src/layers/l1-generator.js';
 import { DefaultL2Generator } from '../../packages/core/src/layers/l2-generator.js';
 import { DefaultL3Generator } from '../../packages/core/src/layers/l3-generator.js';
@@ -29,10 +30,12 @@ describe('DefaultCompilationPipeline', () => {
     dataDir = tmpDir;
     cas = new LocalCASStorage(dataDir);
     registry = new SQLiteRegistry(path.join(dataDir, 'registry.sqlite'));
+    const contextNodeRepository = new DefaultContextNodeRepository(cas, registry);
 
     pipeline = new DefaultCompilationPipeline({
       cas,
       registry,
+      contextNodeRepository,
       l1Generator: new DefaultL1Generator(),
       l2Generator: new DefaultL2Generator(),
       l3Generator: new DefaultL3Generator(),
@@ -179,9 +182,11 @@ describe('DefaultCompilationPipeline', () => {
   });
 
   it('fails with clear error when LLM provider is null on L2 job', async () => {
+    const contextNodeRepository = new DefaultContextNodeRepository(cas, registry);
     const noLlmPipeline = new DefaultCompilationPipeline({
       cas,
       registry,
+      contextNodeRepository,
       l1Generator: new DefaultL1Generator(),
       l2Generator: new DefaultL2Generator(),
       l3Generator: new DefaultL3Generator(),
@@ -210,9 +215,11 @@ describe('DefaultCompilationPipeline', () => {
   });
 
   it('fails with clear error when embedding provider is null on L3 job', async () => {
+    const contextNodeRepository = new DefaultContextNodeRepository(cas, registry);
     const noEmbedPipeline = new DefaultCompilationPipeline({
       cas,
       registry,
+      contextNodeRepository,
       l1Generator: new DefaultL1Generator(),
       l2Generator: new DefaultL2Generator(),
       l3Generator: new DefaultL3Generator(),

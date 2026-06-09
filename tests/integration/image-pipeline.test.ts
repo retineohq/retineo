@@ -14,6 +14,7 @@ import { DefaultAdapterManager } from '../../packages/core/src/adapters/manager.
 import { DefaultAdapterProcessRunner } from '../../packages/core/src/adapters/runner.js';
 import { DefaultIngestionService } from '../../packages/core/src/adapters/ingestion.js';
 import { DefaultCompilationPipeline } from '../../packages/core/src/layers/pipeline.js';
+import { DefaultContextNodeRepository } from '../../packages/core/src/storage/context-node-repository.js';
 import { DefaultL1Generator } from '../../packages/core/src/layers/l1-generator.js';
 import { DefaultL2Generator } from '../../packages/core/src/layers/l2-generator.js';
 import { DefaultL3Generator } from '../../packages/core/src/layers/l3-generator.js';
@@ -56,9 +57,11 @@ beforeEach(async () => {
 
   const llm = new MockLLMProvider({ id: 'mock', model: 'mock', apiKey: '' });
   const embedder = new MockLLMProvider({ id: 'mock', model: 'mock', apiKey: '' });
+  const contextNodeRepository = new DefaultContextNodeRepository(cas, registry);
   pipeline = new DefaultCompilationPipeline({
     cas,
     registry,
+    contextNodeRepository,
     l1Generator: new DefaultL1Generator(),
     l2Generator: new DefaultL2Generator(),
     l3Generator: new DefaultL3Generator(),

@@ -10,7 +10,7 @@ import { tmpdir } from 'os';
 import path from 'path';
 import { writeFile } from 'fs/promises';
 
-describe('BruteForceHNSW (fallback)', () => {
+describe('HNSW Index (native or fallback)', () => {
   it('builds and searches', async () => {
     const index = await createHNSWIndex(3);
     index.build([

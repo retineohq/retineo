@@ -9,12 +9,14 @@ import path from 'path';
 import type { EmbeddingProvider } from '../llm/provider.js';
 import type { CASStorage } from '../storage/cas.js';
 import type { Hash, L2Artifact, SourceRef } from '../domain/types.js';
+import type { Section, Chunk, L1Index } from '../layers/l1-generator.js';
 import type { SearchConfig } from '../storage/config.js';
 import type { AnalyzedQuery, QueryIntent } from './query-analyzer.js';
 import type { Logger } from '../utils/logger.js';
 import { getGlobalLogger } from '../utils/logger.js';
 import type { LRUCache } from '../utils/cache.js';
 import { SimpleLRUCache } from '../utils/cache.js';
+import { OkapiBM25, tokenize } from './bm25.js';
 
 const readFileAsync = promisify(readFile);
 
@@ -61,6 +63,138 @@ export interface Citation {
   sourceRef?: SourceRef;
 }
 
+// --- Document Hit + L1 Navigation (Section 5) ---
+
+export interface ChunkHit {
+  chunkId: string;
+  score: number;
+  sectionId: string;
+  lineRange: [number, number];
+}
+
+export interface NavigationNode {
+  sectionId: string;
+  heading: string;
+  level: number;
+  chunkHits: ChunkHit[];
+  children: NavigationNode[];
+}
+
+export interface DocumentHit {
+  sourceHash: Hash;
+  sourcePath: string;
+  documentScore: number;
+  maxChunkScore: number;
+  coverageBonus: number;
+  densityBonus: number;
+  chunks: ChunkHit[];
+  navigationTree: NavigationNode[] | null;
+}
+
+export interface DocumentScore {
+  documentScore: number;
+  maxChunkScore: number;
+  coverageBonus: number;
+  densityBonus: number;
+}
+
+/** Aggregate chunk scores into a document-level score. */
+export function calculateDocumentScore(chunks: ChunkHit[]): DocumentScore {
+  if (chunks.length === 0) {
+    return { documentScore: 0, maxChunkScore: 0, coverageBonus: 0, densityBonus: 0 };
+  }
+  const maxScore = Math.max(...chunks.map((c) => c.score));
+  const uniqueSections = new Set(chunks.map((c) => c.sectionId)).size;
+  const totalChunks = chunks.length;
+
+  const coverageBonus = uniqueSections > 1 ? uniqueSections * 0.05 : 0;
+  const densityBonus = uniqueSections === 1 && totalChunks > 1 ? 0.1 : 0;
+
+  return {
+    documentScore: maxScore + coverageBonus + densityBonus,
+    maxChunkScore: maxScore,
+    coverageBonus,
+    densityBonus,
+  };
+}
+
+/** Find which L1 section a chunk belongs to by line range. */
+function findSectionForChunk(chunkLineStart: number, sections: Section[]): Section | null {
+  for (const section of sections) {
+    if (chunkLineStart >= section.lineStart && chunkLineStart < section.lineEnd) {
+      // Check children first (more specific match)
+      const childMatch = findSectionForChunk(chunkLineStart, section.children);
+      if (childMatch) return childMatch;
+      return section;
+    }
+  }
+  return null;
+}
+
+/** Build a navigation tree from chunk hits and L1 index. */
+export function buildNavigationTree(
+  chunks: ChunkHit[],
+  l1Index: L1Index
+): NavigationNode[] | null {
+  if (!l1Index?.sections || l1Index.sections.length === 0) return null;
+
+  function buildNodes(sections: Section[]): NavigationNode[] {
+    return sections.map((section) => {
+      const sectionId = `${section.lineStart}-${section.lineEnd}`;
+      const sectionChunks = chunks.filter((c) => c.sectionId === sectionId);
+      return {
+        sectionId,
+        heading: section.title,
+        level: section.level,
+        chunkHits: sectionChunks,
+        children: buildNodes(section.children),
+      };
+    });
+  }
+
+  return buildNodes(l1Index.sections);
+}
+
+/** Group chunk hits by source document. */
+export function aggregateDocumentHits(
+  chunkHits: Array<ChunkHit & { sourceHash: Hash; sourcePath: string }>,
+  l1Indices: Map<Hash, L1Index>
+): DocumentHit[] {
+  const byDoc = new Map<Hash, Array<ChunkHit & { sourceHash: Hash; sourcePath: string }>>();
+  for (const ch of chunkHits) {
+    const existing = byDoc.get(ch.sourceHash) ?? [];
+    existing.push(ch);
+    byDoc.set(ch.sourceHash, existing);
+  }
+
+  const hits: DocumentHit[] = [];
+  for (const [hash, chunks] of byDoc) {
+    const chunkHits: ChunkHit[] = chunks.map((c) => ({
+      chunkId: c.chunkId,
+      score: c.score,
+      sectionId: c.sectionId,
+      lineRange: c.lineRange,
+    }));
+    const score = calculateDocumentScore(chunkHits);
+    const l1 = l1Indices.get(hash) ?? null;
+    hits.push({
+      sourceHash: hash,
+      sourcePath: chunks[0].sourcePath,
+      documentScore: score.documentScore,
+      maxChunkScore: score.maxChunkScore,
+      coverageBonus: score.coverageBonus,
+      densityBonus: score.densityBonus,
+      chunks: chunkHits,
+      navigationTree: l1 ? buildNavigationTree(chunkHits, l1) : null,
+    });
+  }
+
+  hits.sort((a, b) => b.documentScore - a.documentScore);
+  return hits;
+}
+
+// --- End Document Hit + L1 Navigation ---
+
 export interface RetrievalService {
   search(query: AnalyzedQuery, options?: SearchOptions): Promise<RetrievalResult>;
 }
@@ -96,38 +230,35 @@ async function loadEmbeddings(indexDir: string): Promise<Array<{ hash: string; v
   return out;
 }
 
-/** Load BM25 inverted index. */
-async function loadBM25(indexDir: string): Promise<Record<string, string[]>> {
+/** Load BM25 data and build OkapiBM25 index. */
+async function loadOkapiBM25(indexDir: string): Promise<OkapiBM25> {
   const bm25Path = path.join(indexDir, 'bm25.json');
-  if (!existsSync(bm25Path)) return {};
+  const bm25 = new OkapiBM25();
+  if (!existsSync(bm25Path)) return bm25;
   try {
-    const raw = await readFileAsync(bm25Path, 'utf-8');
-    return JSON.parse(raw) as Record<string, string[]>;
-  } catch {
-    return {};
-  }
-}
+    const raw = JSON.parse(await readFileAsync(bm25Path, 'utf-8'));
+    // Backward compat: old format was Record<string, string[]>
+    const invertedIndex: Record<string, string[]> = raw.invertedIndex ?? raw;
 
-/** Simple TF keyword scoring. */
-function keywordScore(query: string, bm25: Record<string, string[]>): Map<string, number> {
-  const terms = query
-    .toLowerCase()
-    .replace(/[^a-z0-9\u0400-\u04FF\u4E00-\u9FFF\s]/g, ' ')
-    .split(/\s+/)
-    .filter((t) => t.length > 2);
-  const scores = new Map<string, number>();
-  for (const term of terms) {
-    const hashes = bm25[term] ?? [];
-    for (const h of hashes) {
-      scores.set(h, (scores.get(h) ?? 0) + 1);
+    // Rebuild OkapiBM25 from inverted index
+    const docTerms = new Map<string, string[]>();
+    for (const [term, hashes] of Object.entries(invertedIndex)) {
+      for (const hash of hashes) {
+        let terms = docTerms.get(hash);
+        if (!terms) {
+          terms = [];
+          docTerms.set(hash, terms);
+        }
+        terms.push(term);
+      }
     }
+    for (const [hash, terms] of docTerms) {
+      bm25.addDocument(hash, terms);
+    }
+  } catch {
+    // empty index
   }
-  let max = 0;
-  for (const v of scores.values()) max = Math.max(max, v);
-  if (max > 0) {
-    for (const [k, v] of scores) scores.set(k, v / max);
-  }
-  return scores;
+  return bm25;
 }
 
 export interface RetrievalServiceDeps {
@@ -208,15 +339,21 @@ export class DefaultRetrievalService implements RetrievalService {
       l3Scores = l3Scores.slice(0, topK);
     }
 
-    // Keyword search (BM25)
+    // Keyword search (Okapi BM25)
     let kwScores = new Map<string, number>();
     if (mode === 'keyword' || mode === 'hybrid') {
-      trace.steps.push('L3: keyword search');
-      const bm25 = await loadBM25(this.indexDir);
-      kwScores = keywordScore(query.enrichedQuery, bm25);
+      trace.steps.push('L3: BM25 search');
+      const bm25 = await loadOkapiBM25(this.indexDir);
+      const queryTokens = tokenize(query.enrichedQuery);
+      const bm25Results = bm25.scoreAll(queryTokens, topK);
+      // Use raw BM25 scores (already ranked)
+      for (const r of bm25Results) {
+        kwScores.set(r.hash, r.score);
+      }
       if (mode === 'keyword') {
+        // BM25 scores are raw (can be negative/zero); take top K by rank
         for (const [hash, score] of kwScores) {
-          if (score >= threshold) l3Scores.push({ hash, score });
+          l3Scores.push({ hash, score });
         }
         l3Scores.sort((a, b) => b.score - a.score);
         l3Scores = l3Scores.slice(0, topK);
@@ -236,7 +373,6 @@ export class DefaultRetrievalService implements RetrievalService {
       }
       l3Scores = Array.from(hybridMap.entries())
         .map(([hash, score]) => ({ hash, score }))
-        .filter((s) => s.score >= threshold)
         .sort((a, b) => b.score - a.score)
         .slice(0, topK);
     }

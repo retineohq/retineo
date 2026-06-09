@@ -286,8 +286,9 @@ describe('E2E Real: BM25 Index', () => {
     const bm25Path = path.join(DATA_DIR, 'index', 'bm25.json');
     expect(fs.existsSync(bm25Path)).toBe(true);
 
-    const bm25 = JSON.parse(fs.readFileSync(bm25Path, 'utf-8')) as Record<string, string[]>;
-    const terms = Object.keys(bm25);
+    const bm25Raw = JSON.parse(fs.readFileSync(bm25Path, 'utf-8'));
+    const invertedIndex = bm25Raw.invertedIndex ?? bm25Raw; // backward compat
+    const terms = Object.keys(invertedIndex);
     expect(terms.length).toBeGreaterThan(0);
 
     // Should have relevant terms from the test document

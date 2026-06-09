@@ -22,6 +22,7 @@ import { DefaultContextAssembler } from '../search/context-assembler.js';
 import { DefaultLLMProviderFactory, DefaultEmbeddingProviderFactory } from '../llm/factory.js';
 import { FileSecretsManager } from '../storage/secrets.js';
 import { DefaultCompilationPipeline } from '../layers/pipeline.js';
+import { DefaultContextNodeRepository } from '../storage/context-node-repository.js';
 import { DefaultQueueWorker } from '../layers/worker.js';
 import { DefaultL1Generator } from '../layers/l1-generator.js';
 import { DefaultL2Generator } from '../layers/l2-generator.js';
@@ -42,6 +43,7 @@ export interface DaemonServices {
   worker: DefaultQueueWorker;
   bridge: FastifyBridgeServer;
   registry: SQLiteRegistry;
+  cas: LocalCASStorage;
   shutdownManager: DefaultShutdownManager;
   logger: ReturnType<typeof createLogger>;
 }
@@ -88,9 +90,11 @@ export async function startDaemonServices(): Promise<DaemonServices> {
   const l2Generator = new DefaultL2Generator();
   const l3Generator = new DefaultL3Generator();
 
+  const contextNodeRepository = new DefaultContextNodeRepository(cas, registry);
   const pipeline = new DefaultCompilationPipeline({
     cas,
     registry,
+    contextNodeRepository,
     l1Generator,
     l2Generator,
     l3Generator,
@@ -172,7 +176,7 @@ export async function startDaemonServices(): Promise<DaemonServices> {
     shutdownManager,
   });
 
-  return { worker, bridge, registry, shutdownManager, logger };
+  return { worker, bridge, registry, cas, shutdownManager, logger };
 }
 
 /**
@@ -190,12 +194,25 @@ export async function runDaemon(): Promise<void> {
     void services.shutdownManager.initiate('SIGINT');
   });
 
-  // Shutdown order: bridge → worker → registry
+  // Shutdown order: bridge → worker → orphan detection → registry
   services.shutdownManager.register(async () => {
     await services.bridge.stop();
   });
   services.shutdownManager.register(async () => {
     await services.worker.stop();
+  });
+  services.shutdownManager.register(async () => {
+    // Detect orphans on shutdown
+    try {
+      const { DefaultOrphanDetector } = await import('../ghost/orphan-detector.js');
+      const detector = new DefaultOrphanDetector(services.registry, services.cas, services.logger);
+      const orphans = await detector.detectDeletedSources();
+      if (orphans.length > 0) {
+        services.logger.info('ghost.shutdown.detected', { count: orphans.length });
+      }
+    } catch (err) {
+      services.logger.warn('ghost.shutdown.failed', { error: String(err) });
+    }
   });
   services.shutdownManager.register(async () => {
     services.registry.close();

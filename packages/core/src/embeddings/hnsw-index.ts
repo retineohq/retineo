@@ -6,6 +6,8 @@
 import { writeFile, readFile, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
+import type { Logger } from '../utils/logger.js';
+import { getGlobalLogger } from '../utils/logger.js';
 
 export interface HNSWIndex {
   build(vectors: Array<{ hash: string; vector: number[] }>): void;
@@ -84,19 +86,21 @@ try {
   nativeHNSW = null;
 }
 
-/** Try native hnswlib-node, fallback to brute-force */
+/** Try native hnswlib-node, fallback to brute-force with warning */
 export async function createHNSWIndex(
   dimension: number,
-  metric: 'cosine' | 'euclidean' | 'ip' = 'cosine'
+  metric: 'cosine' | 'euclidean' | 'ip' = 'cosine',
+  logger?: Logger
 ): Promise<HNSWIndex> {
   if (nativeHNSW) {
     try {
       const index = new nativeHNSW.HierarchicalNSW(metric, dimension);
       return new NativeHNSWWrapper(index, metric, dimension);
-    } catch {
-      // fall through
+    } catch (error) {
+      (logger ?? getGlobalLogger()).warn('HNSW native init failed, using brute-force fallback', { error: String(error) });
     }
   }
+  (logger ?? getGlobalLogger()).warn('HNSW native unavailable, using brute-force fallback');
   return new BruteForceHNSW();
 }
 
@@ -106,6 +110,7 @@ class NativeHNSWWrapper implements HNSWIndex {
   private dimension: number;
   private maxElements = 100000;
   private curCount = 0;
+  private labelToHash: Map<number, string> = new Map();
 
   constructor(index: unknown, metric: string, dimension: number) {
     this.index = index;
@@ -125,11 +130,13 @@ class NativeHNSWWrapper implements HNSWIndex {
       idx.resizeIndex(this.maxElements);
     }
     for (const v of vectors) {
-      idx.addPoint(v.vector, this.curCount++);
+      const label = this.curCount++;
+      this.labelToHash.set(label, v.hash);
+      idx.addPoint(v.vector, label);
     }
   }
 
-  add(_hash: string, vector: number[]): void {
+  add(hash: string, vector: number[]): void {
     const idx = this.index as {
       resizeIndex: (n: number) => void;
       addPoint: (vec: number[], label: number) => void;
@@ -138,24 +145,42 @@ class NativeHNSWWrapper implements HNSWIndex {
       this.maxElements *= 2;
       idx.resizeIndex(this.maxElements);
     }
-    idx.addPoint(vector, this.curCount++);
+    const label = this.curCount++;
+    this.labelToHash.set(label, hash);
+    idx.addPoint(vector, label);
   }
 
   search(query: number[], k: number): Array<{ hash: string; distance: number }> {
     const result = (this.index as { searchKnn: (q: number[], k: number) => { neighbors: number[]; distances: number[] } }).searchKnn(query, k);
     const out: Array<{ hash: string; distance: number }> = [];
     for (let i = 0; i < result.neighbors.length; i++) {
-      out.push({ hash: String(result.neighbors[i]), distance: result.distances[i] });
+      const label = result.neighbors[i];
+      out.push({ hash: this.labelToHash.get(label) ?? String(label), distance: result.distances[i] });
     }
     return out;
   }
 
   async save(filePath: string): Promise<void> {
     (this.index as { writeIndexSync: (p: string) => void }).writeIndexSync(filePath);
+    // Persist label→hash mapping alongside native index
+    const mappingPath = filePath + '.labels.json';
+    const mapping: Record<number, string> = {};
+    for (const [label, hash] of this.labelToHash) mapping[label] = hash;
+    await writeFile(mappingPath, JSON.stringify(mapping), 'utf-8');
   }
 
   async load(filePath: string): Promise<void> {
     (this.index as { readIndexSync: (p: string) => void }).readIndexSync(filePath);
+    // Restore label→hash mapping
+    const mappingPath = filePath + '.labels.json';
+    try {
+      const raw = await readFile(mappingPath, 'utf-8');
+      const mapping = JSON.parse(raw) as Record<number, string>;
+      this.labelToHash = new Map(Object.entries(mapping).map(([k, v]) => [Number(k), v]));
+      this.curCount = this.labelToHash.size;
+    } catch {
+      // no mapping saved (legacy or brute-force), use numeric labels
+    }
   }
 
   size(): number {

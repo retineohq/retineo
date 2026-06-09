@@ -37,31 +37,51 @@ function createL2(summary: string, concepts: string[]): L2Artifact {
 async function seedIndex(indexDir: string, cas: LocalCASStorage, provider: MockLLMProvider) {
   const l2a = createL2('Document about cats and felines.', ['cats', 'felines']);
   const l2b = createL2('Document about dogs and canines.', ['dogs', 'canines']);
+  const l2c = createL2('Document about birds and aves.', ['birds', 'aves']);
+  const l2d = createL2('Document about fish and marine life.', ['fish', 'marine']);
 
   // Generate embeddings via mock provider
   const [veca] = await provider.embed([l2a.summary]);
   const [vecb] = await provider.embed([l2b.summary]);
+  const [vecc] = await provider.embed([l2c.summary]);
+  const [vecd] = await provider.embed([l2d.summary]);
 
   // Write embeddings.jsonl
   const lines = [
     JSON.stringify({ hash: 'hash-a', vector: veca }),
     JSON.stringify({ hash: 'hash-b', vector: vecb }),
+    JSON.stringify({ hash: 'hash-c', vector: vecc }),
+    JSON.stringify({ hash: 'hash-d', vector: vecd }),
   ];
   writeFileSync(path.join(indexDir, 'embeddings.jsonl'), lines.join('\n') + '\n', 'utf-8');
 
-  // Write bm25.json
-  const bm25: Record<string, string[]> = {
-    cats: ['hash-a'],
-    felines: ['hash-a'],
-    dogs: ['hash-b'],
-    canines: ['hash-b'],
+  // Write bm25.json (extended format with docLengths for Okapi BM25)
+  const bm25Data = {
+    invertedIndex: {
+      cats: ['hash-a'],
+      felines: ['hash-a'],
+      dogs: ['hash-b'],
+      canines: ['hash-b'],
+      birds: ['hash-c'],
+      aves: ['hash-c'],
+      fish: ['hash-d'],
+      marine: ['hash-d'],
+    },
+    docLengths: {
+      'hash-a': 2,
+      'hash-b': 2,
+      'hash-c': 2,
+      'hash-d': 2,
+    },
   };
-  writeFileSync(path.join(indexDir, 'bm25.json'), JSON.stringify(bm25), 'utf-8');
+  writeFileSync(path.join(indexDir, 'bm25.json'), JSON.stringify(bm25Data), 'utf-8');
 
   // Write CAS objects with L2 artifacts
   for (const [hash, l2] of [
     ['hash-a', l2a],
     ['hash-b', l2b],
+    ['hash-c', l2c],
+    ['hash-d', l2d],
   ] as const) {
     const objDir = cas.getObjectPath(hash);
     mkdirSync(objDir, { recursive: true });

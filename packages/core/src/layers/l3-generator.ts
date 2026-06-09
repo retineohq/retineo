@@ -116,20 +116,28 @@ export class DefaultL3Generator implements L3Generator {
 
     // Update BM25 inverted index
     const bm25Path = path.join(indexDir, 'bm25.json');
-    let bm25: Record<string, string[]> = {};
+    let bm25Data: { invertedIndex: Record<string, string[]>; docLengths: Record<string, number> } = { invertedIndex: {}, docLengths: {} };
     if (existsSync(bm25Path)) {
       try {
-        bm25 = JSON.parse(await readFile(bm25Path, 'utf-8'));
+        const raw = JSON.parse(await readFile(bm25Path, 'utf-8'));
+        // Backward compat: old format was Record<string, string[]>
+        if (raw.invertedIndex) {
+          bm25Data = raw;
+        } else {
+          bm25Data = { invertedIndex: raw, docLengths: {} };
+        }
       } catch {
-        bm25 = {};
+        bm25Data = { invertedIndex: {}, docLengths: {} };
       }
     }
     const terms = buildTerms(l2Artifact);
     for (const term of terms) {
-      if (!bm25[term]) bm25[term] = [];
-      if (!bm25[term].includes(contentHash)) bm25[term].push(contentHash);
+      if (!bm25Data.invertedIndex[term]) bm25Data.invertedIndex[term] = [];
+      if (!bm25Data.invertedIndex[term].includes(contentHash)) bm25Data.invertedIndex[term].push(contentHash);
     }
-    await writeFile(bm25Path, JSON.stringify(bm25, null, 2));
+    // Store document length for Okapi BM25
+    bm25Data.docLengths[contentHash] = terms.length;
+    await writeFile(bm25Path, JSON.stringify(bm25Data, null, 2));
 
     // Update HNSW manifest
     const manifestPath = path.join(indexDir, 'hnsw.manifest.json');

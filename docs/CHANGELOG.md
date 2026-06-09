@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.2.0] - 2026-06-09
+
+### Architectural Fixes
+- **ContextNode First:** New `ContextNodeRepository` — single point of truth for loading/saving `ContextNode` via CAS + Registry. Pipeline and retrieval no longer construct CAS paths directly. `cas.ts` now persists `parentId` and `sourceRef` in `node.json` for full ContextNode reconstruction.
+- **HNSW as Default:** `hnswlib-node` promoted from optional to required dependency. `NativeHNSWWrapper` now maintains label→hash mapping (persisted as `.labels.json` alongside `hnsw.bin`). Fallback to `BruteForceHNSW` logs a warning.
+- **Okapi BM25:** New `OkapiBM25` class with proper IDF (`log((N-n+0.5)/(n+0.5))`), document length normalization, configurable k1=1.2/b=0.75. `bm25.json` format extended with `docLengths`. Retrieval service uses raw BM25 scores for keyword mode (no threshold filtering).
+- **Ghost System Lifecycle:** `DefaultOrphanDetector` detects deleted sources at shutdown. `DefaultGhostRecoveryService` provides list/recover/purge operations. CLI commands: `echoc ghost list`, `echoc ghost recover <hash> [-t path]`, `echoc ghost purge <days>`.
+- **Document Hit + L1 Navigation:** New `DocumentHit` aggregation groups chunk hits by source document with coverage/density bonuses. `buildNavigationTree` maps `ChunkHit[]` to `NavigationNode[]` using L1 section hierarchy. Exported: `calculateDocumentScore`, `aggregateDocumentHits`, `buildNavigationTree`.
+
+### Tests
+- 408 tests passing (was 365)
+- New: ContextNodeRepository (9), DocumentHit/NavigationTree (21), Ghost System (13)
+
 ## [0.1.1] - 2026-06-08
 
 ### Fixed

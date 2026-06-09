@@ -10,8 +10,10 @@ import crypto from 'crypto';
 import type {
   Hash,
   ContextNode,
+  SourceRef,
   ContentMeta,
   L2Artifact,
+  BuildManifest,
 } from '../domain/types.js';
 
 export type NodeArtifacts = {
@@ -83,7 +85,13 @@ export class LocalCASStorage implements CASStorage {
       await mkdir(dir, { recursive: true });
     }
 
-    await writeFile(path.join(dir, 'node.json'), JSON.stringify(node.build, null, 2));
+    // Persist parentId and sourceRef alongside BuildManifest for ContextNode reconstruction
+    const nodePayload = {
+      ...node.build,
+      parentId: node.parentId ?? null,
+      sourceRef: node.sourceRef,
+    };
+    await writeFile(path.join(dir, 'node.json'), JSON.stringify(nodePayload, null, 2));
     await writeFile(path.join(dir, 'content.md'), artifacts.content);
     await writeFile(path.join(dir, 'content.meta.json'), JSON.stringify(artifacts.meta, null, 2));
 
@@ -98,7 +106,16 @@ export class LocalCASStorage implements CASStorage {
   async readObject(hash: Hash): Promise<{ node: ContextNode; artifacts: NodeArtifacts }> {
     const dir = this.resolvePath(hash);
 
-    const buildManifest = JSON.parse(await readFile(path.join(dir, 'node.json'), 'utf-8'));
+    const rawManifest = JSON.parse(await readFile(path.join(dir, 'node.json'), 'utf-8'));
+    // Backward compat: node.json may be raw BuildManifest or extended with parentId/sourceRef
+    const buildManifest: BuildManifest = {
+      schemaVersion: rawManifest.schemaVersion,
+      nodeVersion: rawManifest.nodeVersion,
+      rawHash: rawManifest.rawHash,
+      contentHash: rawManifest.contentHash,
+      generators: rawManifest.generators,
+      buildTimestamp: rawManifest.buildTimestamp,
+    };
     const content = await readFile(path.join(dir, 'content.md'), 'utf-8');
     const meta = JSON.parse(await readFile(path.join(dir, 'content.meta.json'), 'utf-8')) as ContentMeta;
 
@@ -114,9 +131,11 @@ export class LocalCASStorage implements CASStorage {
       artifacts.l2 = JSON.parse(await readFile(l2Path, 'utf-8')) as L2Artifact;
     }
 
+    const sourceRef = rawManifest.sourceRef as SourceRef | undefined ?? { protocol: 'file', uri: '', mimeType: '' };
     const node: ContextNode = {
       id: hash,
-      sourceRef: { protocol: 'file', uri: '', mimeType: '' }, // reconstructed from registry if needed
+      sourceRef,
+      parentId: rawManifest.parentId as Hash | undefined,
       childrenIds: [],
       depth: 0,
       artifacts: {},

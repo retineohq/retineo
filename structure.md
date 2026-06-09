@@ -22,11 +22,11 @@ echo-core/
 │   ├── adapters/        # Adapter IPC protocol
 │   ├── storage/         # CAS, Registry, Config, NodeBuilder
 │   ├── embeddings/      # (planned) Vector embedding generation & caching
-│   ├── search/          # Query analysis, retrieval, context assembly
+│   ├── search/          # Query analysis, retrieval (BM25/semantic/hybrid), context assembly, DocumentHit
 │   ├── llm/             # LLM provider abstraction, rate limiting, factory
 │   ├── layers/          # L1/L2/L3 compilation pipelines, queue worker
 │   ├── context/         # (planned) Context assembly, window management
-│   ├── ghost/           # (planned) Orphan recovery, garbage collection
+│   ├── ghost/           # Orphan recovery, garbage collection
 │   ├── bridge/          # HTTP/gRPC API, WebSocket streaming
 │   ├── mcp/             # Model Context Protocol server
 │   ├── i18n/            # Language packs, detection, cross-lingual search
@@ -46,7 +46,7 @@ echo-core/
 │   ├── adapters/        # Transport, Manager, Ingestion, Mock adapter tests
 │   ├── llm/             # Provider factory, mock provider, rate limiter tests
 │   ├── layers/          # L1/L2/L3 generators, pipeline, worker tests
-│   ├── search/          # Query analyzer, retrieval service, context assembler, end-to-end
+│   ├── search/          # Query analyzer, retrieval service, context assembler, bm25, end-to-end, document-hit, navigation-tree
 │   ├── i18n/            # Language detector, pack registry tests
 │   ├── bridge/          # HTTP server, routes, SSE tests
 │   ├── cli/             # CLI command parsing and execution tests
@@ -124,7 +124,8 @@ echo-core/
 | `node-builder.ts` | `NodeBuilder`, `DefaultNodeBuilder`                                                    | Builds `ContextNode` trees + `BuildManifest` from adapter output.                               |
 | `secrets.ts`      | `SecretsManager`, `FileSecretsManager`, `resolveSecret`, `resolveConfigValue`          | AES-256-GCM encrypted secrets store (`~/.echo/secrets.json`).                                   |
 | `schema.sql`      | —                                                                                      | SQLite DDL: `sources`, `segments`, `jobs`, `orphaned_objects`, `encryption_keys`, `audit_logs`. |
-| `index.ts`        | Barrel export of `cas.js`, `registry.js`, `config.js`, `node-builder.js`, `secrets.js` | Public storage API entrypoint.                                                                  |
+| `context-node-repository.ts` | `ContextNodeRepository`, `DefaultContextNodeRepository` | Single point of truth for loading/saving ContextNode via CAS + Registry. |
+| `index.ts`        | Barrel export of `cas.js`, `registry.js`, `config.js`, `node-builder.js`, `secrets.js`, `context-node-repository.js` | Public storage API entrypoint.                                                                  |
 
 ### `src/embeddings/` — Vector Embeddings
 
@@ -139,7 +140,8 @@ echo-core/
 | File                   | Exports                                                                                                        | Description                                                                       |
 | ---------------------- | -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | `query-analyzer.ts`    | `QueryAnalyzer`, `DefaultQueryAnalyzer`, `AnalyzedQuery`, `QueryIntent`, `QuerySignal`, `SessionContext`       | Language detection, intent classification, entity extraction, pronoun resolution. |
-| `retrieval-service.ts` | `RetrievalService`, `DefaultRetrievalService`, `CandidateNode`, `RetrievalResult`, `Citation`, `SearchOptions` | L3 semantic/keyword/hybrid search, L2 rerank, L1/L0 cascade. Default threshold 0.5. |
+| `bm25.ts`              | `OkapiBM25`, `tokenize`                                                                          | Okapi BM25 with IDF, document length normalization, k1/b parameters.             |
+| `retrieval-service.ts` | `RetrievalService`, `DefaultRetrievalService`, `CandidateNode`, `RetrievalResult`, `Citation`, `SearchOptions`, `DocumentHit`, `ChunkHit`, `NavigationNode`, `calculateDocumentScore`, `buildNavigationTree`, `aggregateDocumentHits` | L3 semantic/BM25/hybrid search, L2 rerank, L1/L0 cascade, DocumentHit aggregation. |
 | `context-assembler.ts` | `ContextAssembler`, `DefaultContextAssembler`, `AssembledContext`, `ContextSegment`                            | Token budget allocation, citation generation, drill-down segments.                |
 | `index.ts`             | Barrel export of `query-analyzer.js`, `retrieval-service.js`, `context-assembler.js`                           | Public search API entrypoint.                                                     |
 
@@ -173,11 +175,13 @@ echo-core/
 | ---------- | ----------- | -------------------------- |
 | `index.ts` | `(planned)` | Barrel export placeholder. |
 
-### `src/ghost/` — Orphan Recovery & GC (planned)
+### `src/ghost/` — Orphan Recovery & GC
 
-| File       | Exports     | Description                |
-| ---------- | ----------- | -------------------------- |
-| `index.ts` | `(planned)` | Barrel export placeholder. |
+| File                    | Exports                                                                                       | Description                                                                       |
+| ----------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `orphan-detector.ts`    | `OrphanDetector`, `DefaultOrphanDetector`, `OrphanRecord`                                     | Detects deleted/modified source files and registers orphans.                      |
+| `recovery-service.ts`   | `GhostRecoveryService`, `DefaultGhostRecoveryService`                                         | List, recover, and purge orphaned objects from CAS.                               |
+| `index.ts`              | Barrel export of `orphan-detector.js`, `recovery-service.js`                                  | Public ghost API entrypoint.                                                      |
 
 ### `src/bridge/` — External API
 
@@ -247,6 +251,7 @@ echo-core/
 | `registry.test.ts`     | Sources CRUD, Segments CRUD + FK cascade, Job lease model (acquire/heartbeat/complete/fail/release), Orphan lifecycle | SQLite registry integrity, lease crash recovery, orphan purge.     |
 | `node-builder.test.ts` | `buildRoot`, `buildSegments`, `createBuildManifest`                                                                   | Node tree construction, placeholder generators, manifest validity. |
 | `secrets.test.ts`      | `FileSecretsManager` set/get/delete/list, encryption round-trip, `resolveSecret`, `resolveConfigValue`                | AES-256-GCM secrets storage and config resolution.                 |
+| `context-node-repository.test.ts` | loadByHash, loadBySourcePath, loadChildren, save roundtrip, buildManifest, loadL2 | DefaultContextNodeRepository correctness. |
 
 ### `tests/adapters/` — Adapter IPC Tests
 
@@ -290,6 +295,8 @@ echo-core/
 | `query-analyzer.test.ts`    | Language detection (heuristic/franc), intent classification (rule/LLM), entity extraction, pronoun resolution, signal generation | DefaultQueryAnalyzer correctness.    |
 | `retrieval-service.test.ts` | L3 semantic search, keyword search, hybrid mode, threshold filtering, L2 rerank scoring, L1/L0 cascade, trace                    | DefaultRetrievalService correctness. |
 | `context-assembler.test.ts` | Token budgets per intent, cascade modes, citation generation, drill-down children, language propagation                          | DefaultContextAssembler correctness. |
+| `document-hit.test.ts`      | calculateDocumentScore (coverage/density bonus), aggregateDocumentHits, L1 integration                                          | DocumentHit scoring and aggregation. |
+| `navigation-tree.test.ts`   | L1 H1/H2/H3 → tree, chunk→section mapping, section order                                                                      | Navigation tree construction.        |
 | `end-to-end.test.ts`        | Full pipeline: Russian query → detect → search → rerank → assemble → citations in Russian                                        | Cross-lingual end-to-end validation. |
 
 ### `tests/bridge/` — Bridge Tests
@@ -302,6 +309,13 @@ echo-core/
 | `sse.test.ts`          | SSE streaming, headers, events                                       | Server-Sent Events correctness.           |
 | `health.test.ts`       | GET /v1/health (healthy/unhealthy), GET /v1/ready (ready/not ready)  | Liveness and readiness probes.            |
 | `metrics.test.ts`      | GET /v1/metrics (JSON), GET /v1/metrics/prometheus (text format)     | Metrics collection and Prometheus export. |
+
+### `tests/ghost/` — Ghost System Tests
+
+| File                       | Tests                                                                                         | Description                                |
+| -------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| `orphan-detector.test.ts`  | detectDeletedSources (deleted/existing/multiple), orphan registry integration                 | DefaultOrphanDetector correctness.         |
+| `recovery-service.test.ts` | listGhosts, recover (success/not found/CAS missing), purge                                    | DefaultGhostRecoveryService correctness.   |
 
 ### `tests/cli/` — CLI Tests
 
@@ -316,6 +330,7 @@ echo-core/
 | `bridge-lifecycle.test.ts` | `bridgeStatus` reports stopped when no PID file; `bridgeStop` no-op; `bridgeLogs` handles missing log file | Bridge PID/lifecycle correctness. |
 | `ingest-watch.test.ts` | `ingest` prints queued job ids; uses mock registry that completes after a few polls | `--watch` flag plumbing. |
 | `daemon.test.ts`  | `daemon` module exports `startDaemonServices`/`runDaemon`; `process-manager` exports lifecycle helpers; `worker-script` exports `startWorkerServices` | Daemon + worker-script contract tests. |
+| `ghost-commands.test.ts` | ghostList empty/populated output, ghostRecover, ghostPurge | Ghost CLI command correctness. |
 | `key-list.test.ts` | `key list` empty state, masked output                        | Key management display.            |
 | `doctor.test.ts`   | `runDoctor`, `formatDoctor`, Node.js check, whisper.cpp check, whisper model check, output formatting | Dependency checker correctness.    |
 | `verbose.test.ts`  | `--verbose` flag sets debug level, pretty console output; config logging section defaults; `createLogger` with `logging` config | Verbose mode + config integration. |

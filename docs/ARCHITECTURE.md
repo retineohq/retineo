@@ -147,12 +147,81 @@ CLI: `echoc key set <provider> <key>`, `echoc key get <provider>`, `echoc key de
 See [`HEALTH.md`](HEALTH.md) for health probe config and alerting rules.
 See [`SECURITY.md`](SECURITY.md) for secrets and error handling details.
 
+## ContextNode Repository (v0.2.0)
+
+`ContextNodeRepository` is the single point of truth for loading and saving `ContextNode` objects. Business logic (pipeline, retrieval) works with `ContextNode`, never with raw CAS paths.
+
+```typescript
+interface ContextNodeRepository {
+  loadByHash(hash: Hash): Promise<ContextNode | null>;
+  loadBySourcePath(path: string): Promise<ContextNode | null>;
+  loadChildren(parentHash: Hash): Promise<ContextNode[]>;
+  save(node: ContextNode): Promise<void>;
+  buildManifest(node: ContextNode): BuildManifest;
+  loadL2(hash: Hash): Promise<L2Artifact | null>;
+}
+```
+
+`cas.ts` now persists `parentId` and `sourceRef` alongside the `BuildManifest` in `node.json`, enabling full `ContextNode` reconstruction without registry lookups.
+
+## Okapi BM25 (v0.2.0)
+
+Keyword search uses proper Okapi BM25 with IDF and document length normalization:
+
+```
+BM25(q, d) = Σ IDF(qi) · TF(qi,d) · (k1+1) / (TF(qi,d) + k1 · (1 - b + b · |d|/avgdl))
+```
+
+| Parameter | Default | Purpose |
+|-----------|---------|--------|
+| `k1` | 1.2 | Term saturation — higher = slower TF growth |
+| `b` | 0.75 | Length normalization — 0 = no normalization, 1 = full |
+
+- `bm25.json` format: `{ invertedIndex: {term: hash[]}, docLengths: {hash: num} }`
+- Backward compatible with old `Record<string, string[]>` format
+- Keyword search uses raw BM25 scores (no threshold filtering)
+- Hybrid mode: BM25 + semantic weighted by `search.semantic.hybridWeight`
+
+## Ghost System (v0.2.0)
+
+Orphan detection, recovery, and garbage collection for deleted/modified source files:
+
+| Component | Responsibility |
+|-----------|---------------|
+| `DefaultOrphanDetector` | Scans registered sources, detects deleted files, registers orphans |
+| `DefaultGhostRecoveryService` | Lists orphans, recovers from CAS, purges old entries |
+| CLI `ghost list` | Shows all orphaned objects |
+| CLI `ghost recover <hash>` | Restores content from CAS to original or custom path |
+| CLI `ghost purge <days>` | Removes orphans older than N days |
+
+Orphan detection runs at graceful shutdown to catch files deleted while the daemon was running.
+
+## Document Hit + L1 Navigation (v0.2.0)
+
+Search results aggregate chunk-level hits into document-level `DocumentHit` objects with navigation trees:
+
+```
+ChunkHit[] → aggregateDocumentHits() → DocumentHit[]
+  ├── documentScore = maxChunkScore + coverageBonus + densityBonus
+  ├── chunks: ChunkHit[] (with sectionId, lineRange)
+  └── navigationTree: NavigationNode[] (from L1 sections)
+```
+
+| Bonus | Condition | Value |
+|-------|-----------|-------|
+| Coverage | Chunks from >1 section | `uniqueSections × 0.05` |
+| Density | 2+ chunks in same section | `0.1` |
+
+`buildNavigationTree(chunks, l1Index)` maps `ChunkHit[]` to a tree of `NavigationNode` objects, one per L1 section, with chunk hits attached.
+
 ## Performance Optimization (Phase 7)
 
 ### HNSW Vector Index
 
-Approximate nearest neighbor search via `hnswlib-node` (native) with automatic brute-force fallback:
+Approximate nearest neighbor search via `hnswlib-node` (native, required dependency) with automatic brute-force fallback:
 - `createHNSWIndex(dimension, metric)` returns the best available implementation
+- `NativeHNSWWrapper` maintains label→hash mapping (persisted as `.labels.json` alongside `hnsw.bin`)
+- Fallback to `BruteForceHNSW` logs a warning via the logger
 - `loadOrBuildHNSW(indexDir, dimension, model)` rebuilds from `embeddings.jsonl` on manifest mismatch
 - Manifest tracks `dimension`, `metric`, `model`, `count`, `version`
 
@@ -192,7 +261,7 @@ data/
 │           └── L2.json             # L2 semantic artifact
 ├── index/
 │   ├── embeddings.jsonl            # MVP: one JSON line per vector (Phase 4: parquet)
-│   ├── bm25.json                   # Inverted keyword index
+│   ├── bm25.json                   # Okapi BM25 inverted index + doc lengths
 │   └── hnsw.manifest.json          # Index metadata (Phase 4: hnsw.bin)
 └── echo.sqlite                     # Registry: sources, segments, jobs, orphans
 ```
@@ -203,14 +272,14 @@ data/
 |--------|---------------|
 | `domain/` | Types, Zod schemas, shared language |
 | `adapters/` | JSON-RPC protocol, transport, runner, manager, ingestion service |
-| `storage/` | CAS (filesystem), Registry (SQLite), NodeBuilder, Config, SecretsManager |
+| `storage/` | CAS (filesystem), Registry (SQLite), NodeBuilder, Config, SecretsManager, ContextNodeRepository |
 | `embeddings/` | HNSW index, Parquet/JSONL embedding store, vector I/O |
-| `search/` | Query analysis, semantic/keyword/hybrid retrieval, L2 rerank, L1/L0 cascade, context assembly |
+| `search/` | Query analysis, Okapi BM25, semantic/keyword/hybrid retrieval, L2 rerank, L1/L0 cascade, DocumentHit aggregation, context assembly |
 | `llm/` | Provider abstraction, rate limiting, circuit breaker, factory (Ollama, OpenAI-compatible, Mock) |
 | `layers/` | L1/L2/L3 generators, compilation pipeline, queue worker, batch embedding |
 | `context/` | `(planned)` Context assembly, window management |
 | `i18n/` | Language packs, detection (franc/cld3/heuristic), cross-lingual search |
-| `ghost/` | `(planned)` Orphan recovery, garbage collection |
+| `ghost/` | Orphan detection, recovery service, garbage collection |
 | `bridge/` | HTTP REST API + SSE streaming + health/metrics (Fastify, localhost-only) |
 | `mcp/` | Model Context Protocol server (stdio transport) |
 | `utils/` | Shared helpers, logger, shutdown manager, errors, error handler, LRU cache |
@@ -251,6 +320,9 @@ echoc compile [file]         # Compile pending jobs or specific file
 echoc config [key] [value]   # Read/write config
 echoc jobs                   # List recent jobs
 echoc recover <hash>         # Recover orphaned node
+echoc ghost list             # List orphaned objects
+echoc ghost recover <hash>   # Recover orphan from CAS
+echoc ghost purge <days>     # Remove old orphans
 echoc key set <p> <key>      # Store encrypted API key
 echoc key get <p>            # Show masked key
 echoc key delete <p>         # Remove key

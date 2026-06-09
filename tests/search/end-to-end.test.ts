@@ -44,11 +44,14 @@ async function seedIndex(indexDir: string, cas: LocalCASStorage, provider: MockL
     'utf-8'
   );
 
-  const bm25: Record<string, string[]> = {
-    machine: ['hash-ml'],
-    learning: ['hash-ml'],
+  const bm25Data = {
+    invertedIndex: {
+      machine: ['hash-ml'],
+      learning: ['hash-ml'],
+    },
+    docLengths: { 'hash-ml': 2 },
   };
-  writeFileSync(path.join(indexDir, 'bm25.json'), JSON.stringify(bm25), 'utf-8');
+  writeFileSync(path.join(indexDir, 'bm25.json'), JSON.stringify(bm25Data), 'utf-8');
 
   const objDir = cas.getObjectPath('hash-ml');
   mkdirSync(objDir, { recursive: true });

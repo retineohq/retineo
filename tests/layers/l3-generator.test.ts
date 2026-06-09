@@ -63,8 +63,9 @@ describe('DefaultL3Generator', () => {
 
     const bm25Path = path.join(indexDir, 'bm25.json');
     const bm25 = JSON.parse(require('fs').readFileSync(bm25Path, 'utf-8'));
-    expect(Object.keys(bm25).length).toBeGreaterThan(0);
-    expect(bm25['learning']).toContain('hash1');
+    const invertedIndex = bm25.invertedIndex ?? bm25; // backward compat
+    expect(Object.keys(invertedIndex).length).toBeGreaterThan(0);
+    expect(invertedIndex['learning']).toContain('hash1');
   });
 });
 

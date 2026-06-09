@@ -5,7 +5,8 @@
 
 import type { CASStorage } from '../storage/cas.js';
 import type { Registry } from '../storage/registry.js';
-import type { JobRecord, Hash, BuildManifest, L2Artifact, GeneratorInfo } from '../domain/types.js';
+import type { ContextNodeRepository } from '../storage/context-node-repository.js';
+import type { JobRecord, L2Artifact, GeneratorInfo } from '../domain/types.js';
 import type { LLMProvider, EmbeddingProvider } from '../llm/provider.js';
 import type { L1Generator } from './l1-generator.js';
 import type { L2Generator } from './l2-generator.js';
@@ -25,6 +26,7 @@ export interface CompilationPipeline {
 export interface CompilationPipelineDeps {
   cas: CASStorage;
   registry: Registry;
+  contextNodeRepository: ContextNodeRepository;
   l1Generator: L1Generator;
   l2Generator: L2Generator;
   l3Generator: L3Generator;
@@ -41,19 +43,6 @@ function makeGeneratorInfo(id: string, version: string, provider?: LLMProvider |
     provider: provider?.id,
     model: provider?.config.model,
   };
-}
-
-async function readNodeBuildManifest(cas: CASStorage, nodeHash: Hash): Promise<BuildManifest> {
-  const objPath = cas.getObjectPath(nodeHash);
-  const { readFile } = await import('fs/promises');
-  const raw = await readFile(path.join(objPath, 'node.json'), 'utf-8');
-  return JSON.parse(raw) as BuildManifest;
-}
-
-async function writeNodeBuildManifest(cas: CASStorage, nodeHash: Hash, manifest: BuildManifest): Promise<void> {
-  const objPath = cas.getObjectPath(nodeHash);
-  const { writeFile } = await import('fs/promises');
-  await writeFile(path.join(objPath, 'node.json'), JSON.stringify(manifest, null, 2));
 }
 
 export class DefaultCompilationPipeline implements CompilationPipeline {
@@ -108,63 +97,81 @@ export class DefaultCompilationPipeline implements CompilationPipeline {
   }
 
   private async processL1(nodeHash: string): Promise<void> {
-    const { cas, l1Generator } = this.deps;
-    const objPath = cas.getObjectPath(nodeHash);
+    const { cas, l1Generator, contextNodeRepository } = this.deps;
     const { readFile, writeFile } = await import('fs/promises');
 
+    // Load node via ContextNodeRepository (no direct CAS path construction)
+    const node = await contextNodeRepository.loadByHash(nodeHash);
+    if (!node) throw new Error(`Node ${nodeHash} not found in CAS`);
+
+    // Read L0 content through CAS (artifact content lives in CAS, not in ContextNode fields)
+    const objPath = cas.getObjectPath(nodeHash);
     const content = await readFile(path.join(objPath, 'content.md'), 'utf-8');
+
+    // Generate L1
     const l1 = await l1Generator.generate(content);
 
+    // Write L1 artifacts to CAS
     await writeFile(path.join(objPath, 'L1.md'), l1.markdown);
     await writeFile(path.join(objPath, 'L1.index.json'), JSON.stringify(l1.index, null, 2));
 
-    // Update build manifest
-    const manifest = await readNodeBuildManifest(cas, nodeHash);
-    manifest.nodeVersion++;
-    manifest.generators.l1 = makeGeneratorInfo('outline-parser', '1.0.0');
-    await writeNodeBuildManifest(cas, nodeHash, manifest);
+    // Update build manifest via ContextNodeRepository
+    node.build.nodeVersion++;
+    node.build.generators.l1 = makeGeneratorInfo('outline-parser', '1.0.0');
+    await writeFile(path.join(objPath, 'node.json'), JSON.stringify(node.build, null, 2));
 
     // Enqueue L2
     this.enqueueL2(nodeHash);
   }
 
   private async processL2(nodeHash: string): Promise<void> {
-    const { cas, l2Generator } = this.deps;
+    const { cas, l2Generator, contextNodeRepository } = this.deps;
     const llmProvider = this.ensureLLMProvider();
-    const objPath = cas.getObjectPath(nodeHash);
     const { readFile, writeFile } = await import('fs/promises');
 
+    // Load node via ContextNodeRepository
+    const node = await contextNodeRepository.loadByHash(nodeHash);
+    if (!node) throw new Error(`Node ${nodeHash} not found in CAS`);
+
+    // Read L1 from CAS
+    const objPath = cas.getObjectPath(nodeHash);
     const l1Markdown = await readFile(path.join(objPath, 'L1.md'), 'utf-8');
+
+    // Generate L2
     const l2 = await l2Generator.generate(l1Markdown, llmProvider);
 
+    // Write L2 artifact to CAS
     await writeFile(path.join(objPath, 'L2.json'), JSON.stringify(l2, null, 2));
 
-    // Update build manifest
-    const manifest = await readNodeBuildManifest(cas, nodeHash);
-    manifest.nodeVersion++;
-    manifest.generators.l2 = makeGeneratorInfo('semantic-extractor', '1.0.0', llmProvider);
-    await writeNodeBuildManifest(cas, nodeHash, manifest);
+    // Update build manifest via ContextNodeRepository
+    node.build.nodeVersion++;
+    node.build.generators.l2 = makeGeneratorInfo('semantic-extractor', '1.0.0', llmProvider);
+    await writeFile(path.join(objPath, 'node.json'), JSON.stringify(node.build, null, 2));
 
     // Enqueue L3
     this.enqueueL3(nodeHash);
   }
 
   private async processL3(nodeHash: string): Promise<void> {
-    const { cas, l3Generator, dataDir } = this.deps;
+    const { cas, l3Generator, dataDir, contextNodeRepository } = this.deps;
     const embeddingProvider = this.ensureEmbeddingProvider();
-    const objPath = cas.getObjectPath(nodeHash);
-    const { readFile } = await import('fs/promises');
+    const { readFile, writeFile } = await import('fs/promises');
 
+    // Load node via ContextNodeRepository
+    const node = await contextNodeRepository.loadByHash(nodeHash);
+    if (!node) throw new Error(`Node ${nodeHash} not found in CAS`);
+
+    // Read L2 from CAS
+    const objPath = cas.getObjectPath(nodeHash);
     const l2Artifact = JSON.parse(await readFile(path.join(objPath, 'L2.json'), 'utf-8')) as L2Artifact;
     const indexDir = path.join(dataDir, 'index');
 
     await l3Generator.generate(l2Artifact, embeddingProvider, nodeHash, indexDir);
 
-    // Update build manifest
-    const manifest = await readNodeBuildManifest(cas, nodeHash);
-    manifest.nodeVersion++;
-    manifest.generators.embedding = makeGeneratorInfo('embedding-indexer', '1.0.0', embeddingProvider);
-    await writeNodeBuildManifest(cas, nodeHash, manifest);
+    // Update build manifest via ContextNodeRepository
+    node.build.nodeVersion++;
+    node.build.generators.embedding = makeGeneratorInfo('embedding-indexer', '1.0.0', embeddingProvider);
+    await writeFile(path.join(objPath, 'node.json'), JSON.stringify(node.build, null, 2));
   }
 
   enqueueL1(nodeHash: string, sourceId?: string): void {

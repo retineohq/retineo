@@ -8,6 +8,7 @@ import path from 'path';
 import os from 'os';
 import { DefaultQueueWorker } from '../../packages/core/src/layers/worker.js';
 import { DefaultCompilationPipeline } from '../../packages/core/src/layers/pipeline.js';
+import { DefaultContextNodeRepository } from '../../packages/core/src/storage/context-node-repository.js';
 import { LocalCASStorage, computeHash } from '../../packages/core/src/storage/cas.js';
 import { SQLiteRegistry } from '../../packages/core/src/storage/registry.js';
 import { DefaultL1Generator } from '../../packages/core/src/layers/l1-generator.js';
@@ -33,9 +34,11 @@ describe('DefaultQueueWorker', () => {
     const llmProvider = new MockLLMProvider({ id: 'mock', type: 'mock', model: 'test' });
     const embeddingProvider = new MockLLMProvider({ id: 'mock-embed', type: 'mock', model: 'test-embed', dimension: 384 });
 
+    const contextNodeRepository = new DefaultContextNodeRepository(cas, registry);
     pipeline = new DefaultCompilationPipeline({
       cas,
       registry,
+      contextNodeRepository,
       l1Generator: new DefaultL1Generator(),
       l2Generator: new DefaultL2Generator(),
       l3Generator: new DefaultL3Generator(),

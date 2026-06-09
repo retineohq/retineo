@@ -1,20 +1,20 @@
-# Progress: ECHO Core — CLI Lifecycle & Setup Wizard
+# Progress: ECHO Core v0.1.1 → v0.2.0 Architectural Fixes
 
 ## ✅ Completed
-- [x] Phase A: Registry job queries (getJobsBySource, getJob, getJobCounts, getLastHeartbeat, getRunningWorkerIds)
-- [x] Phase B: EchoConfig extended with llm.providers[], embedding.providers[], bridge{host,port}
-- [x] Phase C: Interactive init wizard + non-interactive mode
-- [x] Phase D: worker-script.ts + bridge-script.ts + daemon.ts (standalone fork targets)
-- [x] Phase E: worker/bridge/daemon lifecycle commands (start, stop, status, logs)
-- [x] Phase F: --watch and --timeout flags on ingest/compile (auto-spawns worker if none)
-- [x] Phase G: Registered all commands in cli/index.ts
-- [x] Phase H: Updated CLI.md, GETTING_STARTED.md, INSTALL.md, TROUBLESHOOTING.md, structure.md
-- [x] Phase I: 33 new tests across 5 files (init-wizard, worker-lifecycle, bridge-lifecycle, ingest-watch, daemon)
-- [x] Phase J: tsc --noEmit clean, 338/338 tests pass
-- [x] End-to-end acceptance verified: init → worker start → compile --watch → daemon start → health 200
+- [x] Section 1: ContextNode Drift Fix — ContextNodeRepository, pipeline refactor, CAS parentId persistence
+- [x] Section 2: HNSW as Default — hnswlib-node installed, NativeHNSWWrapper label→hash mapping, fallback warning
+- [x] Section 3: BM25 → Okapi BM25 — OkapiBM25 class, bm25.json extended format, retrieval service integration
+- [x] Section 4: Ghost System Lifecycle — orphan-detector, recovery-service, CLI commands (ghost list/recover/purge)
+- [x] Section 5: Document Hit + L1 Navigation — DocumentHit/ChunkHit/NavigationNode types, calculateDocumentScore, buildNavigationTree, aggregateDocumentHits
+- [x] structure.md updated with all new files and descriptions
+
+## 🔄 In Progress
+- (none)
 
 ## 📋 Next Steps
-- None — all deliverables complete.
+- [ ] E2E smoke test (manual)
+- [ ] docs/CHANGELOG.md update
+- [ ] Git commit
 
 ## 📍 Current Status
-Done. Build clean, 338/338 tests green, end-to-end flow verified manually.
+All 5 sections implemented. 408/408 tests passing. Build clean. structure.md updated.
