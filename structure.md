@@ -64,7 +64,16 @@ echo-core/
 │   ├── SEARCH.md        # Search configuration & retrieval pipeline guide
 │   ├── MULTILINGUAL.md  # Multilingual support & language pack guide
 │   ├── LOGGING.md       # Structured logging configuration & events
-│   └── OPERATIONS.md    # Graceful shutdown, health checks, monitoring
+│   ├── OPERATIONS.md    # Graceful shutdown, health checks, monitoring
+│   ├── API.md           # HTTP Bridge API reference
+│   ├── CLI.md           # CLI command reference
+│   ├── HEALTH.md        # Health check & readiness probe guide
+│   ├── MCP.md           # MCP server tool reference
+│   ├── PERFORMANCE.md   # Performance tuning & benchmarks
+│   ├── SECURITY.md      # Security model & secrets management
+│   ├── TROUBLESHOOTING.md # Common issues & fixes
+│   ├── CHANGELOG.md     # Version history
+│   └── CAPABILITIES_AUDIT.md # Full capabilities inventory & gap analysis
 ├── .github/
 │   ├── workflows/
 │   │   ├── ci.yml       # CI: test on PR/push (Node 20, 22, pnpm)
