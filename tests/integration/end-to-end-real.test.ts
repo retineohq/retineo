@@ -22,6 +22,34 @@ const DATA_DIR = process.env.RETINEO_DATA_DIR ?? path.join(os.homedir(), '.retin
 const TEST_FILE = path.join(os.homedir(), 'retineo-beta-test', 'test.md');
 const CONFIG_PATH = path.join(DATA_DIR, 'config.yaml');
 
+// Skip all real E2E tests if Ollama is not available or data dir is missing.
+// These tests require a real Ollama instance with models pulled and a
+// populated ~/.retineo directory. They are not suitable for CI.
+function isRealE2EAvailable(): boolean {
+  // Check data dir exists
+  if (!fs.existsSync(DATA_DIR)) return false;
+  // Check config exists
+  if (!fs.existsSync(CONFIG_PATH)) return false;
+  // Check Ollama is reachable
+  try {
+    execSync('curl -sf http://localhost:11434/api/tags > /dev/null', { timeout: 3000 });
+  } catch {
+    return false;
+  }
+  // Check required model is available
+  try {
+    const tags = execSync('curl -sf http://localhost:11434/api/tags', { timeout: 3000, encoding: 'utf-8' });
+    const parsed = JSON.parse(tags) as { models?: Array<{ name?: string }> };
+    const models = parsed.models?.map((m) => m.name?.split(':')[0]) ?? [];
+    if (!models.includes('nomic-embed-text')) return false;
+  } catch {
+    return false;
+  }
+  return true;
+}
+
+const e2e = isRealE2EAvailable() ? describe : describe.skip;
+
 function findFile(dir: string, filename: string): string | null {
   const entries = fs.readdirSync(dir, { withFileTypes: true });
   for (const entry of entries) {
@@ -45,7 +73,7 @@ function runCommand(cmd: string): string {
   }
 }
 
-describe('E2E Real: Config Validation', () => {
+e2e('E2E Real: Config Validation', () => {
   it('config has real Ollama providers', async () => {
     const configManager = new FileConfigManager(DATA_DIR);
     const config = await configManager.load();
@@ -74,7 +102,7 @@ describe('E2E Real: Config Validation', () => {
   });
 });
 
-describe('E2E Real: L3 Index Integrity', () => {
+e2e('E2E Real: L3 Index Integrity', () => {
   it('embeddings.jsonl has valid embeddings', () => {
     const embeddingsPath = path.join(DATA_DIR, 'index', 'embeddings.jsonl');
     expect(fs.existsSync(embeddingsPath)).toBe(true);
@@ -146,7 +174,7 @@ describe('E2E Real: L3 Index Integrity', () => {
   });
 });
 
-describe('E2E Real: Search Results', () => {
+e2e('E2E Real: Search Results', () => {
   let retrievalService: DefaultRetrievalService;
   let queryAnalyzer: DefaultQueryAnalyzer;
   let contextAssembler: DefaultContextAssembler;
@@ -238,7 +266,7 @@ describe('E2E Real: Search Results', () => {
   });
 });
 
-describe('E2E Real: L2 Artifact Quality', () => {
+e2e('E2E Real: L2 Artifact Quality', () => {
   it('L2.json has real content, not mock', () => {
     const l2Path = findFile(path.join(DATA_DIR, 'objects'), 'L2.json');
     expect(l2Path).not.toBeNull();
@@ -274,14 +302,14 @@ describe('E2E Real: L2 Artifact Quality', () => {
   });
 });
 
-describe('E2E Real: Compile with Provider', () => {
+e2e('E2E Real: Compile with Provider', () => {
   it('compile --provider nonexistent fails with clear error', () => {
     const output = runCommand('node bin/retineo.js compile /home/ryzen/retineo-beta-test/test.md --provider nonexistent 2>&1 || true');
     expect(output).toMatch(/Provider 'nonexistent' not found/);
   });
 });
 
-describe('E2E Real: BM25 Index', () => {
+e2e('E2E Real: BM25 Index', () => {
   it('bm25.json has terms and references', () => {
     const bm25Path = path.join(DATA_DIR, 'index', 'bm25.json');
     expect(fs.existsSync(bm25Path)).toBe(true);

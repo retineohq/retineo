@@ -53,3 +53,9 @@ Thumbs.db
 
 # ECHO data directory (local dev)
 .echo/
+
+# Handoff files (session context, not source code)
+HANDOFF*
+handoff*
+*HANDOFF*
+*handoff*
