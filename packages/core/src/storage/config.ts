@@ -131,7 +131,7 @@ const DEFAULT_SEARCH_CONFIG: SearchConfig = {
   },
   semantic: {
     topK: 100,
-    threshold: 0.5,
+    threshold: 0.35,
     hybridWeight: 0.7,
   },
   rerank: {

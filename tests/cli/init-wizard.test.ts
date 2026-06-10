@@ -144,7 +144,7 @@ describe('init wizard — non-interactive', () => {
     log.mockRestore();
   });
 
-  it('sets search.semantic.threshold to 0.5', async () => {
+  it('sets search.semantic.threshold to 0.35', async () => {
     process.env.RETINEO_DATA_DIR = testDir;
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
 
@@ -153,7 +153,7 @@ describe('init wizard — non-interactive', () => {
 
     const cfg = yaml.load(readFileSync(path.join(testDir, 'config.yaml'), 'utf-8')) as Record<string, unknown>;
     const search = cfg.search as { semantic: { threshold: number } };
-    expect(search.semantic.threshold).toBe(0.5);
+    expect(search.semantic.threshold).toBe(0.35);
     log.mockRestore();
   });
 });

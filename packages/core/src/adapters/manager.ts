@@ -3,7 +3,7 @@
  * Phase 2: Loads built-in adapters, resolves by mimeType/extension, ingests files
  */
 
-import { readdir, readFile } from 'fs/promises';
+import { readdir, readFile, open } from 'fs/promises';
 import path from 'path';
 import { pathToFileURL } from 'url';
 import type {
@@ -32,6 +32,21 @@ interface AdapterManifest {
 interface LoadedAdapter {
   manifest: AdapterManifest;
   dirPath: string;
+}
+
+/** Sniff whether a file is plain text by reading first 4KB and checking for null bytes. */
+async function sniffTextFile(filePath: string): Promise<boolean> {
+  try {
+    const fd = await open(filePath, 'r');
+    const buf = Buffer.alloc(4096);
+    const { bytesRead } = await fd.read(buf, 0, 4096, 0);
+    await fd.close();
+    if (bytesRead === 0) return true; // empty file = text
+    // Null byte indicates binary
+    return !buf.subarray(0, bytesRead).includes(0);
+  } catch {
+    return false;
+  }
 }
 
 export interface AdapterManager {
@@ -85,6 +100,18 @@ export class DefaultAdapterManager implements AdapterManager {
       for (const [id, loaded] of this.loaded) {
         if (loaded.manifest.extensions.includes(ext)) {
           return id;
+        }
+      }
+    }
+
+    // Fallback: no extension and no mimeType — sniff file content
+    if (!ext && !mimeType) {
+      const isText = await sniffTextFile(uri);
+      if (isText) {
+        for (const [id, loaded] of this.loaded) {
+          if (loaded.manifest.extensions.includes('.txt') || loaded.manifest.mimeTypes.includes('text/plain')) {
+            return id;
+          }
         }
       }
     }

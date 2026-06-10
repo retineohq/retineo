@@ -31,7 +31,7 @@ import {
   dataDir,
 } from './process-manager.js';
 import { spawn, type ChildProcess } from 'child_process';
-import { existsSync } from 'fs';
+import { existsSync, lstatSync, readdirSync } from 'fs';
 import { readFile as readFileAsync } from 'fs/promises';
 import path from 'path';
 import os from 'os';
@@ -97,14 +97,32 @@ export class CLICommands {
   }
 
   async ingestBatch(paths: string[], options?: IngestCLIOptions): Promise<void> {
-    const { existsSync } = await import('fs');
+    const { existsSync, lstatSync, readdirSync } = await import('fs');
     const expanded: string[] = [];
+
+    function collectFiles(dir: string): void {
+      const entries = readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          collectFiles(full);
+        } else if (entry.isFile()) {
+          expanded.push(full);
+        }
+      }
+    }
+
     for (const p of paths) {
       const resolved = path.resolve(p);
-      if (existsSync(resolved)) {
+      if (!existsSync(resolved)) {
+        console.error(`  Not found: ${p}`);
+        continue;
+      }
+      const stat = lstatSync(resolved);
+      if (stat.isDirectory()) {
+        collectFiles(resolved);
+      } else if (stat.isFile()) {
         expanded.push(resolved);
-      } else {
-        console.error(`  File not found: ${p}`);
       }
     }
 
@@ -1189,7 +1207,7 @@ async function ensureDataDirsForDataDir(dataDir: string): Promise<void> {
 const DEFAULT_SEARCH: RetineoConfig['search'] = {
   defaultLanguage: 'en',
   languageDetection: { provider: 'franc', fallback: 'heuristic', confidenceThreshold: 0.7 },
-  semantic: { topK: 100, threshold: 0.5, hybridWeight: 0.7 },
+  semantic: { topK: 100, threshold: 0.35, hybridWeight: 0.7 },
   rerank: { topK: 10, weights: { concept: 1.0, claim: 0.5, summary: 0.8, language: 0.3 } },
   cascade: { budgets: { vague: 500, section: 800, precision: 1500 } },
   citations: { format: 'markdown', includeLineNumbers: true, includeTimestamps: true },
