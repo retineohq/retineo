@@ -1,6 +1,6 @@
 {
   "name": "@retineo/core",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Connection discovery engine (L0–L3). Open-source core for the Retineo ecosystem.",
   "type": "module",
   "main": "dist/index.js",
@@ -12,13 +12,12 @@
   "files": [
     "dist",
     "bin",
-    "packages/core/adapters",
     "docs",
     "README.md",
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc && cp packages/core/src/storage/schema.sql dist/storage/ && cp -r packages/core/adapters dist/adapters",
+    "build": "tsc && cp packages/core/src/storage/schema.sql dist/storage/ && cp -rn packages/core/adapters/* dist/adapters/ 2>/dev/null || cp -r packages/core/adapters/* dist/adapters/",
     "test": "vitest --run",
     "lint": "eslint packages/core/src/**/*.ts",
     "bundle:binary": "esbuild bin/retineo.js --bundle --platform=node --outfile=dist/bundle.cjs --format=cjs",
@@ -26,7 +25,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "better-sqlite3": "^11.10.0",
+    "better-sqlite3": "^12.10.0",
     "commander": "^15.0.0",
     "fastify": "^5.8.5",
     "hnswlib-node": "^3.0.0",
@@ -52,6 +51,7 @@
     "typescript-eslint": "^8.60.1",
     "vitest": "^3.2.6"
   },
+  "packageManager": "pnpm@10.32.1",
   "engines": {
     "node": ">=20.0.0"
   },
@@ -72,8 +72,5 @@
   "bugs": {
     "url": "https://github.com/retineohq/retineo/issues"
   },
-  "homepage": "https://github.com/retineohq/retineo#readme",
-  "publishConfig": {
-    "access": "public"
-  }
+  "homepage": "https://github.com/retineohq/retineo#readme"
 }
