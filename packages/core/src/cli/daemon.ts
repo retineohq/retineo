@@ -36,8 +36,12 @@ import { DefaultMetricsService } from '../bridge/metrics.js';
 import { createLogger } from '../utils/logger.js';
 import { DefaultShutdownManager } from '../utils/shutdown.js';
 import path from 'path';
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
 
-const VERSION = '0.1.0';
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const pkg = JSON.parse(readFileSync(path.join(__dirname, '..', '..', '..', '..', 'package.json'), 'utf-8'));
+const VERSION = pkg.version;
 
 export interface DaemonServices {
   worker: DefaultQueueWorker;
