@@ -31,33 +31,6 @@ jobs:
       - run: pnpm build
       - run: pnpm test
 
-  publish-npm:
-    needs: test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22.x
-          registry-url: 'https://registry.npmjs.org'
-          cache: 'pnpm'
-
-      - run: sudo apt-get update && sudo apt-get install -y build-essential python3
-
-      - run: pnpm install --frozen-lockfile
-      - name: Rebuild better-sqlite3 from source
-        run: |
-          cd node_modules/.pnpm/better-sqlite3@*/node_modules/better-sqlite3
-          npx node-gyp rebuild
-      - run: pnpm build
-
-      - run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
   build-binaries:
     needs: test
     strategy:
@@ -102,7 +75,7 @@ jobs:
         continue-on-error: true
 
   release-github:
-    needs: [publish-npm, build-binaries]
+    needs: [build-binaries]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
