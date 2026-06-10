@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Queue Worker
+ * RETINEO Core — Queue Worker
  * Phase 3: Lease-based job processor with heartbeat and crash recovery.
  */
 

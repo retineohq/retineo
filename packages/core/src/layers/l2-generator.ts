@@ -1,5 +1,5 @@
 /**
- * ECHO Core — L2 Generator
+ * RETINEO Core — L2 Generator
  * Phase 3: LLM-powered semantic extraction with Zod validation and retry logic.
  */
 

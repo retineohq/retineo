@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Retrieval Service
+ * RETINEO Core — Retrieval Service
  * Phase 7: L3 semantic search → L2 rerank → L1/L0 cascade with LRU cache.
  */
 

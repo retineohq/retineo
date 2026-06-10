@@ -1,5 +1,5 @@
 /**
- * ECHO Core — CLI Formatters
+ * RETINEO Core — CLI Formatters
  * Phase 5: Output formatters for CLI commands.
  */
 
@@ -66,7 +66,7 @@ function renderSections(sections: Section[], lines: string[], prefix: string): v
 
 export function formatStatus(status: StatusResponse): string {
   const lines: string[] = [];
-  lines.push(`ECHO Core ${status.version}`);
+  lines.push(`RETINEO Core ${status.version}`);
   lines.push(`Nodes: ${status.nodeCount.toLocaleString()} | Sources: ${status.sourceCount.toLocaleString()} | Pending jobs: ${status.jobCount.pending}`);
   lines.push(`Index: ${status.indexStatus.vectorCount.toLocaleString()} vectors | Last indexed: ${status.indexStatus.lastIndexed}`);
   return lines.join('\n');

@@ -13,7 +13,7 @@ let tmpDir: string;
 let adaptersDir: string;
 
 beforeEach(() => {
-  tmpDir = mkdtempSync(path.join(os.tmpdir(), 'echo-pdf-'));
+  tmpDir = mkdtempSync(path.join(os.tmpdir(), 'retineo-pdf-'));
   adaptersDir = path.join(tmpDir, 'adapters');
   mkdirSync(adaptersDir);
 

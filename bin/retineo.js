@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * ECHO Core — CLI Entry Point
+ * RETINEO Core — CLI Entry Point
  * Wires real services: SQLite registry, CAS, ingestion, search, logger.
  */
 
@@ -32,7 +32,7 @@ async function main() {
     config = await configManager.load();
   } catch {
     // Not initialized yet — use defaults
-    const dataDir = path.join(os.homedir(), '.echo');
+    const dataDir = path.join(os.homedir(), '.retineo');
     config = {
       dataDir,
       defaultAdapter: 'file',
@@ -66,7 +66,7 @@ async function main() {
         level: 'info',
         console: true,
         file: true,
-        filePath: path.join(dataDir, 'logs', 'echo.log'),
+        filePath: path.join(dataDir, 'logs', 'retineo.log'),
         pretty: false,
       },
     };
@@ -76,15 +76,15 @@ async function main() {
   // Check for --verbose in process.argv before creating logger
   const verbose = process.argv.includes('--verbose') || process.argv.includes('-v');
   if (verbose) {
-    process.env.ECHO_LOG_LEVEL = 'debug';
-    process.env.ECHO_LOG_CONSOLE = 'true';
-    process.env.ECHO_LOG_PRETTY = 'true';
+    process.env.RETINEO_LOG_LEVEL = 'debug';
+    process.env.RETINEO_LOG_CONSOLE = 'true';
+    process.env.RETINEO_LOG_PRETTY = 'true';
   }
   const logConfig = config.logging || {
     level: 'info',
     console: true,
     file: true,
-    filePath: path.join(config.dataDir, 'logs', 'echo.log'),
+    filePath: path.join(config.dataDir, 'logs', 'retineo.log'),
     pretty: false,
   };
   if (verbose) {
@@ -98,7 +98,7 @@ async function main() {
 
   // --- Storage ---
   const cas = new LocalCASStorage(resolvedDataDir);
-  const dbPath = path.join(resolvedDataDir, 'echo.sqlite');
+  const dbPath = path.join(resolvedDataDir, 'retineo.sqlite');
   const registry = new SQLiteRegistry(dbPath);
 
   // --- Node builder ---
@@ -161,10 +161,10 @@ async function main() {
   const embedder = embedFactory.list().length > 0 ? embedFactory.getDefault() : null;
 
   if (!llmProvider) {
-    logger.warn('cli.noLlmProvider', { message: 'No LLM provider configured. L2 generation will fail. Run echoc init to configure.' });
+    logger.warn('cli.noLlmProvider', { message: 'No LLM provider configured. L2 generation will fail. Run retineo init to configure.' });
   }
   if (!embedder) {
-    logger.warn('cli.noEmbedProvider', { message: 'No embedding provider configured. L3 generation will fail. Run echoc init to configure.' });
+    logger.warn('cli.noEmbedProvider', { message: 'No embedding provider configured. L3 generation will fail. Run retineo init to configure.' });
   }
 
   const retrievalService = new DefaultRetrievalService({
@@ -217,6 +217,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error('ECHO Core CLI error:', err.message);
+  console.error('RETINEO Core CLI error:', err.message);
   process.exit(1);
 });

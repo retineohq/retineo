@@ -13,7 +13,7 @@ let tmpDir: string;
 let adaptersDir: string;
 
 beforeEach(() => {
-  tmpDir = mkdtempSync(path.join(os.tmpdir(), 'echo-img-'));
+  tmpDir = mkdtempSync(path.join(os.tmpdir(), 'retineo-img-'));
   adaptersDir = path.join(tmpDir, 'adapters');
   mkdirSync(adaptersDir);
 

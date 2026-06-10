@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Metrics Service
+ * RETINEO Core — Metrics Service
  * Phase 7: Operational metrics for monitoring.
  */
 
@@ -115,33 +115,33 @@ export class DefaultMetricsService implements MetricsService {
 /** Format metrics as Prometheus text */
 export function formatPrometheus(snapshot: MetricsSnapshot): string {
   const lines: string[] = [];
-  lines.push('# TYPE echo_nodes gauge');
-  lines.push(`echo_nodes ${snapshot.nodes}`);
-  lines.push('# TYPE echo_sources gauge');
-  lines.push(`echo_sources ${snapshot.sources}`);
-  lines.push('# TYPE echo_jobs_pending gauge');
-  lines.push(`echo_jobs_pending ${snapshot.jobs.pending}`);
-  lines.push('# TYPE echo_jobs_running gauge');
-  lines.push(`echo_jobs_running ${snapshot.jobs.running}`);
-  lines.push('# TYPE echo_jobs_completed counter');
-  lines.push(`echo_jobs_completed ${snapshot.jobs.completed}`);
-  lines.push('# TYPE echo_jobs_failed counter');
-  lines.push(`echo_jobs_failed ${snapshot.jobs.failed}`);
-  lines.push('# TYPE echo_index_vectors gauge');
-  lines.push(`echo_index_vectors ${snapshot.index.vectorCount}`);
-  lines.push('# TYPE echo_searches_total counter');
-  lines.push(`echo_searches_total ${snapshot.searches.total}`);
-  lines.push('# TYPE echo_searches_avg_duration_ms gauge');
-  lines.push(`echo_searches_avg_duration_ms ${snapshot.searches.avgDurationMs}`);
-  lines.push('# TYPE echo_llm_requests_total counter');
-  lines.push(`echo_llm_requests_total ${snapshot.llm.requests}`);
-  lines.push('# TYPE echo_llm_errors_total counter');
-  lines.push(`echo_llm_errors_total ${snapshot.llm.errors}`);
-  lines.push('# TYPE echo_llm_avg_latency_ms gauge');
-  lines.push(`echo_llm_avg_latency_ms ${snapshot.llm.avgLatencyMs}`);
+  lines.push('# TYPE retineo_nodes gauge');
+  lines.push(`retineo_nodes ${snapshot.nodes}`);
+  lines.push('# TYPE retineo_sources gauge');
+  lines.push(`retineo_sources ${snapshot.sources}`);
+  lines.push('# TYPE retineo_jobs_pending gauge');
+  lines.push(`retineo_jobs_pending ${snapshot.jobs.pending}`);
+  lines.push('# TYPE retineo_jobs_running gauge');
+  lines.push(`retineo_jobs_running ${snapshot.jobs.running}`);
+  lines.push('# TYPE retineo_jobs_completed counter');
+  lines.push(`retineo_jobs_completed ${snapshot.jobs.completed}`);
+  lines.push('# TYPE retineo_jobs_failed counter');
+  lines.push(`retineo_jobs_failed ${snapshot.jobs.failed}`);
+  lines.push('# TYPE retineo_index_vectors gauge');
+  lines.push(`retineo_index_vectors ${snapshot.index.vectorCount}`);
+  lines.push('# TYPE retineo_searches_total counter');
+  lines.push(`retineo_searches_total ${snapshot.searches.total}`);
+  lines.push('# TYPE retineo_searches_avg_duration_ms gauge');
+  lines.push(`retineo_searches_avg_duration_ms ${snapshot.searches.avgDurationMs}`);
+  lines.push('# TYPE retineo_llm_requests_total counter');
+  lines.push(`retineo_llm_requests_total ${snapshot.llm.requests}`);
+  lines.push('# TYPE retineo_llm_errors_total counter');
+  lines.push(`retineo_llm_errors_total ${snapshot.llm.errors}`);
+  lines.push('# TYPE retineo_llm_avg_latency_ms gauge');
+  lines.push(`retineo_llm_avg_latency_ms ${snapshot.llm.avgLatencyMs}`);
   for (const [adapter, count] of Object.entries(snapshot.adapters)) {
-    lines.push(`# TYPE echo_adapter_ingests_total counter`);
-    lines.push(`echo_adapter_ingests_total{adapter="${adapter}"} ${count}`);
+    lines.push(`# TYPE retineo_adapter_ingests_total counter`);
+    lines.push(`retineo_adapter_ingests_total{adapter="${adapter}"} ${count}`);
   }
   return lines.join('\n') + '\n';
 }

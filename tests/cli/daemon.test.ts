@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Daemon Module Tests
+ * RETINEO Core — Daemon Module Tests
  *
  * Validates that the daemon module exports the expected symbols and that
  * `startDaemonServices` returns a fully-wired service bundle. The full

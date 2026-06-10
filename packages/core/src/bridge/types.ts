@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Bridge Types
+ * RETINEO Core — Bridge Types
  * Phase 5: HTTP API request/response interfaces.
  */
 

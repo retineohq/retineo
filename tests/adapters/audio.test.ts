@@ -16,7 +16,7 @@ let mockServer: ReturnType<typeof createServer> | null = null;
 let mockUrl: string = '';
 
 function setupAdapterDir() {
-  tmpDir = mkdtempSync(path.join(os.tmpdir(), 'echo-audio-real-'));
+  tmpDir = mkdtempSync(path.join(os.tmpdir(), 'retineo-audio-real-'));
   adaptersDir = path.join(tmpDir, 'adapters');
   mkdirSync(adaptersDir);
 

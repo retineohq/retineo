@@ -1,21 +1,21 @@
-# Writing Custom Adapters for ECHO Core
+# Writing Custom Adapters for RETINEO Core
 
-This guide teaches you how to write an adapter — a small Node.js program that converts any file format into normalized text that ECHO Core can index, search, and compile.
+This guide teaches you how to write an adapter — a small Node.js program that converts any file format into normalized text that RETINEO Core can index, search, and compile.
 
-By the end of this guide you will understand the adapter lifecycle, the JSON-RPC protocol, the ingest response format, and how to test your adapter without running the full ECHO Core stack.
+By the end of this guide you will understand the adapter lifecycle, the JSON-RPC protocol, the ingest response format, and how to test your adapter without running the full RETINEO Core stack.
 
 ---
 
 ## 1. What Is an Adapter?
 
-An adapter is a **child process** that speaks **JSON-RPC 2.0** over **stdin/stdout**. ECHO Core spawns your adapter when it encounters a file your adapter claims to handle. Your adapter reads the file, extracts text and metadata, and returns a normalized representation. ECHO Core then stores that representation in its Content-Addressable Storage (CAS) and registers it in the SQLite registry.
+An adapter is a **child process** that speaks **JSON-RPC 2.0** over **stdin/stdout**. RETINEO Core spawns your adapter when it encounters a file your adapter claims to handle. Your adapter reads the file, extracts text and metadata, and returns a normalized representation. RETINEO Core then stores that representation in its Content-Addressable Storage (CAS) and registers it in the SQLite registry.
 
-Adapters are **stateless** and **short-lived**. ECHO Core spawns one, sends a single `ingest` request, and shuts it down. Do not assume your adapter stays running between files.
+Adapters are **stateless** and **short-lived**. RETINEO Core spawns one, sends a single `ingest` request, and shuts it down. Do not assume your adapter stays running between files.
 
 Key principles:
 - **Output must be text** (or structured text). Binary data is not indexed.
 - **Deterministic output is strongly preferred**. Same file → same output. This makes deduplication and idempotency work.
-- **Heavy processing is your responsibility**. If you need Whisper, ffmpeg, or Tesseract, bundle them in your adapter. ECHO Core does not provide them.
+- **Heavy processing is your responsibility**. If you need Whisper, ffmpeg, or Tesseract, bundle them in your adapter. RETINEO Core does not provide them.
 
 ---
 
@@ -97,7 +97,7 @@ This template handles all four JSON-RPC methods, reads a file as UTF-8, and retu
 
 ## 3. Manifest Format
 
-The `manifest.json` tells ECHO Core how to find and load your adapter.
+The `manifest.json` tells RETINEO Core how to find and load your adapter.
 
 ```json
 {
@@ -119,13 +119,13 @@ The `manifest.json` tells ECHO Core how to find and load your adapter.
 | `entry` | Yes | Path to the main script, relative to manifest directory. |
 | `status` | No | `"stable"`, `"experimental"`, or `"mock"`. Defaults to `"stable"`. |
 
-ECHO Core scans the adapters directory at startup. Every subdirectory containing a valid `manifest.json` becomes a loaded adapter.
+RETINEO Core scans the adapters directory at startup. Every subdirectory containing a valid `manifest.json` becomes a loaded adapter.
 
 ---
 
 ## 4. JSON-RPC Methods
 
-ECHO Core communicates with adapters using JSON-RPC 2.0 over line-delimited JSON (LDJSON). Each line on stdin is one request; each line on stdout is one response.
+RETINEO Core communicates with adapters using JSON-RPC 2.0 over line-delimited JSON (LDJSON). Each line on stdin is one request; each line on stdout is one response.
 
 ### `initialize`
 
@@ -138,7 +138,7 @@ Called immediately after spawn. Use this to set up working directories or load m
   "id": 1,
   "method": "initialize",
   "params": {
-    "workDir": "/tmp/echo-work",
+    "workDir": "/tmp/retineo-work",
     "config": {}
   }
 }
@@ -156,11 +156,11 @@ Called immediately after spawn. Use this to set up working directories or load m
 }
 ```
 
-If `initialize` fails, ECHO Core kills the process and reports the error upstream.
+If `initialize` fails, RETINEO Core kills the process and reports the error upstream.
 
 ### `capabilities`
 
-Called when ECHO Core needs to know what your adapter can handle. The response must match your manifest.
+Called when RETINEO Core needs to know what your adapter can handle. The response must match your manifest.
 
 **Request:**
 ```json
@@ -185,7 +185,7 @@ Called when ECHO Core needs to know what your adapter can handle. The response m
 
 ### `ingest`
 
-The core method. ECHO Core sends the file URI (and optional mimeType) and expects normalized content back.
+The core method. RETINEO Core sends the file URI (and optional mimeType) and expects normalized content back.
 
 **Request:**
 ```json
@@ -221,7 +221,7 @@ The `ingest` method is where all your parsing logic lives. See Section 5 for the
 
 ### `shutdown`
 
-Called before ECHO Core kills the process. Use this to flush buffers or release resources.
+Called before RETINEO Core kills the process. Use this to flush buffers or release resources.
 
 **Request:**
 ```json
@@ -233,7 +233,7 @@ Called before ECHO Core kills the process. Use this to flush buffers or release 
 }
 ```
 
-**Expected behavior:** Clean up and exit with code 0. ECHO Core will close stdin/stdout after a timeout even if you do not respond.
+**Expected behavior:** Clean up and exit with code 0. RETINEO Core will close stdin/stdout after a timeout even if you do not respond.
 
 ---
 
@@ -288,7 +288,7 @@ Segment blocks use the same schema as root blocks, but their `offset` is relativ
 
 ## 6. Block Types Reference
 
-ECHO Core recognizes these block types. Custom types are allowed and stored as-is in `content.meta.json`.
+RETINEO Core recognizes these block types. Custom types are allowed and stored as-is in `content.meta.json`.
 
 ### `speech`
 Used for audio and video transcripts.
@@ -353,7 +353,7 @@ No extra fields. Headings are the primary navigation anchors for L1 compilation.
 
 ### Custom Types
 
-You may invent new types. ECHO Core will store them but will not apply special semantics unless you also teach the L1 compiler about them.
+You may invent new types. RETINEO Core will store them but will not apply special semantics unless you also teach the L1 compiler about them.
 
 ```json
 { "type": "cad-dimension", "offset": 0, "length": 20, "bbox": [100, 100, 50, 20] }
@@ -363,7 +363,7 @@ You may invent new types. ECHO Core will store them but will not apply special s
 
 ## 7. Segmentation Guide
 
-Segmentation splits a large file into independently processable chunks. ECHO Core creates a parent `ContextNode` for the root and child nodes for each segment.
+Segmentation splits a large file into independently processable chunks. RETINEO Core creates a parent `ContextNode` for the root and child nodes for each segment.
 
 ### When to Segment
 
@@ -405,7 +405,7 @@ Segmentation splits a large file into independently processable chunks. ECHO Cor
 }
 ```
 
-ECHO Core handles `parentHash` linkage automatically. Your adapter only needs to emit segments.
+RETINEO Core handles `parentHash` linkage automatically. Your adapter only needs to emit segments.
 
 ---
 
@@ -482,7 +482,7 @@ You want to index `.fasta` files. Your adapter:
 
 ## 9. Testing Your Adapter
 
-You do not need ECHO Core running to test your adapter. Use stdin directly:
+You do not need RETINEO Core running to test your adapter. Use stdin directly:
 
 ```bash
 # Test initialize
@@ -528,23 +528,23 @@ function send(method, params) {
 })();
 ```
 
-For integration testing with ECHO Core, place your adapter in the `adapters/` directory and use the `DefaultAdapterManager` test pattern shown in `tests/adapters/manager.test.ts`.
+For integration testing with RETINEO Core, place your adapter in the `adapters/` directory and use the `DefaultAdapterManager` test pattern shown in `tests/adapters/manager.test.ts`.
 
 ---
 
 ## 10. Limitations
 
-ECHO Core has strict expectations. Violating them causes ingestion failures.
+RETINEO Core has strict expectations. Violating them causes ingestion failures.
 
 ### Output Must Be Text
 Your adapter must return a string in `content`. Binary data (images, audio waveforms, video frames) cannot be stored in CAS. Extract text representations: transcripts, descriptions, OCR results, or structured Markdown.
 
 ### Adapter Does Not Store Files
-Your adapter is a transformer, not a storage layer. It reads the input file, produces normalized content, and exits. ECHO Core handles all persistence. Do not write to disk unless required for temporary processing.
+Your adapter is a transformer, not a storage layer. It reads the input file, produces normalized content, and exits. RETINEO Core handles all persistence. Do not write to disk unless required for temporary processing.
 
 ### Local-First Audio/Video Transcription
 
-ECHO Core's `audio` and `video` adapters use a **local-first** priority cascade:
+RETINEO Core's `audio` and `video` adapters use a **local-first** priority cascade:
 
 1. **whisper.cpp (local)** — PRIMARY. Offline, free, private. Requires `whisper-cli` binary + GGML model.
 2. **OpenAI Whisper API (cloud)** — OPTIONAL FALLBACK. Requires `WHISPER_API_KEY` or `OPENAI_API_KEY`.
@@ -554,22 +554,22 @@ ECHO Core's `audio` and `video` adapters use a **local-first** priority cascade:
 
 ```bash
 # 1. Download whisper-cli binary
-mkdir -p ~/.echo/bin
+mkdir -p ~/.retineo/bin
 wget https://github.com/ggerganov/whisper.cpp/releases/download/v1.6.0/whisper-cli-linux-x64
 chmod +x whisper-cli-linux-x64
-mv whisper-cli-linux-x64 ~/.echo/bin/whisper-cli
+mv whisper-cli-linux-x64 ~/.retineo/bin/whisper-cli
 
 # 2. Download a model (~500MB for base)
-mkdir -p ~/.echo/models/whisper
+mkdir -p ~/.retineo/models/whisper
 wget https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin
-mv ggml-base.bin ~/.echo/models/whisper/
+mv ggml-base.bin ~/.retineo/models/whisper/
 
 # 3. Verify
-echoc doctor
+retineo doctor
 ```
 
 Supported model locations:
-- `~/.echo/models/whisper/ggml-*.bin` (auto-detected)
+- `~/.retineo/models/whisper/ggml-*.bin` (auto-detected)
 - Config key `whisperCppModel` in adapter config
 - Any path passed via `whisperCppPath` in adapter config
 
@@ -586,7 +586,7 @@ export OPENAI_API_KEY="sk-..."
 The adapters will skip local detection and use the cloud API directly.
 
 ### Heavy Processing Is Your Responsibility
-If your adapter needs ML models (Whisper, Tesseract, YOLO), large binaries (ffmpeg, pandoc), or network calls, you must bundle and manage them. ECHO Core provides the spawn environment and working directory, but nothing else.
+If your adapter needs ML models (Whisper, Tesseract, YOLO), large binaries (ffmpeg, pandoc), or network calls, you must bundle and manage them. RETINEO Core provides the spawn environment and working directory, but nothing else.
 
 ### No Long-Running State
 Adapters are spawned per ingestion. Do not assume state persists between files. If you need to warm up a model, do it in `initialize` and accept the latency on first spawn.
@@ -618,7 +618,7 @@ Custom codes ≥ 6000 are allowed.
 
 ## Built-in Adapters
 
-ECHO Core ships with the following built-in adapters:
+RETINEO Core ships with the following built-in adapters:
 
 | Adapter | Status | Formats | Notes |
 |---------|--------|---------|-------|
@@ -632,7 +632,7 @@ ECHO Core ships with the following built-in adapters:
 | `video-mock` | mock | `.mp4`, `.avi` | Synthetic frame + speech blocks for testing (fallback) |
 
 ### Determinism Is Strongly Recommended
-While not enforced, deterministic output (same file → same content) makes ECHO Core's deduplication and idempotency features work correctly. Use content-based seeds for any random or synthetic generation.
+While not enforced, deterministic output (same file → same content) makes RETINEO Core's deduplication and idempotency features work correctly. Use content-based seeds for any random or synthetic generation.
 
 ---
 

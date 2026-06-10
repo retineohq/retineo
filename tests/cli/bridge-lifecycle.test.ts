@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Bridge Lifecycle Tests
+ * RETINEO Core — Bridge Lifecycle Tests
  *
  * Verifies the bridge command paths are wired through the same process manager.
  * Bridge is just another service that uses PID files — these tests cover
@@ -40,7 +40,7 @@ function makeDeps() {
     configManager: { load: async () => ({ dataDir: dataDir() }), save: async () => {} } as any,
     pipeline: { processJob: async () => {}, enqueueL1: () => {}, enqueueL2: () => {}, enqueueL3: () => {} },
     secretsManager: { set: async () => {}, get: async () => undefined, delete: async () => {}, list: async () => [], listMasked: async () => ({}) },
-    cas: { getObjectPath: () => '/tmp/echo/objects/ab/cdef', read: async () => Buffer.from(''), exists: () => false, write: async () => '', delete: async () => {}, writeObject: async () => {}, readObject: async () => ({ node: {} as any, artifacts: { content: '', meta: {} as any } }) },
+    cas: { getObjectPath: () => '/tmp/retineo/objects/ab/cdef', read: async () => Buffer.from(''), exists: () => false, write: async () => '', delete: async () => {}, writeObject: async () => {}, readObject: async () => ({ node: {} as any, artifacts: { content: '', meta: {} as any } }) },
   };
 }
 

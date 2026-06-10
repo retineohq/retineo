@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Bridge Server Tests
+ * RETINEO Core — Bridge Server Tests
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';

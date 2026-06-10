@@ -1,5 +1,5 @@
 /**
- * ECHO Core — MCP Handlers
+ * RETINEO Core — MCP Handlers
  * Phase 5: Tool handlers calling core services.
  */
 
@@ -27,7 +27,7 @@ export interface MCPHandlersDeps {
 
 export function createHandlers(deps: MCPHandlersDeps) {
   return {
-    async echo_search(args: { query: string; language?: string; topK?: number }) {
+    async retineo_search(args: { query: string; language?: string; topK?: number }) {
       const analyzed = await deps.queryAnalyzer.analyze(args.query);
       const results = await deps.retrievalService.search(analyzed, {
         language: args.language,
@@ -46,7 +46,7 @@ export function createHandlers(deps: MCPHandlersDeps) {
       };
     },
 
-    async echo_ingest(args: { sourcePath: string; mimeType?: string }) {
+    async retineo_ingest(args: { sourcePath: string; mimeType?: string }) {
       const result = await deps.ingestionService.ingestFile(args.sourcePath);
       return {
         content: [
@@ -58,7 +58,7 @@ export function createHandlers(deps: MCPHandlersDeps) {
       };
     },
 
-    async echo_status() {
+    async retineo_status() {
       const sources = deps.registry.listSources();
       const pending = deps.registry.getPendingJobs(1000);
       return {
@@ -85,7 +85,7 @@ export function createHandlers(deps: MCPHandlersDeps) {
       };
     },
 
-    async echo_get_node(args: { hash: string }) {
+    async retineo_get_node(args: { hash: string }) {
       const objPath = deps.cas.getObjectPath(args.hash);
       const nodeJsonPath = path.join(objPath, 'node.json');
       if (!existsSync(nodeJsonPath)) {

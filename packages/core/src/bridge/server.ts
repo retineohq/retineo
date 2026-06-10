@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Bridge Server
+ * RETINEO Core — Bridge Server
  * Phase 7: Fastify-based HTTP server with health routes.
  */
 

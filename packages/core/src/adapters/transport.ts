@@ -1,5 +1,5 @@
 /**
- * ECHO Core — JSON-RPC Transport over child_process stdin/stdout
+ * RETINEO Core — JSON-RPC Transport over child_process stdin/stdout
  * Phase 2: Adapter IPC System
  */
 

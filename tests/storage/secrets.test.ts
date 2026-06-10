@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Secrets Manager Tests
+ * RETINEO Core — Secrets Manager Tests
  * Phase 7
  */
 
@@ -15,7 +15,7 @@ describe('FileSecretsManager', () => {
   let manager: FileSecretsManager;
 
   beforeEach(() => {
-    tmpDir = mkdtempSync(path.join(tmpdir(), 'echo-secrets-'));
+    tmpDir = mkdtempSync(path.join(tmpdir(), 'retineo-secrets-'));
     secretsPath = path.join(tmpDir, 'secrets.json');
     manager = new FileSecretsManager(secretsPath);
   });

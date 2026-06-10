@@ -1,4 +1,4 @@
-# ECHO Core — Search & Retrieval Guide
+# RETINEO Core — Search & Retrieval Guide
 
 This document covers the search pipeline, configuration, and customization of the retrieval system introduced in **Phase 4**.
 
@@ -24,7 +24,7 @@ AssembledContext
 
 ## Configuration
 
-All search behavior is controlled via `~/.echo/config.yaml` under the `search:` key.
+All search behavior is controlled via `~/.retineo/config.yaml` under the `search:` key.
 
 ### Example
 
@@ -236,4 +236,4 @@ search:
       Respond with JSON: {"intent": "..."}
 ```
 
-Reference it in `~/.echo/config.yaml` by merging or replacing the `search.prompts` section. No source code changes required.
+Reference it in `~/.retineo/config.yaml` by merging or replacing the `search.prompts` section. No source code changes required.

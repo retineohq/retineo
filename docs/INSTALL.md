@@ -1,4 +1,4 @@
-# ECHO Core — Installation Guide
+# RETINEO Core — Installation Guide
 
 ## Prerequisites
 
@@ -30,48 +30,48 @@ node --version  # v20.x.x or higher
 ## Install via npm
 
 ```bash
-npm install -g echo-core
+npm install -g retineo
 ```
 
 Or run without installing:
 
 ```bash
-npx echo-core <command>
+npx retineo <command>
 ```
 
-### Initialize ECHO
+### Initialize RETINEO
 
-After install, run the setup wizard to configure ECHO Core:
+After install, run the setup wizard to configure RETINEO Core:
 
 ```bash
-echoc init
+retineo init
 ```
 
-> `echo-core` is also available as an alias for `echoc`.
+> `retineo` is also available as an alias for `retineo`.
 
 What `init` does:
 
 1. Detects Ollama on `localhost:11434` and lists installed models (or offers cloud/mock fallback)
 2. Lets you pick an LLM model and an embedding model
-3. Asks for a data directory (default `~/.echo`) and bridge port (default `37891`)
-4. Creates `~/.echo/` directory structure (`objects/`, `index/`, `adapters/`, `models/`, `logs/`)
-5. Writes `~/.echo/config.yaml` with the `llm.providers[]` and `embedding.providers[]` sections
-6. Initializes the SQLite database (`~/.echo/echo.sqlite`) with the schema
-7. Optionally starts a background worker (`echoc worker start`)
+3. Asks for a data directory (default `~/.retineo`) and bridge port (default `37891`)
+4. Creates `~/.retineo/` directory structure (`objects/`, `index/`, `adapters/`, `models/`, `logs/`)
+5. Writes `~/.retineo/config.yaml` with the `llm.providers[]` and `embedding.providers[]` sections
+6. Initializes the SQLite database (`~/.retineo/retineo.sqlite`) with the schema
+7. Optionally starts a background worker (`retineo worker start`)
 
-For CI / scripts, use `echoc init --non-interactive` — it reads `ECHO_DATA_DIR`, `ECHO_LLM_MODEL`, `ECHO_EMBED_MODEL`, `ECHO_BRIDGE_PORT`, and `OLLAMA_BASE_URL` from the environment.
+For CI / scripts, use `retineo init --non-interactive` — it reads `RETINEO_DATA_DIR`, `RETINEO_LLM_MODEL`, `RETINEO_EMBED_MODEL`, `RETINEO_BRIDGE_PORT`, and `OLLAMA_BASE_URL` from the environment.
 
 ---
 
 ## Install from binary
 
-Download a standalone binary from [GitHub Releases](https://github.com/your-org/echo-core/releases) if you cannot install Node.js.
+Download a standalone binary from [GitHub Releases](https://github.com/your-org/retineo/releases) if you cannot install Node.js.
 
 | Platform | Binary |
 |----------|--------|
-| Linux x64 | `echo-core-linux-x64` |
-| macOS x64 | `echo-core-macos-x64` |
-| Windows x64 | `echo-core-win-x64.exe` |
+| Linux x64 | `retineo-linux-x64` |
+| macOS x64 | `retineo-macos-x64` |
+| Windows x64 | `retineo-win-x64.exe` |
 
 > **Note:** Binaries are best-effort and may not support native dependencies (e.g., `better-sqlite3`). For full functionality, use npm install.
 
@@ -80,8 +80,8 @@ Download a standalone binary from [GitHub Releases](https://github.com/your-org/
 ## Install from source
 
 ```bash
-git clone https://github.com/your-org/echo-core.git
-cd echo-core
+git clone https://github.com/your-org/retineo.git
+cd retineo
 pnpm install
 pnpm build
 pnpm test
@@ -90,7 +90,7 @@ pnpm test
 Run locally:
 
 ```bash
-node bin/echo-core.js <command>
+node bin/retineo.js <command>
 ```
 
 ---
@@ -116,18 +116,18 @@ Local-first speech-to-text. Offline, free, private.
 
 ```bash
 # Download whisper-cli binary
-mkdir -p ~/.echo/bin
+mkdir -p ~/.retineo/bin
 wget https://github.com/ggerganov/whisper.cpp/releases/download/v1.6.0/whisper-cli-linux-x64
 chmod +x whisper-cli-linux-x64
-mv whisper-cli-linux-x64 ~/.echo/bin/whisper-cli
+mv whisper-cli-linux-x64 ~/.retineo/bin/whisper-cli
 
 # Download model (~500MB for base, good balance)
-mkdir -p ~/.echo/models/whisper
+mkdir -p ~/.retineo/models/whisper
 wget https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin
-mv ggml-base.bin ~/.echo/models/whisper/
+mv ggml-base.bin ~/.retineo/models/whisper/
 
 # Verify
-echoc doctor
+retineo doctor
 ```
 
 Without whisper.cpp, audio/video adapters will use the OpenAI API if a key is set, otherwise return empty content.
@@ -145,24 +145,24 @@ export OPENAI_API_KEY="sk-..."
 Store persistently:
 
 ```bash
-echoc key set openai $OPENAI_API_KEY
+retineo key set openai $OPENAI_API_KEY
 ```
 
 ### Check all dependencies
 
 ```bash
-echoc doctor
+retineo doctor
 ```
 
 ---
 
 ## First run
 
-After `echoc init`, verify everything is wired up:
+After `retineo init`, verify everything is wired up:
 
 ```bash
-echoc worker status
-echoc status
+retineo worker status
+retineo status
 ```
 
 Expected output:
@@ -177,7 +177,7 @@ Expected output:
 }
 ```
 
-Files created in `~/.echo/`:
+Files created in `~/.retineo/`:
 
 | File            | Purpose                        |
 | --------------- | ------------------------------ |
@@ -185,7 +185,7 @@ Files created in `~/.echo/`:
 | `secrets.json`  | AES-256-GCM encrypted API keys |
 | `data/objects/` | Content-Addressable Storage    |
 | `data/index/`   | Search indexes                 |
-| `echo.sqlite`   | SQLite registry                |
+| `retineo.sqlite`   | SQLite registry                |
 
 ---
 
@@ -194,22 +194,22 @@ Files created in `~/.echo/`:
 View current config:
 
 ```bash
-echoc config
+retineo config
 ```
 
 Set data directory:
 
 ```bash
-echoc config dataDir /path/to/data
+retineo config dataDir /path/to/data
 ```
 
 Set default LLM provider:
 
 ```bash
-echoc config llm.defaultProvider ollama
+retineo config llm.defaultProvider ollama
 ```
 
-Edit `~/.echo/config.yaml` directly for advanced options. See [`ARCHITECTURE.md`](ARCHITECTURE.md) for config reference.
+Edit `~/.retineo/config.yaml` directly for advanced options. See [`ARCHITECTURE.md`](ARCHITECTURE.md) for config reference.
 
 ---
 
@@ -217,12 +217,12 @@ Edit `~/.echo/config.yaml` directly for advanced options. See [`ARCHITECTURE.md`
 
 | Symptom                                 | Cause                                    | Fix                                                                                                     |
 | --------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `Port 37891 is already in use`          | Another ECHO instance running            | `kill` the old process or change `bridge.port` in config                                                |
-| `SQLite database is locked`             | Concurrent access or crashed worker      | Wait 30s for lease expiry, or run `echoc recover`                                                        |
+| `Port 37891 is already in use`          | Another RETINEO instance running            | `kill` the old process or change `bridge.port` in config                                                |
+| `SQLite database is locked`             | Concurrent access or crashed worker      | Wait 30s for lease expiry, or run `retineo recover`                                                        |
 | `Adapter not found for .ext`            | No adapter registered for that extension | Check [`ADAPTER_GUIDE.md`](ADAPTER_GUIDE.md) or install the adapter                                     |
-| `LLM provider timeout`                  | Provider unreachable or overloaded       | Check `llm.providers[].baseUrl`, increase `timeoutMs`, or verify API key with `echoc key get <provider>` |
-| `CONFIG_SECRET_NOT_FOUND`               | Environment variable or secret missing   | Set with `echoc key set <provider> <key>` or export the env var                                          |
-| `WHISPER_API_KEY not set`               | Missing Whisper API key                  | Set `WHISPER_API_KEY` or `OPENAI_API_KEY` env var, or run `echoc key set openai <key>`                  |
+| `LLM provider timeout`                  | Provider unreachable or overloaded       | Check `llm.providers[].baseUrl`, increase `timeoutMs`, or verify API key with `retineo key get <provider>` |
+| `CONFIG_SECRET_NOT_FOUND`               | Environment variable or secret missing   | Set with `retineo key set <provider> <key>` or export the env var                                          |
+| `WHISPER_API_KEY not set`               | Missing Whisper API key                  | Set `WHISPER_API_KEY` or `OPENAI_API_KEY` env var, or run `retineo key set openai <key>`                  |
 | `ffmpeg is required`                    | ffmpeg not installed                     | Install ffmpeg: `apt install ffmpeg` or `brew install ffmpeg`                                            |
 | `Module not found` after source install | Forgot `pnpm build`                      | Run `pnpm build`                                                                                        |
 

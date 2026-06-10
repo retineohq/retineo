@@ -18,7 +18,7 @@ describe('DefaultContextNodeRepository', () => {
   let repo: DefaultContextNodeRepository;
 
   beforeEach(() => {
-    tmpDir = mkdtempSync(path.join(os.tmpdir(), 'echo-repo-'));
+    tmpDir = mkdtempSync(path.join(os.tmpdir(), 'retineo-repo-'));
     cas = new LocalCASStorage(tmpDir);
     registry = new SQLiteRegistry(path.join(tmpDir, 'registry.sqlite'));
     repo = new DefaultContextNodeRepository(cas, registry);

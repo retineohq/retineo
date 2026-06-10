@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Language Detector
+ * RETINEO Core — Language Detector
  * Phase 4: franc + heuristic fallback. CLD3 stub for optional future use.
  */
 

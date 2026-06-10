@@ -1,5 +1,5 @@
 /**
- * ECHO Core — ContextNodeRepository
+ * RETINEO Core — ContextNodeRepository
  * Single point of truth for loading/saving ContextNode via CAS + Registry.
  * Business logic (pipeline, retrieval) works with ContextNode, never with raw files.
  */

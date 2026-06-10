@@ -1,5 +1,5 @@
 /**
- * ECHO Core — LLM & Embedding Provider Interfaces
+ * RETINEO Core — LLM & Embedding Provider Interfaces
  * Phase 3: Provider abstraction for LLM and embedding generation
  */
 

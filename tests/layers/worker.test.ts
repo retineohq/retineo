@@ -26,7 +26,7 @@ describe('DefaultQueueWorker', () => {
   let worker: DefaultQueueWorker;
 
   beforeEach(() => {
-    tmpDir = mkdtempSync(path.join(os.tmpdir(), 'echo-worker-'));
+    tmpDir = mkdtempSync(path.join(os.tmpdir(), 'retineo-worker-'));
     dataDir = tmpDir;
     cas = new LocalCASStorage(dataDir);
     registry = new SQLiteRegistry(path.join(dataDir, 'registry.sqlite'));

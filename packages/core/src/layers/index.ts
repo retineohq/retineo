@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Compilation Layers Barrel Export
+ * RETINEO Core — Compilation Layers Barrel Export
  * Phase 3: L1/L2/L3 generators, pipeline, worker
  */
 

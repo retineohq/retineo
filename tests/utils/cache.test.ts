@@ -1,5 +1,5 @@
 /**
- * ECHO Core — LRU Cache Tests
+ * RETINEO Core — LRU Cache Tests
  * Phase 7
  */
 

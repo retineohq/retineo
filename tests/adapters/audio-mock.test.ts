@@ -13,7 +13,7 @@ let tmpDir: string;
 let adaptersDir: string;
 
 beforeEach(() => {
-  tmpDir = mkdtempSync(path.join(os.tmpdir(), 'echo-audio-'));
+  tmpDir = mkdtempSync(path.join(os.tmpdir(), 'retineo-audio-'));
   adaptersDir = path.join(tmpDir, 'adapters');
   mkdirSync(adaptersDir);
 

@@ -1,8 +1,8 @@
 /**
- * ECHO Core — Standalone Worker Script
+ * RETINEO Core — Standalone Worker Script
  *
  * Used as the entry point for `child_process.fork()` from
- * `echoc worker start` and from `echoc daemon start`.
+ * `retineo worker start` and from `retineo daemon start`.
  *
  * Wires real services: SQLiteRegistry, CAS, IngestionService, Pipeline,
  * QueueWorker. Listens for SIGTERM for graceful shutdown.
@@ -57,7 +57,7 @@ function resolveAdaptersDir(): string {
 export async function startWorkerServices(
   options: WorkerScriptOptions = {}
 ): Promise<RunningServices> {
-  const configManager = new FileConfigManager(process.env.ECHO_DATA_DIR);
+  const configManager = new FileConfigManager(process.env.RETINEO_DATA_DIR);
   const config = await configManager.load();
   const dataDir = config.dataDir;
 
@@ -70,7 +70,7 @@ export async function startWorkerServices(
 
   // Storage
   const cas = new LocalCASStorage(dataDir);
-  const registry = new SQLiteRegistry(path.join(dataDir, 'echo.sqlite'));
+  const registry = new SQLiteRegistry(path.join(dataDir, 'retineo.sqlite'));
 
   // Adapters (best-effort)
   const adaptersDir = resolveAdaptersDir();
@@ -174,7 +174,7 @@ async function main(): Promise<void> {
 
 const isForked =
   typeof process.send === 'function' ||
-  process.env.ECHO_WORKER_SCRIPT === '1';
+  process.env.RETINEO_WORKER_SCRIPT === '1';
 
 if (isForked) {
   main().catch((err) => {

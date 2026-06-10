@@ -1,5 +1,5 @@
 /**
- * ECHO Core — ConfigManager
+ * RETINEO Core — ConfigManager
  * Phase 4: Extended with search, i18n, retrieval settings.
  */
 
@@ -109,7 +109,7 @@ export interface I18nConfig {
   packs: I18nPackConfig[];
 }
 
-export interface EchoConfig {
+export interface RetineoConfig {
   dataDir: string;
   defaultAdapter: string;
   llmProvider: string;
@@ -170,7 +170,7 @@ const DEFAULT_LOGGING_CONFIG: LoggingConfig = {
   level: 'info',
   console: true,
   file: true,
-  filePath: path.join(os.homedir(), '.echo', 'logs', 'echo.log'),
+  filePath: path.join(os.homedir(), '.retineo', 'logs', 'retineo.log'),
   pretty: false,
 };
 
@@ -207,8 +207,8 @@ const DEFAULT_EMBEDDING_CONFIG: EmbeddingConfig = {
 
 const DEFAULT_BRIDGE_CONFIG = { host: '127.0.0.1', port: 37891 };
 
-const DEFAULT_CONFIG: EchoConfig = {
-  dataDir: path.join(os.homedir(), '.echo'),
+const DEFAULT_CONFIG: RetineoConfig = {
+  dataDir: path.join(os.homedir(), '.retineo'),
   defaultAdapter: 'file',
   llmProvider: 'ollama',
   embeddingModel: 'nomic-embed-text',
@@ -314,8 +314,8 @@ export interface ConfigManager {
   getDataDir(): string;
   getConfigPath(): string;
   configExists(): boolean;
-  load(): Promise<EchoConfig>;
-  save(config: EchoConfig): Promise<void>;
+  load(): Promise<RetineoConfig>;
+  save(config: RetineoConfig): Promise<void>;
   initializeDataDir(): Promise<void>;
 }
 
@@ -324,7 +324,7 @@ export class FileConfigManager implements ConfigManager {
   private dataDir: string;
 
   constructor(dataDir?: string) {
-    this.dataDir = dataDir ?? process.env.ECHO_DATA_DIR ?? DEFAULT_CONFIG.dataDir;
+    this.dataDir = dataDir ?? process.env.RETINEO_DATA_DIR ?? DEFAULT_CONFIG.dataDir;
     this.configPath = path.join(this.dataDir, 'config.yaml');
   }
 
@@ -340,13 +340,13 @@ export class FileConfigManager implements ConfigManager {
     return existsSync(this.configPath);
   }
 
-  async load(): Promise<EchoConfig> {
+  async load(): Promise<RetineoConfig> {
     if (!existsSync(this.configPath)) {
       await this.save(DEFAULT_CONFIG);
       return structuredClone(DEFAULT_CONFIG);
     }
     const raw = await readFile(this.configPath, 'utf-8');
-    const parsed = yaml.load(raw) as Partial<EchoConfig> & Record<string, unknown>;
+    const parsed = yaml.load(raw) as Partial<RetineoConfig> & Record<string, unknown>;
     return {
       dataDir: parsed.dataDir ?? DEFAULT_CONFIG.dataDir,
       defaultAdapter: parsed.defaultAdapter ?? DEFAULT_CONFIG.defaultAdapter,
@@ -361,7 +361,7 @@ export class FileConfigManager implements ConfigManager {
     };
   }
 
-  async save(config: EchoConfig): Promise<void> {
+  async save(config: RetineoConfig): Promise<void> {
     await mkdir(this.dataDir, { recursive: true });
     const raw = yaml.dump(config);
     await writeFile(this.configPath, raw, 'utf-8');
@@ -383,7 +383,7 @@ export class FileConfigManager implements ConfigManager {
   }
 
   private async initializeDatabase(): Promise<void> {
-    const dbPath = path.join(this.dataDir, 'echo.sqlite');
+    const dbPath = path.join(this.dataDir, 'retineo.sqlite');
     const db = new Database(dbPath);
 
     const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as { name: string }[];

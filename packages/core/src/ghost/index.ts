@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Ghost System
+ * RETINEO Core — Ghost System
  * Orphan detection, recovery, and garbage collection.
  */
 

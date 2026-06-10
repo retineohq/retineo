@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Zod Schemas
+ * RETINEO Core — Zod Schemas
  * Runtime validation for all domain types
  */
 

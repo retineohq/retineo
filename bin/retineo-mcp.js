@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
- * ECHO Core — MCP Server Entry Point
- * Starts EchoMCPServer over stdio transport with wired services.
+ * RETINEO Core — MCP Server Entry Point
+ * Starts RetineoMCPServer over stdio transport with wired services.
  */
 
-import { EchoMCPServer } from '../dist/mcp/server.js';
+import { RetineoMCPServer } from '../dist/mcp/server.js';
 import { FileConfigManager } from '../dist/storage/config.js';
 import { LocalCASStorage, computeHash } from '../dist/storage/cas.js';
 import { SQLiteRegistry } from '../dist/storage/registry.js';
@@ -28,11 +28,11 @@ async function main() {
 
   const configManager = new FileConfigManager();
   const config = await configManager.load();
-  const dataDir = config.dataDir || path.join(os.homedir(), '.echo');
+  const dataDir = config.dataDir || path.join(os.homedir(), '.retineo');
   const secretsManager = new FileSecretsManager(path.join(dataDir, 'secrets.json'));
 
   const cas = new LocalCASStorage(dataDir);
-  const dbPath = path.join(dataDir, 'echo.sqlite');
+  const dbPath = path.join(dataDir, 'retineo.sqlite');
   const registry = new SQLiteRegistry(dbPath);
 
   const nodeBuilder = new DefaultNodeBuilder();
@@ -58,7 +58,7 @@ async function main() {
 
   const queryAnalyzer = new DefaultQueryAnalyzer({ searchConfig: config.search });
 
-  // Load real embedding provider from config (same as echo-core.js)
+  // Load real embedding provider from config (same as retineo.js)
   const { DefaultEmbeddingProviderFactory } = await import('../dist/llm/factory.js');
   const embedFactory = new DefaultEmbeddingProviderFactory();
   try {
@@ -77,7 +77,7 @@ async function main() {
 
   const contextAssembler = new DefaultContextAssembler({ config: config.search });
 
-  const server = new EchoMCPServer({
+  const server = new RetineoMCPServer({
     deps: {
       queryAnalyzer,
       retrievalService,

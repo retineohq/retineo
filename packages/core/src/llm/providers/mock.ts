@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Mock LLM Provider
+ * RETINEO Core — Mock LLM Provider
  * Phase 3: Deterministic provider for tests. Hash(prompt) → fixed response.
  */
 

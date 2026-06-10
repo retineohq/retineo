@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Prompt Helpers Tests
+ * RETINEO Core — Prompt Helpers Tests
  */
 
 import { describe, it, expect } from 'vitest';

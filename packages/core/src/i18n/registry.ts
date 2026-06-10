@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Language Pack Registry
+ * RETINEO Core — Language Pack Registry
  * Phase 4: Load built-in packs, resolve by code, allow config overrides.
  */
 

@@ -1,8 +1,8 @@
 /**
- * ECHO Core — Process Lifecycle Manager
+ * RETINEO Core — Process Lifecycle Manager
  *
  * Read/write PID files, signal running processes, and stream logs.
- * Used by `echoc worker start/stop/status/logs` and `echoc bridge ...`.
+ * Used by `retineo worker start/stop/status/logs` and `retineo bridge ...`.
  */
 
 import { readFile, writeFile, mkdir, unlink, access } from 'fs/promises';
@@ -20,9 +20,9 @@ export interface ProcessInfo {
 }
 
 export function dataDir(): string {
-  // Honour ECHO_DATA_DIR for the lifecycle helpers so the wizard and
+  // Honour RETINEO_DATA_DIR for the lifecycle helpers so the wizard and
   // lifecycle commands operate on the same directory.
-  return process.env.ECHO_DATA_DIR ?? path.join(os.homedir(), '.echo');
+  return process.env.RETINEO_DATA_DIR ?? path.join(os.homedir(), '.retineo');
 }
 
 export function pidFilePath(service: string): string {

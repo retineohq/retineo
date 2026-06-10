@@ -18,7 +18,7 @@ describe('DefaultGhostRecoveryService', () => {
   let service: DefaultGhostRecoveryService;
 
   beforeEach(() => {
-    tmpDir = mkdtempSync(path.join(os.tmpdir(), 'echo-ghost-recover-'));
+    tmpDir = mkdtempSync(path.join(os.tmpdir(), 'retineo-ghost-recover-'));
     cas = new LocalCASStorage(tmpDir);
     registry = new SQLiteRegistry(path.join(tmpDir, 'registry.sqlite'));
     service = new DefaultGhostRecoveryService(registry, cas);

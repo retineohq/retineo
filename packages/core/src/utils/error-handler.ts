@@ -1,17 +1,17 @@
 /**
- * ECHO Core — Global Error Handler
+ * RETINEO Core — Global Error Handler
  * Phase 7: Unified error handling for HTTP, CLI, and MCP.
  */
 
 import type { FastifyReply } from 'fastify';
-import type { EchoError, BaseEchoError } from './errors.js';
+import type { RetineoError, BaseRetineoError } from './errors.js';
 
-export function isEchoError(err: unknown): err is BaseEchoError {
+export function isRetineoError(err: unknown): err is BaseRetineoError {
   return err instanceof Error && 'code' in err && 'statusCode' in err;
 }
 
-export function echoErrorFrom(err: unknown): EchoError {
-  if (isEchoError(err)) {
+export function retineoErrorFrom(err: unknown): RetineoError {
+  if (isRetineoError(err)) {
     return err;
   }
   const message = err instanceof Error ? err.message : String(err);
@@ -22,32 +22,32 @@ export function echoErrorFrom(err: unknown): EchoError {
   };
 }
 
-/** Send structured EchoError as JSON HTTP response */
+/** Send structured RetineoError as JSON HTTP response */
 export function sendErrorReply(reply: FastifyReply, err: unknown): FastifyReply {
-  const echoErr = echoErrorFrom(err);
-  return reply.status(echoErr.statusCode).send({
+  const retineoErr = retineoErrorFrom(err);
+  return reply.status(retineoErr.statusCode).send({
     error: {
-      code: echoErr.code,
-      message: echoErr.message,
-      details: (echoErr as BaseEchoError).details,
+      code: retineoErr.code,
+      message: retineoErr.message,
+      details: (retineoErr as BaseRetineoError).details,
     },
   });
 }
 
 /** Format error for CLI output */
 export function formatCLIError(err: unknown, json = false): string {
-  const echoErr = echoErrorFrom(err);
+  const retineoErr = retineoErrorFrom(err);
   if (json) {
     return JSON.stringify({
       error: {
-        code: echoErr.code,
-        message: echoErr.message,
-        details: (echoErr as BaseEchoError).details,
+        code: retineoErr.code,
+        message: retineoErr.message,
+        details: (retineoErr as BaseRetineoError).details,
       },
     }, null, 2);
   }
-  const details = (echoErr as BaseEchoError).details
-    ? '\n  Details: ' + JSON.stringify((echoErr as BaseEchoError).details)
+  const details = (retineoErr as BaseRetineoError).details
+    ? '\n  Details: ' + JSON.stringify((retineoErr as BaseRetineoError).details)
     : '';
-  return `Error [${echoErr.code}]: ${echoErr.message}${details}`;
+  return `Error [${retineoErr.code}]: ${retineoErr.message}${details}`;
 }

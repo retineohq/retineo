@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Adapter Manager
+ * RETINEO Core — Adapter Manager
  * Phase 2: Loads built-in adapters, resolves by mimeType/extension, ingests files
  */
 

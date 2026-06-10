@@ -1,5 +1,5 @@
 /**
- * ECHO Core — HNSW Index Tests
+ * RETINEO Core — HNSW Index Tests
  * Phase 7
  */
 
@@ -34,7 +34,7 @@ describe('HNSW Index (native or fallback)', () => {
   });
 
   it('save and load roundtrip', async () => {
-    const tmpDir = mkdtempSync(path.join(tmpdir(), 'echo-hnsw-'));
+    const tmpDir = mkdtempSync(path.join(tmpdir(), 'retineo-hnsw-'));
     const index = await createHNSWIndex(2);
     index.build([{ hash: 'a', vector: [1, 0] }]);
     const filePath = path.join(tmpDir, 'hnsw.bin');
@@ -53,7 +53,7 @@ describe('loadOrBuildHNSW', () => {
   let tmpDir: string;
 
   beforeEach(() => {
-    tmpDir = mkdtempSync(path.join(tmpdir(), 'echo-hnsw-load-'));
+    tmpDir = mkdtempSync(path.join(tmpdir(), 'retineo-hnsw-load-'));
   });
 
   afterEach(() => {

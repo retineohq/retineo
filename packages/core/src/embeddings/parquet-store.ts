@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Parquet Embedding Store
+ * RETINEO Core — Parquet Embedding Store
  * Phase 7: Optional Parquet storage with JSONL fallback.
  */
 

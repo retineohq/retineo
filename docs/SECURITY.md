@@ -1,4 +1,4 @@
-# ECHO Core — Security
+# RETINEO Core — Security
 
 ## Secrets Management
 
@@ -17,27 +17,27 @@ interface SecretsManager {
 
 ### `FileSecretsManager`
 
-- Stores secrets in `~/.echo/secrets.json`.
+- Stores secrets in `~/.retineo/secrets.json`.
 - Encrypted with **AES-256-GCM** via `node:crypto`.
 - Encryption key derived from:
-  1. `ECHO_MASTER_KEY` environment variable (preferred).
+  1. `RETINEO_MASTER_KEY` environment variable (preferred).
   2. Machine-specific salt + hostname/username fallback (MVP convenience, not for production).
 
 ### CLI Commands
 
 ```bash
 # Store an API key (encrypted)
-echoc key set openai sk-xxxxxxxx
+retineo key set openai sk-xxxxxxxx
 
 # View masked key
-echoc key get openai
+retineo key get openai
 # openai: sk-x...xxxx
 
 # List all keys (masked)
-echoc key list
+retineo key list
 
 # Remove a key
-echoc key delete openai
+retineo key delete openai
 ```
 
 ### Config Resolution Order
@@ -45,7 +45,7 @@ echoc key delete openai
 When a provider config contains `${OPENAI_API_KEY}`:
 
 1. Check environment variable `OPENAI_API_KEY`.
-2. Check secrets manager (`~/.echo/secrets.json`).
+2. Check secrets manager (`~/.retineo/secrets.json`).
 3. If neither found → throw `CONFIG_SECRET_NOT_FOUND` on provider initialization.
 
 ### Example Config
@@ -61,7 +61,7 @@ llm:
 
 ## Error Handling
 
-All errors use the `EchoError` hierarchy with standardized codes:
+All errors use the `RetineoError` hierarchy with standardized codes:
 
 | Code | Status | Meaning |
 |------|--------|---------|
@@ -87,7 +87,7 @@ HTTP responses include structured JSON:
 
 ## Recommendations
 
-- Set `ECHO_MASTER_KEY` in production. Do not rely on machine-derived keys.
-- Restrict `~/.echo/` directory permissions to `0700`.
+- Set `RETINEO_MASTER_KEY` in production. Do not rely on machine-derived keys.
+- Restrict `~/.retineo/` directory permissions to `0700`.
 - Rotate secrets regularly.
 - Use separate API keys per environment (dev/staging/prod).

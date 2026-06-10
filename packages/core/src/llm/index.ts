@@ -1,5 +1,5 @@
 /**
- * ECHO Core — LLM Module Barrel Export
+ * RETINEO Core — LLM Module Barrel Export
  * Phase 7: Added circuit breaker.
  */
 

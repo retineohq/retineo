@@ -1,5 +1,5 @@
 /**
- * ECHO Core — CLI Commands Tests
+ * RETINEO Core — CLI Commands Tests
  */
 
 import { describe, it, expect, vi } from 'vitest';
@@ -91,7 +91,7 @@ function makeDeps(): CLICommandsDeps {
       enqueueL2: () => {},
       enqueueL3: () => {},
     },
-    cas: { getObjectPath: () => '/tmp/echo/objects/ab/cdef', read: async () => Buffer.from(''), exists: () => false, write: async () => '', delete: async () => {}, writeObject: async () => {}, readObject: async () => ({ node: {} as any, artifacts: { content: '', meta: {} as any } }) },
+    cas: { getObjectPath: () => '/tmp/retineo/objects/ab/cdef', read: async () => Buffer.from(''), exists: () => false, write: async () => '', delete: async () => {}, writeObject: async () => {}, readObject: async () => ({ node: {} as any, artifacts: { content: '', meta: {} as any } }) },
   };
 }
 
@@ -112,7 +112,7 @@ describe('CLICommands', () => {
     await cmds.status();
     expect(log).toHaveBeenCalled();
     const output = log.mock.calls[0][0] as string;
-    expect(output).toContain('ECHO Core 0.1.0');
+    expect(output).toContain('RETINEO Core 0.1.0');
     log.mockRestore();
   });
 
@@ -137,7 +137,7 @@ describe('CLICommands', () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     const fs = await import('fs');
     const crypto = await import('crypto');
-    const tmpFile = '/tmp/echo-recover-test-' + Date.now() + '.md';
+    const tmpFile = '/tmp/retineo-recover-test-' + Date.now() + '.md';
     const content = 'hello world';
     fs.writeFileSync(tmpFile, content);
     const hash = crypto.createHash('sha256').update(content).digest('hex');
@@ -153,7 +153,7 @@ describe('CLICommands', () => {
       rootHash: hash,
       lastSeenAt: new Date().toISOString(),
     }];
-    deps.cas.getObjectPath = () => '/tmp/echo/objects/ab/cdef';
+    deps.cas.getObjectPath = () => '/tmp/retineo/objects/ab/cdef';
 
     const cmds = new CLICommands(deps);
     await cmds.recover(hash);

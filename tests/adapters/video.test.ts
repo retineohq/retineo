@@ -13,7 +13,7 @@ let tmpDir: string;
 let adaptersDir: string;
 
 function setupAdapterDir() {
-  tmpDir = mkdtempSync(path.join(os.tmpdir(), 'echo-video-real-'));
+  tmpDir = mkdtempSync(path.join(os.tmpdir(), 'retineo-video-real-'));
   adaptersDir = path.join(tmpDir, 'adapters');
   mkdirSync(adaptersDir);
 

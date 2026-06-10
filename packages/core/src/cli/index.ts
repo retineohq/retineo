@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * ECHO Core — CLI Entry Point
+ * RETINEO Core — CLI Entry Point
  * Phase 8: Worker/bridge/daemon lifecycle, --watch flag, interactive init wizard.
  */
 
@@ -13,16 +13,16 @@ export function createCLI(deps: CLICommandsDeps): Command {
   const program = new Command();
 
   program
-    .name('echoc')
-    .description('ECHO Core CLI')
+    .name('retineo')
+    .description('RETINEO Core CLI')
     .version(deps.version)
     .option('-v, --verbose', 'Enable verbose debug output to console (pretty-printed)')
     .hook('preAction', (thisCommand) => {
       const verbose = thisCommand.opts().verbose;
       if (verbose) {
-        process.env.ECHO_LOG_LEVEL = 'debug';
-        process.env.ECHO_LOG_CONSOLE = 'true';
-        process.env.ECHO_LOG_PRETTY = 'true';
+        process.env.RETINEO_LOG_LEVEL = 'debug';
+        process.env.RETINEO_LOG_CONSOLE = 'true';
+        process.env.RETINEO_LOG_PRETTY = 'true';
       }
     });
 
@@ -135,7 +135,7 @@ export function createCLI(deps: CLICommandsDeps): Command {
 
   program
     .command('init')
-    .description('Initialize ECHO Core (interactive setup wizard)')
+    .description('Initialize RETINEO Core (interactive setup wizard)')
     .option('--non-interactive', 'Initialize using environment variables (no prompts)')
     .option('--llm-model <model>', 'LLM model name (required with --non-interactive)')
     .option('--embed-model <model>', 'Embedding model name (required with --non-interactive)')

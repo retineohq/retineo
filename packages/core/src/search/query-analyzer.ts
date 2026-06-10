@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Query Analyzer
+ * RETINEO Core — Query Analyzer
  * Phase 4: Language detection, intent classification, entity extraction, query enrichment.
  */
 

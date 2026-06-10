@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Ollama Provider
+ * RETINEO Core — Ollama Provider
  * Phase 3: LLM + Embedding via Ollama HTTP API
  */
 

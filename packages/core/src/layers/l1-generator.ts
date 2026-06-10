@@ -1,5 +1,5 @@
 /**
- * ECHO Core — L1 Generator
+ * RETINEO Core — L1 Generator
  * Phase 3: Rule-based structural parser for markdown.
  * Splits content into sections (headings) and chunks.
  */

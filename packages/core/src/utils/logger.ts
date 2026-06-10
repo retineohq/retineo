@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Dual Logger
+ * RETINEO Core — Dual Logger
  * Writes to console (stderr) and/or file. Console is human-readable (pretty),
  * file is JSON for parsing. Console logger always works even if file logger fails.
  */

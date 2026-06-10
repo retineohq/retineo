@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Bridge Routes
+ * RETINEO Core — Bridge Routes
  * Phase 7: Fastify route definitions with health/metrics.
  */
 

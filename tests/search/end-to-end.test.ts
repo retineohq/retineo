@@ -67,7 +67,7 @@ describe('End-to-end search pipeline', () => {
   let provider: MockLLMProvider;
 
   beforeEach(async () => {
-    tmpDir = mkdtempSync(path.join(os.tmpdir(), 'echo-e2e-'));
+    tmpDir = mkdtempSync(path.join(os.tmpdir(), 'retineo-e2e-'));
     indexDir = path.join(tmpDir, 'index');
     mkdirSync(indexDir, { recursive: true });
     cas = new LocalCASStorage(tmpDir);

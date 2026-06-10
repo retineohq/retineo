@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Search Route Tests
+ * RETINEO Core — Search Route Tests
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';

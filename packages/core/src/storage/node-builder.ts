@@ -1,5 +1,5 @@
 /**
- * ECHO Core — NodeBuilder
+ * RETINEO Core — NodeBuilder
  * Phase 1: ContextNode + BuildManifest generation
  */
 

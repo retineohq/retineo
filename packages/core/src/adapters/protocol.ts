@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Adapter IPC Protocol
+ * RETINEO Core — Adapter IPC Protocol
  * JSON-RPC 2.0 over child_process stdin/stdout
  */
 

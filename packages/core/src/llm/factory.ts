@@ -1,9 +1,9 @@
 /**
- * ECHO Core — LLM & Embedding Provider Factory
+ * RETINEO Core — LLM & Embedding Provider Factory
  * Phase 7: Config-driven provider loading with circuit breaker, fallback, and secret resolution.
  */
 
-import type { EchoConfig } from '../storage/config.js';
+import type { RetineoConfig } from '../storage/config.js';
 import type { SecretsManager } from '../storage/secrets.js';
 import type { LLMProvider, EmbeddingProvider, ProviderConfig } from './provider.js';
 import { SemaphoreRateLimiter, type RateLimiter } from './rate-limiter.js';
@@ -15,7 +15,7 @@ import { resolveConfigValue } from '../storage/secrets.js';
 import { LLMCircuitOpen, LLMError } from '../utils/errors.js';
 
 export interface LLMProviderFactory {
-  loadFromConfig(config: EchoConfig, secrets?: SecretsManager): Promise<void>;
+  loadFromConfig(config: RetineoConfig, secrets?: SecretsManager): Promise<void>;
   get(id: string): LLMProvider;
   getDefault(): LLMProvider;
   list(): string[];
@@ -27,7 +27,7 @@ export interface LLMProviderFactory {
 }
 
 export interface EmbeddingProviderFactory {
-  loadFromConfig(config: EchoConfig, secrets?: SecretsManager): Promise<void>;
+  loadFromConfig(config: RetineoConfig, secrets?: SecretsManager): Promise<void>;
   get(id: string): EmbeddingProvider;
   getDefault(): EmbeddingProvider;
   list(): string[];
@@ -68,7 +68,7 @@ export class DefaultLLMProviderFactory implements LLMProviderFactory {
   private defaultId = '';
   private rateLimiter = new SemaphoreRateLimiter();
 
-  async loadFromConfig(config: EchoConfig, secrets?: SecretsManager): Promise<void> {
+  async loadFromConfig(config: RetineoConfig, secrets?: SecretsManager): Promise<void> {
     const llmConfig = (config as unknown as Record<string, unknown>).llm as
       | { defaultProvider?: string; providers?: Array<ProviderConfig & { fallback?: string; circuitBreaker?: Record<string, unknown> }> }
       | undefined;
@@ -188,7 +188,7 @@ export class DefaultEmbeddingProviderFactory implements EmbeddingProviderFactory
   private defaultId = '';
   private rateLimiter = new SemaphoreRateLimiter();
 
-  async loadFromConfig(config: EchoConfig, secrets?: SecretsManager): Promise<void> {
+  async loadFromConfig(config: RetineoConfig, secrets?: SecretsManager): Promise<void> {
     const embedConfig = (config as unknown as Record<string, unknown>).embedding as
       | { defaultProvider?: string; providers?: Array<ProviderConfig & { fallback?: string; circuitBreaker?: Record<string, unknown> }> }
       | undefined;

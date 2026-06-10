@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Chinese (Simplified) Language Pack
+ * RETINEO Core — Chinese (Simplified) Language Pack
  * Phase 4: Prompt templates and search tuning for Chinese.
  */
 

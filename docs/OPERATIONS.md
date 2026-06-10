@@ -1,8 +1,8 @@
-# ECHO Core — Operations Guide
+# RETINEO Core — Operations Guide
 
 ## Graceful Shutdown
 
-On `SIGTERM` / `SIGINT`, ECHO Core executes a 12-step clean shutdown:
+On `SIGTERM` / `SIGINT`, RETINEO Core executes a 12-step clean shutdown:
 
 ```
 1. Receive SIGTERM
@@ -52,13 +52,13 @@ All logs are JSON. Key metrics to alert on:
 | Search latency   | `search.duration.durationMs`  | > 2000 ms           |
 | Lease expiry     | `releaseExpiredLeases` result | > 0 (stuck workers) |
 | Shutdown forced  | `shutdown.complete.exitCode`  | 1                   |
-| LLM circuit open | `echo_llm_errors_total`       | > 100               |
+| LLM circuit open | `retineo_llm_errors_total`       | > 100               |
 
 Prometheus scraping:
 
 ```yaml
 scrape_configs:
-  - job_name: "echo-core"
+  - job_name: "retineo"
     static_configs:
       - targets: ["localhost:37891"]
     metrics_path: /v1/metrics/prometheus
@@ -67,5 +67,5 @@ scrape_configs:
 ## Deployment Notes
 
 - systemd: `TimeoutStopSec=35`
-- Set `ECHO_MASTER_KEY` for production secrets encryption
-- Restrict `~/.echo/` permissions to `0700`
+- Set `RETINEO_MASTER_KEY` for production secrets encryption
+- Restrict `~/.retineo/` permissions to `0700`

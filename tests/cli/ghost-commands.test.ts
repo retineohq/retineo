@@ -24,7 +24,7 @@ describe('CLI Ghost Commands', () => {
   const embedProvider = new MockLLMProvider({ id: 'mock-embed', type: 'mock', model: 'test-embed', dimension: 384 });
 
   beforeEach(() => {
-    tmpDir = mkdtempSync(path.join(os.tmpdir(), 'echo-ghost-cli-'));
+    tmpDir = mkdtempSync(path.join(os.tmpdir(), 'retineo-ghost-cli-'));
     cas = new LocalCASStorage(tmpDir);
     registry = new SQLiteRegistry(path.join(tmpDir, 'registry.sqlite'));
 

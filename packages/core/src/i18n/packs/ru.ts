@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Russian Language Pack
+ * RETINEO Core — Russian Language Pack
  * Phase 4: Prompt templates and search tuning for Russian.
  */
 

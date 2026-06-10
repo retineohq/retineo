@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Interactive Prompt Helpers
+ * RETINEO Core — Interactive Prompt Helpers
  * Readline-based single-question prompts with default values.
  *
  * Kept dependency-free: stdlib `readline` only.

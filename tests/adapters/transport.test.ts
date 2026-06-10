@@ -12,14 +12,14 @@ import type { JSONRPCRequest } from '../../packages/core/src/adapters/protocol.j
 let tmpDir: string;
 
 beforeEach(() => {
-  tmpDir = mkdtempSync(path.join(os.tmpdir(), 'echo-transport-'));
+  tmpDir = mkdtempSync(path.join(os.tmpdir(), 'retineo-transport-'));
 });
 
 afterEach(() => {
   rmSync(tmpDir, { recursive: true, force: true });
 });
 
-function makeEchoAdapter(responseDelay = 0): string {
+function makeRetineoAdapter(responseDelay = 0): string {
   const script = `
 const readline = require('readline');
 const rl = readline.createInterface({ input: process.stdin });
@@ -27,8 +27,8 @@ rl.on('line', (line) => {
   const req = JSON.parse(line);
   let result;
   switch (req.method) {
-    case 'initialize': result = { adapterId: 'echo', version: '1.0.0' }; break;
-    case 'echo': result = req.params; break;
+    case 'initialize': result = { adapterId: 'retineo', version: '1.0.0' }; break;
+    case 'retineo': result = req.params; break;
     case 'error':
       console.log(JSON.stringify({ jsonrpc: '2.0', id: req.id, error: { code: 5000, message: 'boom' } }));
       return;
@@ -43,20 +43,20 @@ rl.on('line', (line) => {
   console.log(JSON.stringify({ jsonrpc: '2.0', id: req.id, result }));
 });
 `;
-  const p = path.join(tmpDir, 'echo-adapter.cjs');
+  const p = path.join(tmpDir, 'retineo-adapter.cjs');
   writeFileSync(p, script);
   return p;
 }
 
 describe('LineDelimitedJSONTransport', () => {
   it('sends request and receives response', async () => {
-    const adapterPath = makeEchoAdapter();
+    const adapterPath = makeRetineoAdapter();
     const transport = new LineDelimitedJSONTransport(adapterPath);
 
     const req: JSONRPCRequest = {
       jsonrpc: '2.0',
       id: 1,
-      method: 'echo',
+      method: 'retineo',
       params: { hello: 'world' },
     };
 
@@ -70,7 +70,7 @@ describe('LineDelimitedJSONTransport', () => {
   });
 
   it('handles JSON-RPC error responses', async () => {
-    const adapterPath = makeEchoAdapter();
+    const adapterPath = makeRetineoAdapter();
     const transport = new LineDelimitedJSONTransport(adapterPath);
 
     const req: JSONRPCRequest = {
@@ -84,7 +84,7 @@ describe('LineDelimitedJSONTransport', () => {
   });
 
   it('times out on slow responses', async () => {
-    const adapterPath = makeEchoAdapter(100);
+    const adapterPath = makeRetineoAdapter(100);
     const transport = new LineDelimitedJSONTransport(adapterPath, 10);
 
     const req: JSONRPCRequest = {
@@ -145,13 +145,13 @@ rl.on('line', () => process.exit(2));
   });
 
   it('auto-assigns id if missing', async () => {
-    const adapterPath = makeEchoAdapter();
+    const adapterPath = makeRetineoAdapter();
     const transport = new LineDelimitedJSONTransport(adapterPath);
 
     const req: JSONRPCRequest = {
       jsonrpc: '2.0',
       id: undefined as any,
-      method: 'echo',
+      method: 'retineo',
       params: { test: true },
     };
 
@@ -162,7 +162,7 @@ rl.on('line', () => process.exit(2));
   });
 
   it('closes gracefully', async () => {
-    const adapterPath = makeEchoAdapter();
+    const adapterPath = makeRetineoAdapter();
     const transport = new LineDelimitedJSONTransport(adapterPath);
     await transport.close();
     // Should not throw on second close

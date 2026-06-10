@@ -1,4 +1,4 @@
-# Contributing to ECHO Core
+# Contributing to RETINEO Core
 
 Thank you for contributing. This guide covers setup, conventions, and the pull request process.
 
@@ -7,8 +7,8 @@ Thank you for contributing. This guide covers setup, conventions, and the pull r
 ## Development Setup
 
 ```bash
-git clone https://github.com/your-org/echo-core.git
-cd echo-core
+git clone https://github.com/your-org/retineo.git
+cd retineo
 pnpm install
 pnpm build
 pnpm test
@@ -20,7 +20,7 @@ All 277 tests must pass before submitting.
 
 ## Project Structure
 
-ECHO Core is a monorepo. See [`structure.md`](../structure.md) for the complete file listing and cross-reference index.
+RETINEO Core is a monorepo. See [`structure.md`](../structure.md) for the complete file listing and cross-reference index.
 
 ```
 packages/core/
@@ -48,7 +48,7 @@ packages/core/
 - **ESM only** — use `.js` extensions in imports
 - **Zod for validation** — all runtime inputs validated against schemas
 - **Structured logging** — use `createLogger` from `src/utils/logger.ts`. No `console.log` in production code
-- **Error hierarchy** — throw `BaseEchoError` subclasses, not raw `Error`
+- **Error hierarchy** — throw `BaseRetineoError` subclasses, not raw `Error`
 
 Example:
 

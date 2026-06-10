@@ -1,9 +1,9 @@
 /**
- * ECHO Core — MCP Server Tests
+ * RETINEO Core — MCP Server Tests
  */
 
 import { describe, it, expect } from 'vitest';
-import { EchoMCPServer } from '../../packages/core/src/mcp/server.js';
+import { RetineoMCPServer } from '../../packages/core/src/mcp/server.js';
 import type { MCPHandlersDeps } from '../../packages/core/src/mcp/handlers.js';
 
 function makeDeps(): MCPHandlersDeps {
@@ -71,9 +71,9 @@ function makeDeps(): MCPHandlersDeps {
   };
 }
 
-describe('EchoMCPServer', () => {
+describe('RetineoMCPServer', () => {
   it('constructs without error', () => {
-    const server = new EchoMCPServer({ deps: makeDeps() });
+    const server = new RetineoMCPServer({ deps: makeDeps() });
     expect(server).toBeDefined();
   });
 });

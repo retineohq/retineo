@@ -6,7 +6,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { DefaultLLMProviderFactory, DefaultEmbeddingProviderFactory } from '../../packages/core/src/llm/factory.js';
 import { MockLLMProvider } from '../../packages/core/src/llm/providers/mock.js';
-import type { EchoConfig } from '../../packages/core/src/storage/config.js';
+import type { RetineoConfig } from '../../packages/core/src/storage/config.js';
 
 describe('DefaultLLMProviderFactory', () => {
   let factory: DefaultLLMProviderFactory;
@@ -17,8 +17,8 @@ describe('DefaultLLMProviderFactory', () => {
 
   it('loads providers from config and resolves env vars', async () => {
     process.env.TEST_API_KEY = 'secret123';
-    const config: EchoConfig = {
-      dataDir: '/tmp/echo',
+    const config: RetineoConfig = {
+      dataDir: '/tmp/retineo',
       defaultAdapter: 'file',
       llmProvider: 'openai',
       embeddingModel: 'text-embedding-3-small',
@@ -28,7 +28,7 @@ describe('DefaultLLMProviderFactory', () => {
           { id: 'mock', type: 'mock', model: 'mock-model', apiKey: '${TEST_API_KEY}' },
         ],
       },
-    } as unknown as EchoConfig;
+    } as unknown as RetineoConfig;
 
     await factory.loadFromConfig(config);
     expect(factory.list()).toContain('mock');
@@ -38,8 +38,8 @@ describe('DefaultLLMProviderFactory', () => {
   });
 
   it('returns default provider', async () => {
-    const config: EchoConfig = {
-      dataDir: '/tmp/echo',
+    const config: RetineoConfig = {
+      dataDir: '/tmp/retineo',
       defaultAdapter: 'file',
       llmProvider: 'openai',
       embeddingModel: 'text-embedding-3-small',
@@ -47,7 +47,7 @@ describe('DefaultLLMProviderFactory', () => {
         defaultProvider: 'mock',
         providers: [{ id: 'mock', type: 'mock', model: 'mock-model' }],
       },
-    } as unknown as EchoConfig;
+    } as unknown as RetineoConfig;
 
     await factory.loadFromConfig(config);
     expect(factory.getDefault().id).toBe('mock');
@@ -74,8 +74,8 @@ describe('DefaultEmbeddingProviderFactory', () => {
   });
 
   it('loads embedding providers from config', async () => {
-    const config: EchoConfig = {
-      dataDir: '/tmp/echo',
+    const config: RetineoConfig = {
+      dataDir: '/tmp/retineo',
       defaultAdapter: 'file',
       llmProvider: 'openai',
       embeddingModel: 'text-embedding-3-small',
@@ -83,7 +83,7 @@ describe('DefaultEmbeddingProviderFactory', () => {
         defaultProvider: 'mock-embed',
         providers: [{ id: 'mock-embed', type: 'mock', model: 'mock-embed-model' }],
       },
-    } as unknown as EchoConfig;
+    } as unknown as RetineoConfig;
 
     await factory.loadFromConfig(config);
     expect(factory.list()).toContain('mock-embed');

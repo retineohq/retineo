@@ -1,5 +1,5 @@
 /**
- * ECHO Core — MCP Tools
+ * RETINEO Core — MCP Tools
  * Phase 5: Tool definitions for Model Context Protocol.
  */
 
@@ -9,8 +9,8 @@ export interface MCPTool {
   inputSchema: object;
 }
 
-export const ECHO_SEARCH_TOOL: MCPTool = {
-  name: 'echo_search',
+export const RETINEO_SEARCH_TOOL: MCPTool = {
+  name: 'retineo_search',
   description: 'Search the knowledge base for relevant context',
   inputSchema: {
     type: 'object',
@@ -23,8 +23,8 @@ export const ECHO_SEARCH_TOOL: MCPTool = {
   },
 };
 
-export const ECHO_INGEST_TOOL: MCPTool = {
-  name: 'echo_ingest',
+export const RETINEO_INGEST_TOOL: MCPTool = {
+  name: 'retineo_ingest',
   description: 'Ingest a file into the knowledge base',
   inputSchema: {
     type: 'object',
@@ -36,17 +36,17 @@ export const ECHO_INGEST_TOOL: MCPTool = {
   },
 };
 
-export const ECHO_STATUS_TOOL: MCPTool = {
-  name: 'echo_status',
-  description: 'Get ECHO Core engine status',
+export const RETINEO_STATUS_TOOL: MCPTool = {
+  name: 'retineo_status',
+  description: 'Get RETINEO Core engine status',
   inputSchema: {
     type: 'object',
     properties: {},
   },
 };
 
-export const ECHO_GET_NODE_TOOL: MCPTool = {
-  name: 'echo_get_node',
+export const RETINEO_GET_NODE_TOOL: MCPTool = {
+  name: 'retineo_get_node',
   description: 'Get a specific node by hash',
   inputSchema: {
     type: 'object',
@@ -58,8 +58,8 @@ export const ECHO_GET_NODE_TOOL: MCPTool = {
 };
 
 export const ALL_TOOLS: MCPTool[] = [
-  ECHO_SEARCH_TOOL,
-  ECHO_INGEST_TOOL,
-  ECHO_STATUS_TOOL,
-  ECHO_GET_NODE_TOOL,
+  RETINEO_SEARCH_TOOL,
+  RETINEO_INGEST_TOOL,
+  RETINEO_STATUS_TOOL,
+  RETINEO_GET_NODE_TOOL,
 ];

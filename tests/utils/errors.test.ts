@@ -1,11 +1,11 @@
 /**
- * ECHO Core — Error Hierarchy Tests
+ * RETINEO Core — Error Hierarchy Tests
  * Phase 7
  */
 
 import { describe, it, expect } from 'vitest';
 import {
-  BaseEchoError,
+  BaseRetineoError,
   AdapterError,
   AdapterSpawnFailed,
   AdapterIngestFailed,
@@ -18,20 +18,20 @@ import {
   ConfigError,
   ConfigSecretNotFound,
 } from '../../packages/core/src/utils/errors.js';
-import { isEchoError, echoErrorFrom } from '../../packages/core/src/utils/error-handler.js';
+import { isRetineoError, retineoErrorFrom } from '../../packages/core/src/utils/error-handler.js';
 
 describe('Error Hierarchy', () => {
-  it('BaseEchoError has code, message, statusCode', () => {
-    const err = new BaseEchoError('TEST_CODE', 'test message', 418);
+  it('BaseRetineoError has code, message, statusCode', () => {
+    const err = new BaseRetineoError('TEST_CODE', 'test message', 418);
     expect(err.code).toBe('TEST_CODE');
     expect(err.message).toBe('test message');
     expect(err.statusCode).toBe(418);
     expect(err.toJSON()).toEqual({ code: 'TEST_CODE', message: 'test message', statusCode: 418 });
   });
 
-  it('BaseEchoError includes details and cause', () => {
+  it('BaseRetineoError includes details and cause', () => {
     const cause = new Error('root');
-    const err = new BaseEchoError('TEST', 'msg', 500, { foo: 'bar' }, cause);
+    const err = new BaseRetineoError('TEST', 'msg', 500, { foo: 'bar' }, cause);
     expect(err.details).toEqual({ foo: 'bar' });
     expect(err.cause).toBe(cause);
   });
@@ -69,37 +69,37 @@ describe('Error Hierarchy', () => {
   });
 });
 
-describe('isEchoError', () => {
-  it('returns true for EchoError instances', () => {
-    expect(isEchoError(new BaseEchoError('X', 'y', 500))).toBe(true);
+describe('isRetineoError', () => {
+  it('returns true for RetineoError instances', () => {
+    expect(isRetineoError(new BaseRetineoError('X', 'y', 500))).toBe(true);
   });
 
   it('returns false for plain Error', () => {
-    expect(isEchoError(new Error('plain'))).toBe(false);
+    expect(isRetineoError(new Error('plain'))).toBe(false);
   });
 
   it('returns false for strings', () => {
-    expect(isEchoError('oops')).toBe(false);
+    expect(isRetineoError('oops')).toBe(false);
   });
 });
 
-describe('echoErrorFrom', () => {
+describe('retineoErrorFrom', () => {
   it('wraps plain Error', () => {
-    const wrapped = echoErrorFrom(new Error('plain'));
+    const wrapped = retineoErrorFrom(new Error('plain'));
     expect(wrapped.code).toBe('INTERNAL_ERROR');
     expect(wrapped.message).toBe('plain');
     expect(wrapped.statusCode).toBe(500);
   });
 
-  it('passes through EchoError', () => {
+  it('passes through RetineoError', () => {
     const original = LLMRateLimited('openai');
-    const wrapped = echoErrorFrom(original);
+    const wrapped = retineoErrorFrom(original);
     expect(wrapped.code).toBe('LLM_RATE_LIMITED');
     expect(wrapped.statusCode).toBe(429);
   });
 
   it('wraps strings', () => {
-    const wrapped = echoErrorFrom('something broke');
+    const wrapped = retineoErrorFrom('something broke');
     expect(wrapped.message).toBe('something broke');
   });
 });

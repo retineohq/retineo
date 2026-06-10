@@ -1,5 +1,5 @@
 /**
- * ECHO Core — i18n Barrel Export
+ * RETINEO Core — i18n Barrel Export
  * Phase 4: Language packs, detection, registry.
  */
 

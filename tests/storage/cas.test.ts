@@ -16,7 +16,7 @@ import type { ContextNode, ContentMeta, L2Artifact } from '../../packages/core/s
 let tmpDir: string;
 
 beforeEach(() => {
-  tmpDir = mkdtempSync(path.join(os.tmpdir(), 'echo-cas-'));
+  tmpDir = mkdtempSync(path.join(os.tmpdir(), 'retineo-cas-'));
 });
 
 afterEach(() => {

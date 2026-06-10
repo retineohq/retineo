@@ -1,18 +1,18 @@
-# Writing Custom LLM Providers for ECHO Core
+# Writing Custom LLM Providers for RETINEO Core
 
-This guide teaches you how to write an LLM or embedding provider — a TypeScript class that ECHO Core loads from `config.yaml` to power L2 generation and L3 indexing.
+This guide teaches you how to write an LLM or embedding provider — a TypeScript class that RETINEO Core loads from `config.yaml` to power L2 generation and L3 indexing.
 
-By the end of this guide you will understand the provider interface, the factory loading mechanism, rate limiting, and how to test your provider without running the full ECHO Core stack.
+By the end of this guide you will understand the provider interface, the factory loading mechanism, rate limiting, and how to test your provider without running the full RETINEO Core stack.
 
 ---
 
 ## 1. What Is a Provider?
 
-A provider is a **TypeScript class** that implements `LLMProvider` and/or `EmbeddingProvider`. ECHO Core instantiates providers from `config.yaml` at startup. Unlike adapters, providers are **not child processes** — they are lightweight in-memory objects that make HTTP calls to external APIs.
+A provider is a **TypeScript class** that implements `LLMProvider` and/or `EmbeddingProvider`. RETINEO Core instantiates providers from `config.yaml` at startup. Unlike adapters, providers are **not child processes** — they are lightweight in-memory objects that make HTTP calls to external APIs.
 
 Key principles:
 - **Output must be deterministic where possible.** Same input → same output makes testing and caching easier.
-- **HTTP errors are your responsibility.** Timeouts, retries, and rate limiting are handled by ECHO Core, but you must throw clear error messages.
+- **HTTP errors are your responsibility.** Timeouts, retries, and rate limiting are handled by RETINEO Core, but you must throw clear error messages.
 - **Keep it stateless.** Providers are singletons per config entry. Do not store per-request state in instance fields.
 
 ---
@@ -23,7 +23,7 @@ Create a provider file:
 
 ```typescript
 // my-provider.ts
-import type { LLMProvider, EmbeddingProvider, ProviderConfig, GenerateOptions, ProviderCapabilities } from 'echo-core/llm';
+import type { LLMProvider, EmbeddingProvider, ProviderConfig, GenerateOptions, ProviderCapabilities } from 'retineo/llm';
 
 export class MyProvider implements LLMProvider, EmbeddingProvider {
   readonly id: string;
@@ -112,7 +112,7 @@ llm:
 Then register it with the factory at runtime:
 
 ```typescript
-import { DefaultLLMProviderFactory } from 'echo-core/llm';
+import { DefaultLLMProviderFactory } from 'retineo/llm';
 import { MyProvider } from './my-provider.js';
 
 const factory = new DefaultLLMProviderFactory();
@@ -161,7 +161,7 @@ interface ProviderConfig {
 
 ## 4. Factory Loading
 
-ECHO Core resolves `${ENV_VAR}` syntax in `apiKey` and `baseUrl` at load time. The factory uses the `type` field to instantiate the correct class:
+RETINEO Core resolves `${ENV_VAR}` syntax in `apiKey` and `baseUrl` at load time. The factory uses the `type` field to instantiate the correct class:
 
 | `type` | Built-in Class |
 |--------|---------------|
@@ -189,7 +189,7 @@ The factory automatically registers each provider with a `SemaphoreRateLimiter`.
 If you need custom rate limiting (e.g., token bucket), implement `RateLimiter`:
 
 ```typescript
-import type { RateLimiter } from 'echo-core/llm';
+import type { RateLimiter } from 'retineo/llm';
 
 export class TokenBucketLimiter implements RateLimiter {
   acquire(providerId: string): Promise<void> { /* ... */ }
@@ -201,7 +201,7 @@ export class TokenBucketLimiter implements RateLimiter {
 
 ## 6. Testing Your Provider
 
-You do not need ECHO Core running to test your provider. Use any HTTP mocking library:
+You do not need RETINEO Core running to test your provider. Use any HTTP mocking library:
 
 ```typescript
 import { describe, it, expect, vi } from 'vitest';
@@ -224,7 +224,7 @@ describe('MyProvider', () => {
 For deterministic tests without network, use `MockLLMProvider`:
 
 ```typescript
-import { MockLLMProvider } from 'echo-core/llm';
+import { MockLLMProvider } from 'retineo/llm';
 
 const mock = new MockLLMProvider({ id: 'mock', type: 'mock', model: 'm' });
 const json = await mock.generate('prompt', { jsonMode: true });
@@ -234,7 +234,7 @@ const json = await mock.generate('prompt', { jsonMode: true });
 
 ## 7. Error Handling
 
-Throw descriptive errors. ECHO Core catches them and marks the job as failed for retry:
+Throw descriptive errors. RETINEO Core catches them and marks the job as failed for retry:
 
 ```typescript
 if (!res.ok) {

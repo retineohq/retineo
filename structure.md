@@ -1,4 +1,4 @@
-# ECHO Core — Repository Structure
+# RETINEO Core — Repository Structure
 
 > This file is the single source of truth for codebase navigation.
 >
@@ -16,7 +16,7 @@
 ## Top-Level Layout
 
 ```
-echo-core/
+retineo/
 ├── packages/core/src/
 │   ├── domain/          # Types, schemas, shared domain language
 │   ├── adapters/        # Adapter IPC protocol
@@ -80,8 +80,8 @@ echo-core/
 │   │   └── release.yml  # CD: publish npm + build binaries + GitHub Release
 │   └── release.yml      # Release notes category configuration
 ├── bin/
-│   ├── echo-core.js     # CLI entry point (echoc) — wires real services: SQLiteRegistry, CAS, IngestionService, PinoLogger
-│   └── echo-mcp.js      # MCP server entry point (echo-mcp)
+│   ├── retineo.js     # CLI entry point (retineo) — wires real services: SQLiteRegistry, CAS, IngestionService, PinoLogger
+│   └── retineo-mcp.js      # MCP server entry point (retineo-mcp)
 ├── CHANGELOG.md         # Version history
 ├── structure.md         # This file
 ├── package.json         # Dependencies: pino, pino-pretty, better-sqlite3, commander, etc. ESLint 9 + typescript-eslint flat config.
@@ -120,9 +120,9 @@ echo-core/
 | ----------------- | -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
 | `cas.ts`          | `CASStorage`, `LocalCASStorage`, `NodeArtifacts`, `computeHash`, `getObjectPath`       | Content-Addressable Storage: SHA-256 keyed object filesystem.                                   |
 | `registry.ts`     | `Registry`, `SQLiteRegistry`, `OrphanRecord`                                           | SQLite-backed registry: sources, segments, jobs (lease model), orphans. Job queries: `getJobsBySource`, `getJob`, `getJobCounts`, `getLastHeartbeat`, `getRunningWorkerIds`, `getDeadJobs`. Source deduplication: `getSourceByRootHash`, `getSourcesByRootHash`, `updateSourcePath`. Schema init uses `IF NOT EXISTS` for idempotent table/index creation. |
-| `config.ts`       | `ConfigManager`, `FileConfigManager`, `EchoConfig`, `LoggingConfig`, `LLMConfig`, `EmbeddingConfig`, `ProviderConfigEntry` | YAML config manager (`~/.echo/config.yaml`). Includes `initializeDataDir()` for first-run setup. `logging` section: level, console, file, filePath, pretty. `llm.providers[]` and `embedding.providers[]` for multi-provider routing. `bridge: { host, port }` for HTTP API. |
+| `config.ts`       | `ConfigManager`, `FileConfigManager`, `RetineoConfig`, `LoggingConfig`, `LLMConfig`, `EmbeddingConfig`, `ProviderConfigEntry` | YAML config manager (`~/.retineo/config.yaml`). Includes `initializeDataDir()` for first-run setup. `logging` section: level, console, file, filePath, pretty. `llm.providers[]` and `embedding.providers[]` for multi-provider routing. `bridge: { host, port }` for HTTP API. |
 | `node-builder.ts` | `NodeBuilder`, `DefaultNodeBuilder`                                                    | Builds `ContextNode` trees + `BuildManifest` from adapter output.                               |
-| `secrets.ts`      | `SecretsManager`, `FileSecretsManager`, `resolveSecret`, `resolveConfigValue`          | AES-256-GCM encrypted secrets store (`~/.echo/secrets.json`).                                   |
+| `secrets.ts`      | `SecretsManager`, `FileSecretsManager`, `resolveSecret`, `resolveConfigValue`          | AES-256-GCM encrypted secrets store (`~/.retineo/secrets.json`).                                   |
 | `schema.sql`      | —                                                                                      | SQLite DDL: `sources`, `segments`, `jobs`, `orphaned_objects`, `encryption_keys`, `audit_logs`. |
 | `context-node-repository.ts` | `ContextNodeRepository`, `DefaultContextNodeRepository` | Single point of truth for loading/saving ContextNode via CAS + Registry. |
 | `index.ts`        | Barrel export of `cas.js`, `registry.js`, `config.js`, `node-builder.js`, `secrets.js`, `context-node-repository.js` | Public storage API entrypoint.                                                                  |
@@ -206,8 +206,8 @@ echo-core/
 | `formatters.ts` | `formatSearchResult`, `formatStatus`, `formatJobs`, `formatIngestResult`, `formatConfig`, `formatRecoverResult` | Output formatters for CLI commands.                                                   |
 | `prompt.ts`     | `ask`, `choose`, `confirm`, `PromptOptions`, `ChoiceOptions`                                                    | Readline-based single-question prompts. No external deps. Used by the `init` wizard. `ask` closes the readline interface before resolving. |
 | `process-manager.ts` | `dataDir`, `pidFilePath`, `logFilePath`, `readPidFile`, `writePidFile`, `removePidFile`, `isPidAlive`, `stopProcess`, `tailLog`, `streamLog`, `ensureDataDirs`, `fileExists` | PID-file lifecycle and log tail helpers used by `worker`/`bridge`/`daemon` start/stop/status/logs. |
-| `bridge-script.ts` | `startBridgeServices`, `RunningBridgeServices` | Standalone bridge entry point used by `child_process.fork()` from `echoc bridge start`. Wires SQLiteRegistry, CAS, adapters, search services, `DefaultLLMProviderFactory`/`DefaultEmbeddingProviderFactory` (config-driven), `FastifyBridgeServer`. |
-| `worker-script.ts` | `startWorkerServices`, `RunningServices`                                                                    | Standalone worker entry point used by `child_process.fork()` from `echoc worker start` and `echoc daemon start`. Wires SQLiteRegistry, CAS, adapters, pipeline, `DefaultLLMProviderFactory`/`DefaultEmbeddingProviderFactory` (config-driven), `DefaultQueueWorker`. |
+| `bridge-script.ts` | `startBridgeServices`, `RunningBridgeServices` | Standalone bridge entry point used by `child_process.fork()` from `retineo bridge start`. Wires SQLiteRegistry, CAS, adapters, search services, `DefaultLLMProviderFactory`/`DefaultEmbeddingProviderFactory` (config-driven), `FastifyBridgeServer`. |
+| `worker-script.ts` | `startWorkerServices`, `RunningServices`                                                                    | Standalone worker entry point used by `child_process.fork()` from `retineo worker start` and `retineo daemon start`. Wires SQLiteRegistry, CAS, adapters, pipeline, `DefaultLLMProviderFactory`/`DefaultEmbeddingProviderFactory` (config-driven), `DefaultQueueWorker`. |
 | `daemon.ts`     | `startDaemonServices`, `runDaemon`, `DaemonServices`                                                           | All-in-one daemon: starts worker + bridge in one process. Loads LLM/embedding providers from config via `DefaultLLMProviderFactory`/`DefaultEmbeddingProviderFactory`. Graceful shutdown order: bridge → worker → registry. |
 | `index.ts`      | `createCLI`                                                                                                     | Commander-based CLI entry point. Supports `-v, --verbose` global flag for debug output. Wires all commands including service lifecycle subcommands. |
 
@@ -215,9 +215,9 @@ echo-core/
 
 | File          | Exports                                                                                                  | Description                          |
 | ------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------ |
-| `tools.ts`    | `MCPTool`, `ECHO_SEARCH_TOOL`, `ECHO_INGEST_TOOL`, `ECHO_STATUS_TOOL`, `ECHO_GET_NODE_TOOL`, `ALL_TOOLS` | MCP tool definitions.                |
+| `tools.ts`    | `MCPTool`, `RETINEO_SEARCH_TOOL`, `RETINEO_INGEST_TOOL`, `RETINEO_STATUS_TOOL`, `RETINEO_GET_NODE_TOOL`, `ALL_TOOLS` | MCP tool definitions.                |
 | `handlers.ts` | `MCPHandlersDeps`, `createHandlers`                                                                      | Tool handlers calling core services. |
-| `server.ts`   | `MCPServer`, `EchoMCPServer`, `MCPServerOptions`                                                         | MCP server over stdio transport.     |
+| `server.ts`   | `MCPServer`, `RetineoMCPServer`, `MCPServerOptions`                                                         | MCP server over stdio transport.     |
 | `index.ts`    | Barrel export of `tools.js`, `handlers.js`, `server.js`                                                  | Public MCP API entrypoint.           |
 
 ### `src/i18n/` — Multilingual Support
@@ -238,8 +238,8 @@ echo-core/
 | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
 | `logger.ts`        | `Logger`, `LogMeta`, `LoggerConfig`, `DualLogger`, `createLogger`, `setGlobalLogger`, `getGlobalLogger`                                                                    | Dual logger: console (stderr, pretty or JSON) + file (JSON). Console works even if file fails. `DualLogger` class for simultaneous output. |
 | `shutdown.ts`      | `ShutdownManager`, `ShutdownHandler`, `DefaultShutdownManager`, `installSignalHandlers`                                                                                    | SIGTERM/SIGINT handling with 12-step graceful shutdown.              |
-| `errors.ts`        | `EchoError`, `BaseEchoError`, `AdapterError`, `IngestError`, `LLMError`, `PipelineError`, `SearchError`, `BridgeError`, `ConfigError`, and factory functions for each code | Standardized error hierarchy with codes and HTTP status mapping.     |
-| `error-handler.ts` | `isEchoError`, `echoErrorFrom`, `sendErrorReply`, `formatCLIError`                                                                                                         | Unified error handling for HTTP (Fastify), CLI, and MCP.             |
+| `errors.ts`        | `RetineoError`, `BaseRetineoError`, `AdapterError`, `IngestError`, `LLMError`, `PipelineError`, `SearchError`, `BridgeError`, `ConfigError`, and factory functions for each code | Standardized error hierarchy with codes and HTTP status mapping.     |
+| `error-handler.ts` | `isRetineoError`, `retineoErrorFrom`, `sendErrorReply`, `formatCLIError`                                                                                                         | Unified error handling for HTTP (Fastify), CLI, and MCP.             |
 | `cache.ts`         | `LRUCache`, `SimpleLRUCache`                                                                                                                                               | In-memory LRU cache with TTL eviction and MRU reordering.            |
 | `index.ts`         | Barrel export of `logger.js`, `shutdown.js`, `errors.js`, `error-handler.js`, `cache.js`                                                                                   | Public utils API entrypoint.                                         |
 
@@ -325,7 +325,7 @@ echo-core/
 | `compile-provider.test.ts` | `compile` with `--provider` override: accepts valid provider, rejects invalid with available list | Provider override validation and error messages. |
 | `prompt.test.ts` | `ask` closes readline after line input; returns default on empty input | Prompt helper correctness. |
 | `init.test.ts`     | `init` creates directories, config, SQLite schema; idempotent | First-run initialization.          |
-| `init-wizard.test.ts` | Non-interactive `init` writes Ollama-first config; honours `ECHO_DATA_DIR`, `ECHO_LLM_MODEL`, `ECHO_EMBED_MODEL`, `ECHO_BRIDGE_PORT`; bridge section defaults to `127.0.0.1:37891`; graceful fallback when Ollama is not running; interactive `init` calls `process.exit(0)` on completion | Interactive + non-interactive init wizard. |
+| `init-wizard.test.ts` | Non-interactive `init` writes Ollama-first config; honours `RETINEO_DATA_DIR`, `RETINEO_LLM_MODEL`, `RETINEO_EMBED_MODEL`, `RETINEO_BRIDGE_PORT`; bridge section defaults to `127.0.0.1:37891`; graceful fallback when Ollama is not running; interactive `init` calls `process.exit(0)` on completion | Interactive + non-interactive init wizard. |
 | `worker-lifecycle.test.ts` | `writePidFile`/`readPidFile` round-trip; `isPidAlive` / `stopProcess`; `workerStatus` reports stopped/running based on PID file; `workerStart` is idempotent | Worker PID/lifecycle correctness. |
 | `bridge-lifecycle.test.ts` | `bridgeStatus` reports stopped when no PID file; `bridgeStop` no-op; `bridgeLogs` handles missing log file | Bridge PID/lifecycle correctness. |
 | `ingest-watch.test.ts` | `ingest` prints queued job ids; uses mock registry that completes after a few polls | `--watch` flag plumbing. |
@@ -339,9 +339,9 @@ echo-core/
 
 | File             | Tests                                                        | Description                          |
 | ---------------- | ------------------------------------------------------------ | ------------------------------------ |
-| `server.test.ts` | `EchoMCPServer` construction                                 | MCP server initialization.           |
-| `tools.test.ts`  | `echo_search`, `echo_ingest`, `echo_status`, `echo_get_node` | Tool execution with mocked services. |
-| `bin.test.ts`    | `echo-mcp.js` exists, `EchoMCPServer` importable             | MCP binary entry point.              |
+| `server.test.ts` | `RetineoMCPServer` construction                                 | MCP server initialization.           |
+| `tools.test.ts`  | `retineo_search`, `retineo_ingest`, `retineo_status`, `retineo_get_node` | Tool execution with mocked services. |
+| `bin.test.ts`    | `retineo-mcp.js` exists, `RetineoMCPServer` importable             | MCP binary entry point.              |
 
 ### `tests/utils/` — Utility Tests
 
@@ -349,7 +349,7 @@ echo-core/
 | ------------------ | --------------------------------------------------------------------------- | ------------------------------------------- |
 | `logger.test.ts`   | Log levels, child loggers, redaction, traceId propagation, DualLogger (console+file, pretty mode, level filtering, file failure resilience) | DualLogger + PinoLogger correctness.                     |
 | `shutdown.test.ts` | SIGTERM handling, job release, adapter cleanup, timeout scenarios           | DefaultShutdownManager correctness.         |
-| `errors.test.ts`   | `BaseEchoError` hierarchy, `toJSON`, factory functions, status codes        | Standardized error codes and serialization. |
+| `errors.test.ts`   | `BaseRetineoError` hierarchy, `toJSON`, factory functions, status codes        | Standardized error codes and serialization. |
 | `cache.test.ts`    | `SimpleLRUCache` get/set/has/delete, TTL eviction, MRU reordering, max size | LRU cache correctness.                      |
 
 ### `tests/integration/` — Integration Tests
@@ -385,7 +385,7 @@ echo-core/
 | **Read or write an immutable artifact by hash**         | `CASStorage`                                   | `src/storage/cas.ts`                                | `computeHash`, `getObjectPath`                                   |
 | **Run background compilation jobs reliably**            | `Registry` (jobs)                              | `src/storage/registry.ts`                           | `acquireLease`, `heartbeatJob`, `releaseExpiredLeases`           |
 | **Recover from a crashed worker mid-job**               | `Registry`                                     | `src/storage/registry.ts`                           | `releaseExpiredLeases` → re-acquire                              |
-| **Load or save user configuration**                     | `ConfigManager`                                | `src/storage/config.ts`                             | `EchoConfig`, `FileConfigManager`                                |
+| **Load or save user configuration**                     | `ConfigManager`                                | `src/storage/config.ts`                             | `RetineoConfig`, `FileConfigManager`                                |
 | **Validate runtime data against domain types**          | `schemas`                                      | `src/domain/schemas.ts`                             | `zod` schemas for every domain type                              |
 | **Spawn an adapter process and talk JSON-RPC**          | `LineDelimitedJSONTransport`                   | `src/adapters/transport.ts`                         | `AdapterTransport`, `JSONRPCRequest`, `JSONRPCResponse`          |
 | **Manage adapter lifecycle (spawn, init, kill)**        | `DefaultAdapterProcessRunner`                  | `src/adapters/runner.ts`                            | `AdapterProcessRunner`, `InitializeParams`                       |
@@ -395,8 +395,8 @@ echo-core/
 | **Write a third-party adapter**                         | `ADAPTER_GUIDE.md`                             | `docs/ADAPTER_GUIDE.md`                             | `protocol.ts`, `types.ts`, `schemas.ts`                          |
 | **Add structured logging**                              | `createLogger`                                 | `src/utils/logger.ts`                               | `Logger`, `LogMeta`, `getGlobalLogger`                           |
 | **Write logs to console + file simultaneously**         | `DualLogger`                                   | `src/utils/logger.ts`                               | `LoggerConfig` with `console`, `file`, `pretty` flags. Console = stderr (pretty or JSON), file = JSON. Console works even if file fails. |
-| **Enable verbose debug output via CLI**                 | `--verbose` / `-v` flag                        | `src/cli/index.ts`, `bin/echo-core.js`              | Sets `ECHO_LOG_LEVEL=debug`, pretty console output. Checked via `process.argv` before logger creation. |
-| **Configure logging via config.yaml**                    | `logging` section in `EchoConfig`              | `src/storage/config.ts`                             | `LoggingConfig`: level, console, file, filePath, pretty. |
+| **Enable verbose debug output via CLI**                 | `--verbose` / `-v` flag                        | `src/cli/index.ts`, `bin/retineo.js`              | Sets `RETINEO_LOG_LEVEL=debug`, pretty console output. Checked via `process.argv` before logger creation. |
+| **Configure logging via config.yaml**                    | `logging` section in `RetineoConfig`              | `src/storage/config.ts`                             | `LoggingConfig`: level, console, file, filePath, pretty. |
 | **Implement graceful shutdown**                         | `DefaultShutdownManager`                       | `src/utils/shutdown.ts`                             | `ShutdownHandler`, `installSignalHandlers`                       |
 | **Add a new adapter protocol method**                   | `protocol`                                     | `src/adapters/protocol.ts`                          | `AdapterMethod`, `JSONRPCRequest`                                |
 | **Implement a custom storage backend**                  | `CASStorage` interface                         | `src/storage/cas.ts`                                | Implement `write`, `read`, `exists`, `writeObject`, `readObject` |
@@ -411,7 +411,7 @@ echo-core/
 | **Encrypt and retrieve API secrets**                    | `FileSecretsManager`                           | `src/storage/secrets.ts`                            | `resolveSecret`, `resolveConfigValue`                            |
 | **Add health/readiness probes**                         | `DefaultHealthService`                         | `src/bridge/health.ts`                              | `registerHealthRoutes`, `/v1/health`, `/v1/ready`                |
 | **Export operational metrics**                          | `DefaultMetricsService`                        | `src/bridge/metrics.ts`                             | `formatPrometheus`, `/v1/metrics/prometheus`                     |
-| **Handle errors consistently across HTTP/CLI**          | `sendErrorReply`, `formatCLIError`             | `src/utils/error-handler.ts`                        | `BaseEchoError`, `isEchoError`                                   |
+| **Handle errors consistently across HTTP/CLI**          | `sendErrorReply`, `formatCLIError`             | `src/utils/error-handler.ts`                        | `BaseRetineoError`, `isRetineoError`                                   |
 | **Run the L1→L2→L3 compilation pipeline**               | `DefaultCompilationPipeline`                   | `src/layers/pipeline.ts`                            | `QueueWorker`, `Registry`                                        |
 | **Process background jobs with lease recovery**         | `DefaultQueueWorker`                           | `src/layers/worker.ts`                              | `Registry.acquireLease`, `heartbeatJob`                          |
 | **Load LLM providers from config**                      | `DefaultLLMProviderFactory`                    | `src/llm/factory.ts`                                | `ProviderConfig`, `OllamaProvider`, `OpenAICompatibleProvider`   |
@@ -421,15 +421,15 @@ echo-core/
 | **Assemble context for LLM consumption**                | `DefaultContextAssembler`                      | `src/search/context-assembler.ts`                   | `CandidateNode`, `SearchConfig`                                  |
 | **Detect language of a query**                          | `createDetector`                               | `src/i18n/detector.ts`                              | `FrancDetector`, `HeuristicDetector`, `CLD3Detector`             |
 | **Load or register a language pack**                    | `DefaultLanguagePackRegistry`                  | `src/i18n/registry.ts`                              | `LanguagePack`, `enPack`, `ruPack`, `zhPack`                     |
-| **Add a new language to ECHO**                          | `LanguagePack` + `DefaultLanguagePackRegistry` | `src/i18n/packs/{code}.ts`                          | `docs/MULTILINGUAL.md`                                           |
+| **Add a new language to RETINEO**                          | `LanguagePack` + `DefaultLanguagePackRegistry` | `src/i18n/packs/{code}.ts`                          | `docs/MULTILINGUAL.md`                                           |
 | **Configure search behavior**                           | `FileConfigManager`                            | `src/storage/config.ts`                             | `SearchConfig`, `I18nConfig`                                     |
-| **Expose ECHO over HTTP/WebSocket**                     | `FastifyBridgeServer`                          | `src/bridge/server.ts`                              | `bridge/routes.ts`, `bridge/sse.ts`                              |
-| **Serve as an MCP server**                              | `EchoMCPServer`                                | `src/mcp/server.ts`                                 | `mcp/tools.ts`, `mcp/handlers.ts`                                |
+| **Expose RETINEO over HTTP/WebSocket**                     | `FastifyBridgeServer`                          | `src/bridge/server.ts`                              | `bridge/routes.ts`, `bridge/sse.ts`                              |
+| **Serve as an MCP server**                              | `RetineoMCPServer`                                | `src/mcp/server.ts`                                 | `mcp/tools.ts`, `mcp/handlers.ts`                                |
 | **Run CLI commands**                                    | `CLICommands` + `createCLI`                    | `src/cli/commands.ts`, `src/cli/index.ts`           | `commander`, `bridge/types.ts`                                   |
-| **Manage encrypted API keys via CLI**                   | `CLICommands.keySet/get/delete/list`           | `src/cli/commands.ts`                               | `FileSecretsManager`, `echoc key`                                 |
+| **Manage encrypted API keys via CLI**                   | `CLICommands.keySet/get/delete/list`           | `src/cli/commands.ts`                               | `FileSecretsManager`, `retineo key`                                 |
 | **Add a new LLM provider type to factory**              | `DefaultLLMProviderFactory`                    | `src/llm/factory.ts`                                | Extend `createProvider` switch                                   |
 | **Run the first-time setup wizard**                     | `CLICommands.init`                             | `src/cli/commands.ts`                               | `probeOllama`, `prompt.ts` (`ask`/`choose`/`confirm`), `FileConfigManager.initializeDataDir` |
-| **Run ECHO with multi-provider LLM/embedding config**   | `DefaultLLMProviderFactory.loadFromConfig`     | `src/llm/factory.ts`                                | `EchoConfig.llm.providers[]`, `EchoConfig.embedding.providers[]` |
+| **Run RETINEO with multi-provider LLM/embedding config**   | `DefaultLLMProviderFactory.loadFromConfig`     | `src/llm/factory.ts`                                | `RetineoConfig.llm.providers[]`, `RetineoConfig.embedding.providers[]` |
 | **Spawn/detach the worker as a background process**     | `CLICommands.workerStart`                      | `src/cli/commands.ts`                               | `process-manager.ts` (PID file), `worker-script.ts` (fork target) |
 | **Spawn/detach the bridge as a background process**     | `CLICommands.bridgeStart`                      | `src/cli/commands.ts`                               | `process-manager.ts`, `FastifyBridgeServer`                      |
 | **Run worker + bridge in a single process (daemon)**    | `runDaemon`                                    | `src/cli/daemon.ts`                                 | `DefaultQueueWorker`, `FastifyBridgeServer`, `DefaultShutdownManager` |
@@ -452,13 +452,13 @@ echo-core/
 
 ## Service Lifecycle
 
-ECHO Core services are long-lived background processes. Each is tracked by a PID file in `~/.echo/`:
+RETINEO Core services are long-lived background processes. Each is tracked by a PID file in `~/.retineo/`:
 
 | Service | PID file | Log file | Spawn script | Start command |
 |---------|----------|----------|--------------|---------------|
-| Worker  | `~/.echo/worker.pid`  | `~/.echo/logs/worker.log`  | `dist/cli/worker-script.js` | `echoc worker start` |
-| Bridge  | `~/.echo/bridge.pid`  | `~/.echo/logs/bridge.log`  | (spawned by daemon or via FastifyBridgeServer) | `echoc bridge start` |
-| Daemon  | `~/.echo/daemon.pid`  | `~/.echo/logs/daemon.log`  | `dist/cli/daemon.js` | `echoc daemon start` |
+| Worker  | `~/.retineo/worker.pid`  | `~/.retineo/logs/worker.log`  | `dist/cli/worker-script.js` | `retineo worker start` |
+| Bridge  | `~/.retineo/bridge.pid`  | `~/.retineo/logs/bridge.log`  | (spawned by daemon or via FastifyBridgeServer) | `retineo bridge start` |
+| Daemon  | `~/.retineo/daemon.pid`  | `~/.retineo/logs/daemon.log`  | `dist/cli/daemon.js` | `retineo daemon start` |
 
 **Lifecycle contract:**
 - `start`: spawn detached child, write JSON `{ pid, startedAt, service, logFile }` to PID file, wait 1s and verify the PID is alive (else raise + log tail).
@@ -466,6 +466,6 @@ ECHO Core services are long-lived background processes. Each is tracked by a PID
 - `status`: report running/stopped, PID, uptime, last heartbeat, job counts (from `Registry.getJobCounts`).
 - `logs`: `tail -n 50 <log>` (or `-f` to stream).
 
-**Watch flag**: `echoc ingest file.md --watch` blocks the CLI until all jobs for the ingested node are `COMPLETED` (or any fails / timeout). If no worker/daemon is running, it starts an inline worker in the same process so the user gets end-to-end behaviour without a separate `worker start` step. This is the recommended one-shot flow for interactive use.
+**Watch flag**: `retineo ingest file.md --watch` blocks the CLI until all jobs for the ingested node are `COMPLETED` (or any fails / timeout). If no worker/daemon is running, it starts an inline worker in the same process so the user gets end-to-end behaviour without a separate `worker start` step. This is the recommended one-shot flow for interactive use.
 
-**Daemon vs separate services:** `echoc daemon start` runs worker + bridge in a single process under one PID. This is the recommended production layout. Use `echoc worker start` / `echoc bridge start` separately only when you need them on different machines or want independent restart cycles.
+**Daemon vs separate services:** `retineo daemon start` runs worker + bridge in a single process under one PID. This is the recommended production layout. Use `retineo worker start` / `retineo bridge start` separately only when you need them on different machines or want independent restart cycles.

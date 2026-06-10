@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Search & Retrieval Barrel Export
+ * RETINEO Core — Search & Retrieval Barrel Export
  * Phase 4: Query analysis, retrieval, context assembly.
  */
 

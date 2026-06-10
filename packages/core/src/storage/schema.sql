@@ -1,4 +1,4 @@
--- ECHO Core — SQLite Registry Schema
+-- RETINEO Core — SQLite Registry Schema
 -- Phase 0: Domain Storage
 
 -- Sources: mutable registry of ingested files

@@ -31,7 +31,7 @@ let service: DefaultIngestionService;
 let pipeline: DefaultCompilationPipeline;
 
 beforeEach(async () => {
-  tmpDir = mkdtempSync(path.join(os.tmpdir(), 'echo-pdf-int-'));
+  tmpDir = mkdtempSync(path.join(os.tmpdir(), 'retineo-pdf-int-'));
   dataDir = path.join(tmpDir, 'data');
   adaptersDir = path.join(tmpDir, 'adapters');
   dbPath = path.join(dataDir, 'registry.sqlite');
@@ -119,7 +119,7 @@ ${350 + text.length}
 
 describe('PDF Pipeline', () => {
   it('ingests PDF and queues GENERATE_L1 job', async () => {
-    const filePath = makePDFWithText('ECHO PDF Pipeline Test');
+    const filePath = makePDFWithText('RETINEO PDF Pipeline Test');
 
     const result = await service.ingestFile(filePath);
     const node = result.node;
@@ -127,7 +127,7 @@ describe('PDF Pipeline', () => {
     expect(node.depth).toBe(0);
 
     const obj = await cas.readObject(node.id);
-    expect(obj.artifacts.content).toContain('ECHO PDF Pipeline Test');
+    expect(obj.artifacts.content).toContain('RETINEO PDF Pipeline Test');
 
     const jobs = registry.getPendingJobs(10);
     const job = jobs.find((j) => j.payload.includes(node.id));

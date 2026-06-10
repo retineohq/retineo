@@ -1,7 +1,7 @@
-# ECHO Core Documentation
+# RETINEO Core Documentation
 
-[![npm version](https://img.shields.io/npm/v/echo-core)](https://www.npmjs.com/package/echo-core)
-[![CI](https://github.com/your-org/echo-core/actions/workflows/ci.yml/badge.svg)](https://github.com/your-org/echo-core/actions)
+[![npm version](https://img.shields.io/npm/v/retineo)](https://www.npmjs.com/package/retineo)
+[![CI](https://github.com/your-org/retineo/actions/workflows/ci.yml/badge.svg)](https://github.com/your-org/retineo/actions)
 
 ## Quick Start
 - [Installation](INSTALL.md)

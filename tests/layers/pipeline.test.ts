@@ -26,7 +26,7 @@ describe('DefaultCompilationPipeline', () => {
   const embeddingProvider = new MockLLMProvider({ id: 'mock-embed', type: 'mock', model: 'test-embed', dimension: 384 });
 
   beforeEach(() => {
-    tmpDir = mkdtempSync(path.join(os.tmpdir(), 'echo-pipe-'));
+    tmpDir = mkdtempSync(path.join(os.tmpdir(), 'retineo-pipe-'));
     dataDir = tmpDir;
     cas = new LocalCASStorage(dataDir);
     registry = new SQLiteRegistry(path.join(dataDir, 'registry.sqlite'));
@@ -160,7 +160,7 @@ describe('DefaultCompilationPipeline', () => {
   });
 
   it('end-to-end: ingest content → pipeline generates L1/L2/L3 artifacts', async () => {
-    const hash = seedNode('# Hello World\n\nThis is a test document for ECHO Core.');
+    const hash = seedNode('# Hello World\n\nThis is a test document for RETINEO Core.');
     pipeline.enqueueL1(hash, 'src-e2e');
 
     // Simulate worker processing all jobs

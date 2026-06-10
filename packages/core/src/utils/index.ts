@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Utils Barrel Export
+ * RETINEO Core — Utils Barrel Export
  * Phase 7: Added errors, error-handler, cache.
  */
 

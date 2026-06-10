@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Bridge Public API
+ * RETINEO Core — Bridge Public API
  * Phase 7: Added health, metrics, and health routes.
  */
 

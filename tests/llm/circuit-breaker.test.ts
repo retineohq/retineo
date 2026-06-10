@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Circuit Breaker Tests
+ * RETINEO Core — Circuit Breaker Tests
  * Phase 7
  */
 

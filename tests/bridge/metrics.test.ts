@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Metrics Endpoint Tests
+ * RETINEO Core — Metrics Endpoint Tests
  * Phase 7
  */
 
@@ -22,7 +22,7 @@ describe('Metrics Endpoints', () => {
   let fastify: ReturnType<typeof Fastify>;
 
   beforeAll(() => {
-    tmpDir = mkdtempSync(path.join(tmpdir(), 'echo-metrics-'));
+    tmpDir = mkdtempSync(path.join(tmpdir(), 'retineo-metrics-'));
     registry = new SQLiteRegistry(path.join(tmpDir, 'registry.db'));
     cas = new LocalCASStorage(tmpDir);
     const provider = new MockLLMProvider({ id: 'mock', type: 'mock', model: 'mock' });
@@ -71,10 +71,10 @@ describe('Metrics Endpoints', () => {
     expect(res.statusCode).toBe(200);
     expect(res.headers['content-type']).toContain('text/plain');
     const text = res.body as string;
-    expect(text).toContain('echo_nodes');
-    expect(text).toContain('echo_searches_total');
-    expect(text).toContain('echo_llm_requests_total');
-    expect(text).toContain('echo_adapter_ingests_total{adapter="text"}');
+    expect(text).toContain('retineo_nodes');
+    expect(text).toContain('retineo_searches_total');
+    expect(text).toContain('retineo_llm_requests_total');
+    expect(text).toContain('retineo_adapter_ingests_total{adapter="text"}');
   });
 });
 
@@ -90,12 +90,12 @@ describe('formatPrometheus', () => {
       llm: { requests: 40, errors: 2, avgLatencyMs: 100 },
     };
     const text = formatPrometheus(snapshot);
-    expect(text).toContain('echo_nodes 5');
-    expect(text).toContain('echo_jobs_pending 1');
-    expect(text).toContain('echo_jobs_running 2');
-    expect(text).toContain('echo_index_vectors 100');
-    expect(text).toContain('echo_searches_total 20');
-    expect(text).toContain('echo_llm_errors_total 2');
-    expect(text).toContain('echo_adapter_ingests_total{adapter="text"} 10');
+    expect(text).toContain('retineo_nodes 5');
+    expect(text).toContain('retineo_jobs_pending 1');
+    expect(text).toContain('retineo_jobs_running 2');
+    expect(text).toContain('retineo_index_vectors 100');
+    expect(text).toContain('retineo_searches_total 20');
+    expect(text).toContain('retineo_llm_errors_total 2');
+    expect(text).toContain('retineo_adapter_ingests_total{adapter="text"} 10');
   });
 });

@@ -1,5 +1,5 @@
 /**
- * ECHO Core — CASStorage
+ * RETINEO Core — CASStorage
  * Phase 1: Content-Addressable Storage
  */
 

@@ -1,5 +1,5 @@
 /**
- * ECHO Core — LRU Cache
+ * RETINEO Core — LRU Cache
  * Phase 7: In-memory caching for embeddings, L2 artifacts, and search results.
  */
 

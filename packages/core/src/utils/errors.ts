@@ -1,9 +1,9 @@
 /**
- * ECHO Core — Standardized Error Handling
+ * RETINEO Core — Standardized Error Handling
  * Phase 7: Unified error hierarchy with codes and HTTP status mapping.
  */
 
-export interface EchoError {
+export interface RetineoError {
   code: string;
   message: string;
   statusCode: number;
@@ -11,7 +11,7 @@ export interface EchoError {
   cause?: Error;
 }
 
-export class BaseEchoError extends Error implements EchoError {
+export class BaseRetineoError extends Error implements RetineoError {
   code: string;
   statusCode: number;
   details?: Record<string, unknown>;
@@ -37,7 +37,7 @@ export class BaseEchoError extends Error implements EchoError {
 }
 
 // Adapter errors
-export class AdapterError extends BaseEchoError {
+export class AdapterError extends BaseRetineoError {
   constructor(code: string, message: string, statusCode = 500, details?: Record<string, unknown>, cause?: Error) {
     super(code, message, statusCode, details, cause);
   }
@@ -56,7 +56,7 @@ export const AdapterTimeout = (adapterId: string, cause?: Error) =>
   new AdapterError('ADAPTER_TIMEOUT', `Adapter timed out: ${adapterId}`, 504, { adapterId }, cause);
 
 // Ingest errors
-export class IngestError extends BaseEchoError {
+export class IngestError extends BaseRetineoError {
   constructor(code: string, message: string, statusCode = 500, details?: Record<string, unknown>, cause?: Error) {
     super(code, message, statusCode, details, cause);
   }
@@ -72,7 +72,7 @@ export const IngestRegistryFailed = (sourceId: string, cause?: Error) =>
   new IngestError('INGEST_REGISTRY_FAILED', `Failed to register source: ${sourceId}`, 500, { sourceId }, cause);
 
 // LLM errors
-export class LLMError extends BaseEchoError {
+export class LLMError extends BaseRetineoError {
   constructor(code: string, message: string, statusCode = 500, details?: Record<string, unknown>, cause?: Error) {
     super(code, message, statusCode, details, cause);
   }
@@ -94,7 +94,7 @@ export const LLMProviderDown = (providerId: string, cause?: Error) =>
   new LLMError('LLM_PROVIDER_DOWN', `LLM provider unavailable: ${providerId}`, 503, { providerId }, cause);
 
 // Pipeline errors
-export class PipelineError extends BaseEchoError {
+export class PipelineError extends BaseRetineoError {
   constructor(code: string, message: string, statusCode = 500, details?: Record<string, unknown>, cause?: Error) {
     super(code, message, statusCode, details, cause);
   }
@@ -113,7 +113,7 @@ export const PipelineRetryExhausted = (jobId: string, cause?: Error) =>
   new PipelineError('PIPELINE_RETRY_EXHAUSTED', `Job retry exhausted: ${jobId}`, 500, { jobId }, cause);
 
 // Search errors
-export class SearchError extends BaseEchoError {
+export class SearchError extends BaseRetineoError {
   constructor(code: string, message: string, statusCode = 500, details?: Record<string, unknown>, cause?: Error) {
     super(code, message, statusCode, details, cause);
   }
@@ -129,7 +129,7 @@ export const SearchInvalidQuery = (reason: string, cause?: Error) =>
   new SearchError('SEARCH_INVALID_QUERY', `Invalid search query: ${reason}`, 400, { reason }, cause);
 
 // Bridge errors
-export class BridgeError extends BaseEchoError {
+export class BridgeError extends BaseRetineoError {
   constructor(code: string, message: string, statusCode = 500, details?: Record<string, unknown>, cause?: Error) {
     super(code, message, statusCode, details, cause);
   }
@@ -145,7 +145,7 @@ export const BridgeShutdown = (cause?: Error) =>
   new BridgeError('BRIDGE_SHUTDOWN', 'Service is shutting down', 503, {}, cause);
 
 // Config errors
-export class ConfigError extends BaseEchoError {
+export class ConfigError extends BaseRetineoError {
   constructor(code: string, message: string, statusCode = 500, details?: Record<string, unknown>, cause?: Error) {
     super(code, message, statusCode, details, cause);
   }

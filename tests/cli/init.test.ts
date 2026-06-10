@@ -1,5 +1,5 @@
 /**
- * ECHO Core — CLI Init Command Tests
+ * RETINEO Core — CLI Init Command Tests
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -20,12 +20,12 @@ function makeDeps() {
     configManager: { load: async () => ({ dataDir: '', defaultAdapter: '', llmProvider: '', embeddingModel: '', search: {} as any, i18n: {} as any }), save: async () => {} } as any,
     pipeline: { processJob: async () => {}, enqueueL1: () => {}, enqueueL2: () => {}, enqueueL3: () => {} },
     secretsManager: { set: async () => {}, get: async () => undefined, delete: async () => {}, list: async () => [], listMasked: async () => ({}) },
-    cas: { getObjectPath: () => '/tmp/echo/objects/ab/cdef', read: async () => Buffer.from(''), exists: () => false, write: async () => '', delete: async () => {}, writeObject: async () => {}, readObject: async () => ({ node: {} as any, artifacts: { content: '', meta: {} as any } }) },
+    cas: { getObjectPath: () => '/tmp/retineo/objects/ab/cdef', read: async () => Buffer.from(''), exists: () => false, write: async () => '', delete: async () => {}, writeObject: async () => {}, readObject: async () => ({ node: {} as any, artifacts: { content: '', meta: {} as any } }) },
   };
 }
 
 describe('CLI init', () => {
-  const testDir = path.join(os.tmpdir(), 'echo-init-test-' + Date.now());
+  const testDir = path.join(os.tmpdir(), 'retineo-init-test-' + Date.now());
 
   beforeEach(() => {
     if (existsSync(testDir)) rmSync(testDir, { recursive: true });
@@ -49,7 +49,7 @@ describe('CLI init', () => {
 
     expect(existsSync(testDir)).toBe(true);
     expect(existsSync(path.join(testDir, 'config.yaml'))).toBe(true);
-    expect(existsSync(path.join(testDir, 'echo.sqlite'))).toBe(true);
+    expect(existsSync(path.join(testDir, 'retineo.sqlite'))).toBe(true);
     expect(existsSync(path.join(testDir, 'objects'))).toBe(true);
     expect(existsSync(path.join(testDir, 'index'))).toBe(true);
     expect(existsSync(path.join(testDir, 'adapters'))).toBe(true);
@@ -64,6 +64,6 @@ describe('CLI init', () => {
 
     expect(existsSync(testDir)).toBe(true);
     expect(existsSync(path.join(testDir, 'config.yaml'))).toBe(true);
-    expect(existsSync(path.join(testDir, 'echo.sqlite'))).toBe(true);
+    expect(existsSync(path.join(testDir, 'retineo.sqlite'))).toBe(true);
   });
 });

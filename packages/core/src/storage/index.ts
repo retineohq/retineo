@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Storage Layer
+ * RETINEO Core — Storage Layer
  * Phase 7: Added secrets manager.
  */
 

@@ -18,7 +18,7 @@ describe('DefaultOrphanDetector', () => {
   let detector: DefaultOrphanDetector;
 
   beforeEach(() => {
-    tmpDir = mkdtempSync(path.join(os.tmpdir(), 'echo-ghost-'));
+    tmpDir = mkdtempSync(path.join(os.tmpdir(), 'retineo-ghost-'));
     cas = new LocalCASStorage(tmpDir);
     registry = new SQLiteRegistry(path.join(tmpDir, 'registry.sqlite'));
     detector = new DefaultOrphanDetector(registry, cas);

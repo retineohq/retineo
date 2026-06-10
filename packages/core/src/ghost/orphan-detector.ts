@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Orphan Detector
+ * RETINEO Core — Orphan Detector
  * Detects deleted or modified source files and registers them as orphans.
  */
 

@@ -1,4 +1,4 @@
-# ECHO Core HTTP API Reference
+# RETINEO Core HTTP API Reference
 
 Base URL: `http://127.0.0.1:37891` (configurable via `bridge.port` in `config.yaml`).
 

@@ -1,5 +1,5 @@
 /**
- * ECHO Core — MCP Public API
+ * RETINEO Core — MCP Public API
  */
 
 export * from './tools.js';

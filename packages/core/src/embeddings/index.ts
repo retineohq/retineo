@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Embeddings Barrel Export
+ * RETINEO Core — Embeddings Barrel Export
  * Phase 7: HNSW index and Parquet store.
  */
 

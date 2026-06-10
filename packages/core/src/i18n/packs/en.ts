@@ -1,5 +1,5 @@
 /**
- * ECHO Core — English Language Pack
+ * RETINEO Core — English Language Pack
  * Phase 4: Default language pack with all prompt templates.
  */
 

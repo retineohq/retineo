@@ -1,6 +1,6 @@
-# ECHO Core Architecture
+# RETINEO Core Architecture
 
-ECHO Core is a **Content Compilation Engine** that transforms raw files into structured, queryable context nodes through a layered pipeline (L0–L3).
+RETINEO Core is a **Content Compilation Engine** that transforms raw files into structured, queryable context nodes through a layered pipeline (L0–L3).
 
 ## Core Concepts
 
@@ -19,7 +19,7 @@ A `ContextNode` is the atomic unit of context. It contains:
 Nodes are fractal: a 10-minute video becomes a root node with child segments, each its own node. A 500-page PDF becomes a root with chapter children. Any node can stand alone or participate in a tree.
 
 ### Adapter IPC
-Adapters are external child processes that speak JSON-RPC 2.0 over stdin/stdout. They convert any file format into normalized text + metadata blocks. ECHO Core does not parse PDFs, transcribe audio, or OCR images itself — it delegates to adapters. This keeps the core small and makes format support pluggable.
+Adapters are external child processes that speak JSON-RPC 2.0 over stdin/stdout. They convert any file format into normalized text + metadata blocks. RETINEO Core does not parse PDFs, transcribe audio, or OCR images itself — it delegates to adapters. This keeps the core small and makes format support pluggable.
 
 ## L0–L3 Pipeline
 
@@ -103,7 +103,7 @@ See [`OPERATIONS.md`](OPERATIONS.md) for deployment notes and health checks.
 
 ### Standardized Errors
 
-All errors extend `BaseEchoError` with a stable `code`, `statusCode`, and `details`:
+All errors extend `BaseRetineoError` with a stable `code`, `statusCode`, and `details`:
 
 | Code | Status | Meaning |
 |------|--------|---------|
@@ -130,10 +130,10 @@ If a provider opens, the factory automatically routes to a configured `fallback`
 
 Sensitive config values (`${ENV_VAR}`) resolve in order:
 1. Environment variable
-2. `SecretsManager` (`~/.echo/secrets.json`, AES-256-GCM encrypted)
+2. `SecretsManager` (`~/.retineo/secrets.json`, AES-256-GCM encrypted)
 3. Throw `CONFIG_SECRET_NOT_FOUND`
 
-CLI: `echoc key set <provider> <key>`, `echoc key get <provider>`, `echoc key delete <provider>`, `echoc key list`.
+CLI: `retineo key set <provider> <key>`, `retineo key get <provider>`, `retineo key delete <provider>`, `retineo key list`.
 
 ### Health & Metrics
 
@@ -263,7 +263,7 @@ data/
 │   ├── embeddings.jsonl            # MVP: one JSON line per vector (Phase 4: parquet)
 │   ├── bm25.json                   # Okapi BM25 inverted index + doc lengths
 │   └── hnsw.manifest.json          # Index metadata (Phase 4: hnsw.bin)
-└── echo.sqlite                     # Registry: sources, segments, jobs, orphans
+└── retineo.sqlite                     # Registry: sources, segments, jobs, orphans
 ```
 
 ## Module Map
@@ -291,11 +291,11 @@ User / External Agent
   ↓
 ┌─────────────────────────────────────────┐
 │  CLI          │  HTTP API    │  MCP      │
-│  echoc ingest  │  POST /v1/   │  echo_    │
-│  echoc search  │  ingest      │  search   │
-│  echoc status  │  POST /v1/   │  echo_    │
-│  echoc compile │  search      │  ingest   │
-│  echoc config  │  GET /v1/    │  echo_    │
+│  retineo ingest  │  POST /v1/   │  retineo_    │
+│  retineo search  │  ingest      │  search   │
+│  retineo status  │  POST /v1/   │  retineo_    │
+│  retineo compile │  search      │  ingest   │
+│  retineo config  │  GET /v1/    │  retineo_    │
 │               │  status      │  status   │
 │               │  SSE /v1/    │           │
 │               │  jobs/:id    │           │
@@ -306,27 +306,27 @@ IngestionService / RetrievalService / CompilationPipeline
 
 | Interface | Transport | Default | Auth |
 |-----------|-----------|---------|------|
-| **CLI** | `stdio` | `echoc` command | none (local process) |
+| **CLI** | `stdio` | `retineo` command | none (local process) |
 | **HTTP API** | Fastify | `127.0.0.1:37891` | none in MVP (future: API keys) |
 | **MCP** | stdio (JSON-RPC) | Claude Desktop, Cursor | none |
 
 ### CLI Commands (Phase 7)
 
 ```
-echoc ingest <file>          # Ingest a file
-echoc search <query>         # Search with --language, --mode, --top-k, --json
-echoc status                 # Engine status
-echoc compile [file]         # Compile pending jobs or specific file
-echoc config [key] [value]   # Read/write config
-echoc jobs                   # List recent jobs
-echoc recover <hash>         # Recover orphaned node
-echoc ghost list             # List orphaned objects
-echoc ghost recover <hash>   # Recover orphan from CAS
-echoc ghost purge <days>     # Remove old orphans
-echoc key set <p> <key>      # Store encrypted API key
-echoc key get <p>            # Show masked key
-echoc key delete <p>         # Remove key
-echoc key list               # List all keys (masked)
+retineo ingest <file>          # Ingest a file
+retineo search <query>         # Search with --language, --mode, --top-k, --json
+retineo status                 # Engine status
+retineo compile [file]         # Compile pending jobs or specific file
+retineo config [key] [value]   # Read/write config
+retineo jobs                   # List recent jobs
+retineo recover <hash>         # Recover orphaned node
+retineo ghost list             # List orphaned objects
+retineo ghost recover <hash>   # Recover orphan from CAS
+retineo ghost purge <days>     # Remove old orphans
+retineo key set <p> <key>      # Store encrypted API key
+retineo key get <p>            # Show masked key
+retineo key delete <p>         # Remove key
+retineo key list               # List all keys (masked)
 ```
 
 See [`structure.md`](../structure.md) for the complete file listing and cross-reference index.

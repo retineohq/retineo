@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Circuit Breaker
+ * RETINEO Core — Circuit Breaker
  * Phase 7: Protect against cascading LLM failures.
  */
 

@@ -1,4 +1,4 @@
-# ECHO Core — Performance Optimization
+# RETINEO Core — Performance Optimization
 
 ## HNSW Vector Index
 
@@ -12,7 +12,7 @@ Replaces brute-force cosine search with Hierarchical Navigable Small World (HNSW
 - **Fallback:** Brute-force cosine similarity (pure JS, always works).
 
 ```typescript
-import { createHNSWIndex, loadOrBuildHNSW } from 'echo-core/embeddings';
+import { createHNSWIndex, loadOrBuildHNSW } from 'retineo/embeddings';
 
 const index = await createHNSWIndex(1536, 'cosine');
 index.build(vectors);
@@ -50,7 +50,7 @@ Optional replacement for `embeddings.jsonl` using Apache Parquet for better comp
 - **Future:** `apache-arrow` migration when package size/performance is verified.
 
 ```typescript
-import { createEmbeddingStore } from 'echo-core/embeddings';
+import { createEmbeddingStore } from 'retineo/embeddings';
 
 const store = createEmbeddingStore(indexDir);
 await store.append([{ hash: 'abc', vector: [...], model: 'text-embedding-3-small', dimension: 1536 }]);
@@ -107,7 +107,7 @@ performance:
 `SimpleLRUCache` supports TTL eviction and MRU reordering on `get()`.
 
 ```typescript
-import { SimpleLRUCache } from 'echo-core/utils';
+import { SimpleLRUCache } from 'retineo/utils';
 
 const cache = new SimpleLRUCache<string, number[]>(1000);
 cache.set('key', value);

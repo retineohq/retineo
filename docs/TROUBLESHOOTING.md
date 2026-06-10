@@ -1,4 +1,4 @@
-# ECHO Core — Troubleshooting
+# RETINEO Core — Troubleshooting
 
 Common issues and fixes for audio/video adapters and external dependencies.
 
@@ -13,12 +13,12 @@ Common issues and fixes for audio/video adapters and external dependencies.
 **Fix — Option A: Install whisper.cpp (recommended, local-first)**
 
 ```bash
-mkdir -p ~/.echo/bin ~/.echo/models/whisper
+mkdir -p ~/.retineo/bin ~/.retineo/models/whisper
 wget https://github.com/ggerganov/whisper.cpp/releases/download/v1.6.0/whisper-cli-linux-x64
 chmod +x whisper-cli-linux-x64
-mv whisper-cli-linux-x64 ~/.echo/bin/whisper-cli
+mv whisper-cli-linux-x64 ~/.retineo/bin/whisper-cli
 wget https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin
-mv ggml-base.bin ~/.echo/models/whisper/
+mv ggml-base.bin ~/.retineo/models/whisper/
 ```
 
 **Fix — Option B: Use cloud fallback**
@@ -33,14 +33,14 @@ export OPENAI_API_KEY="sk-..."
 
 ### whisper.cpp model not found (error 5005)
 
-**Cause:** `whisper-cli` is installed but no GGML model file was found in `~/.echo/models/whisper/`.
+**Cause:** `whisper-cli` is installed but no GGML model file was found in `~/.retineo/models/whisper/`.
 
 **Fix:**
 
 ```bash
-mkdir -p ~/.echo/models/whisper
+mkdir -p ~/.retineo/models/whisper
 wget https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin
-mv ggml-base.bin ~/.echo/models/whisper/
+mv ggml-base.bin ~/.retineo/models/whisper/
 ```
 
 Or set `whisperCppModel` in your adapter config to an existing model path.
@@ -59,10 +59,10 @@ export WHISPER_API_KEY="sk-..."
 export OPENAI_API_KEY="sk-..."
 ```
 
-Persist in ECHO secrets:
+Persist in RETINEO secrets:
 
 ```bash
-echoc key set openai sk-...
+retineo key set openai sk-...
 ```
 
 ---
@@ -120,16 +120,16 @@ ffmpeg -i video.mp4 2>&1 | grep Audio
 
 ## Dependency Checks
 
-Run `echoc doctor` to verify all external tools:
+Run `retineo doctor` to verify all external tools:
 
 ```bash
-echoc doctor
+retineo doctor
 ```
 
 Expected output when healthy:
 
 ```
-ECHO Core Dependency Check
+RETINEO Core Dependency Check
 ─────────────────────────
 ✓ Node.js v20.12.0
 ✓ ffmpeg (6.1.1)
@@ -150,34 +150,34 @@ Exit code is `1` if any **critical** dependency is missing. Currently only Node.
 | `Adapter not found for .mp4` | `video` adapter not loaded | Verify `packages/core/adapters/video/` exists and `manifest.json` is valid |
 | Transcription is empty | Audio is silent or corrupted | Check file plays correctly; try re-encoding |
 | Frame extraction fails | Corrupted video or missing codec | Re-encode with ffmpeg: `ffmpeg -i in.mp4 -c:v libx264 out.mp4` |
-| Jobs stuck in `PENDING` forever | No worker is running | `echoc worker status` → if stopped, `echoc worker start` (or use `echoc daemon start` for bridge+worker) |
-| `echoc ingest` returns but no L1/L2/L3 generated | Worker is not draining the queue | Same as above. For a one-shot run, use `echoc ingest file.md --watch` — it starts an inline worker |
+| Jobs stuck in `PENDING` forever | No worker is running | `retineo worker status` → if stopped, `retineo worker start` (or use `retineo daemon start` for bridge+worker) |
+| `retineo ingest` returns but no L1/L2/L3 generated | Worker is not draining the queue | Same as above. For a one-shot run, use `retineo ingest file.md --watch` — it starts an inline worker |
 | `worker.start` exits immediately | Missing `pnpm build` step | Run `pnpm build` so `dist/cli/worker-script.js` exists |
 | `daemon.start` exits immediately | Same as above | `pnpm build` first |
-| L2 shows `"Mock summary for prompt hash..."` | `compile --watch` used inline worker without loading real providers from config | Verify `echoc worker status` shows running; or run `echoc daemon start` first; or re-run `echoc init` to ensure config has real provider |
-| `LLM provider not configured` error | No providers loaded from config | Run `echoc init` to create `~/.echo/config.yaml` with Ollama or cloud provider |
-| `Provider 'xxx' not found` error | `--provider` flag specifies id not in config | Check `echoc config get llm.providers` for available ids |
-| `--non-interactive requires --llm-model and --embed-model` | Missing required flags | Pass both flags: `echoc init --non-interactive --llm-model <model> --embed-model <model>` |
+| L2 shows `"Mock summary for prompt hash..."` | `compile --watch` used inline worker without loading real providers from config | Verify `retineo worker status` shows running; or run `retineo daemon start` first; or re-run `retineo init` to ensure config has real provider |
+| `LLM provider not configured` error | No providers loaded from config | Run `retineo init` to create `~/.retineo/config.yaml` with Ollama or cloud provider |
+| `Provider 'xxx' not found` error | `--provider` flag specifies id not in config | Check `retineo config get llm.providers` for available ids |
+| `--non-interactive requires --llm-model and --embed-model` | Missing required flags | Pass both flags: `retineo init --non-interactive --llm-model <model> --embed-model <model>` |
 | `Ingest shows duplicate jobs` | Running an older version | Upgrade to v0.1.2+ where duplicate ingestion is fully skipped |
 
 ---
 
 ## Duplicate ingestion
 
-**Symptom:** Running `echoc ingest same-file.md` twice creates duplicate rows in the `sources` table, or prints `Job ... queued for L1 generation` after `Skipped: already ingested`.
+**Symptom:** Running `retineo ingest same-file.md` twice creates duplicate rows in the `sources` table, or prints `Job ... queued for L1 generation` after `Skipped: already ingested`.
 
 **Fix:** This is resolved in v0.1.2. Ingestion is now fully idempotent:
 - Same content hash + same path → skipped with `Skipped: already ingested (hash: ...)` — **no jobs queued**
 - Same content hash + different path → source path updated, no new jobs queued
 - New content hash → full ingest + jobs queued as before
 
-If you see duplicates or extra job lines from older versions, run `echoc doctor` to verify your install version.
+If you see duplicates or extra job lines from older versions, run `retineo doctor` to verify your install version.
 
 ---
 
 ## L3 jobs stuck in DEAD status
 
-**Symptom:** After `echoc ingest`, L3 embedding jobs fail with `Ollama embed model not responding — check model settings and ensure Ollama is running`, retry 3 times, then become `DEAD`. `echoc status` shows `0 vectors` and the index is empty.
+**Symptom:** After `retineo ingest`, L3 embedding jobs fail with `Ollama embed model not responding — check model settings and ensure Ollama is running`, retry 3 times, then become `DEAD`. `retineo status` shows `0 vectors` and the index is empty.
 
 **Cause:** When Ollama is not ready (model not loaded in memory), the embedding request fails. The circuit breaker opens, retries happen instantly, and the job exhausts its attempts.
 
@@ -189,17 +189,17 @@ If you see duplicates or extra job lines from older versions, run `echoc doctor`
    ```
 2. Restart the worker to reset the circuit breaker:
    ```bash
-   echoc worker stop
-   echoc worker start
+   retineo worker stop
+   retineo worker start
    ```
-3. Run `echoc compile` to re-queue dead L3 jobs and find any missing L3 work:
+3. Run `retineo compile` to re-queue dead L3 jobs and find any missing L3 work:
    ```bash
-   echoc compile
+   retineo compile
    ```
 4. If you started via daemon, restart the daemon instead:
    ```bash
-   echoc daemon stop
-   echoc daemon start
+   retineo daemon stop
+   retineo daemon start
    ```
 
 Starting in v0.1.1, the worker automatically resets all circuit breakers on startup, and `compile` recovers both dead L3 jobs and nodes that are missing L3 entirely.
@@ -208,9 +208,9 @@ Starting in v0.1.1, the worker automatically resets all circuit breakers on star
 
 ## Recovering files from CAS
 
-**Symptom:** `echoc recover <hash>` prints success but the file does not exist at the reported path, or you deleted a source file accidentally.
+**Symptom:** `retineo recover <hash>` prints success but the file does not exist at the reported path, or you deleted a source file accidentally.
 
-**Fix:** `echoc recover` now performs a full restore:
+**Fix:** `retineo recover` now performs a full restore:
 - Verifies the file at the registered path — if present and hash matches, prints `Already valid`.
 - If missing, reads the normalized content (`content.md`) from the CAS object store and writes it back to the source path.
 - If another copy exists at a different registered path, updates the registry to point there.
@@ -222,8 +222,8 @@ If the registry entry itself is missing, `recover` reports `not found in registr
 
 ## Daemon lifecycle
 
-**Symptom:** `echoc daemon stop` reports the daemon is not running even though it was started.
+**Symptom:** `retineo daemon stop` reports the daemon is not running even though it was started.
 
-**Fix:** Starting in v0.1.1, the PID file is written immediately when `daemon start` spawns the process. If the daemon exits immediately (e.g., port conflict or missing build), the PID file is cleaned up and a clear error is shown. Check logs with `echoc daemon logs` to diagnose startup failures.
+**Fix:** Starting in v0.1.1, the PID file is written immediately when `daemon start` spawns the process. If the daemon exits immediately (e.g., port conflict or missing build), the PID file is cleaned up and a clear error is shown. Check logs with `retineo daemon logs` to diagnose startup failures.
 
 Graceful shutdown order on `daemon stop`: bridge → worker → registry. The stop command sends SIGTERM, waits up to 5 seconds, then sends SIGKILL if needed.

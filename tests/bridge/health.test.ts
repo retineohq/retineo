@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Health & Ready Endpoint Tests
+ * RETINEO Core — Health & Ready Endpoint Tests
  * Phase 7
  */
 
@@ -25,7 +25,7 @@ describe('Health Endpoints', () => {
   let fastify: ReturnType<typeof Fastify>;
 
   beforeAll(() => {
-    tmpDir = mkdtempSync(path.join(tmpdir(), 'echo-health-'));
+    tmpDir = mkdtempSync(path.join(tmpdir(), 'retineo-health-'));
     const dbPath = path.join(tmpDir, 'registry.db');
     registry = new SQLiteRegistry(dbPath);
     cas = new LocalCASStorage(tmpDir);

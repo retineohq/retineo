@@ -1,6 +1,6 @@
-# ECHO Core — Structured Logging Guide
+# RETINEO Core — Structured Logging Guide
 
-ECHO Core uses **Pino** for fast, structured JSON logging. Every log entry is JSON-parseable for production observability.
+RETINEO Core uses **Pino** for fast, structured JSON logging. Every log entry is JSON-parseable for production observability.
 
 ---
 
@@ -35,7 +35,7 @@ logging:
   level: "info"        # debug | info | warn | error
   format: "json"       # json | pretty
   destination: "stdout" # stdout | file | both
-  filePath: "~/.echo/logs/echo.log"
+  filePath: "~/.retineo/logs/retineo.log"
   redact: ["apiKey", "api_key", "password"]
 ```
 

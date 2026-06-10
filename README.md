@@ -1,17 +1,18 @@
-# ECHO Core — Content Compilation Engine
+# Retineo Core
 
-[![npm version](https://img.shields.io/npm/v/echo-core)](https://www.npmjs.com/package/echo-core)
-[![CI](https://github.com/your-org/echo-core/actions/workflows/ci.yml/badge.svg)](https://github.com/your-org/echo-core/actions)
+[![npm version](https://img.shields.io/npm/v/@retineo/core)](https://www.npmjs.com/package/@retineo/core)
+[![CI](https://github.com/retineohq/retineo/actions/workflows/ci.yml/badge.svg)](https://github.com/retineohq/retineo/actions)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-**Version:** 0.1.0 MVP  
+**Version:** 0.2.0  
 **License:** Apache 2.0  
-**Status:** Phases 0–7 complete — 277 tests passing
+**Status:** Production-ready — 408 tests passing
 
-## What is ECHO Core?
+## What is Retineo Core?
 
-ECHO Core is a **Content Compilation Engine** that transforms any information source (text, PDF, audio, video, chats) into a hierarchical fractal structure of artifacts (L0-L3).
+Retineo Core is a **fractal knowledge management engine** (L0–L3) that transforms any information source (text, PDF, audio, video, chats) into a hierarchical structure of compiled artifacts.
 
-**Metaphor:** Not a RAG system, but a compiler. Like `gcc` turns `.c` into `.o` → `.elf`, ECHO turns raw source into a chain of artifacts: **L0 → L1 → L2 → L3**.
+**Metaphor:** Not a RAG system, but a compiler. Like `gcc` turns `.c` into `.o` → `.elf`, Retineo turns raw source into a chain of artifacts: **L0 → L1 → L2 → L3**.
 
 | Level | Artifact | Description |
 |-------|----------|-------------|
@@ -23,13 +24,13 @@ ECHO Core is a **Content Compilation Engine** that transforms any information so
 ## Install
 
 ```bash
-npm install -g echo-core
+npm install -g @retineo/core
 ```
 
 Or try without installing:
 
 ```bash
-npx echo-core status
+npx @retineo/core status
 ```
 
 See [docs/INSTALL.md](docs/INSTALL.md) for binary and source install options.
@@ -37,13 +38,11 @@ See [docs/INSTALL.md](docs/INSTALL.md) for binary and source install options.
 ## Quick start
 
 ```bash
-echoc init      # create ~/.echo/ config
-echoc status    # check engine status
-echoc ingest ./my-document.pdf
-echoc search "semantic search query"
+retineo init      # create ~/.retineo/ config
+retineo status    # check engine status
+retineo ingest ./my-document.pdf
+retineo search "semantic search query"
 ```
-
-> `echo-core` is also available as an alias for the `echoc` command.
 
 ## Architecture Principles
 
@@ -59,9 +58,17 @@ echoc search "semantic search query"
 - [Installation](docs/INSTALL.md)
 - [Getting Started](docs/GETTING_STARTED.md)
 - [Architecture](docs/ARCHITECTURE.md)
+- [CLI Guide](docs/CLI.md)
 - [Adapter Guide](docs/ADAPTER_GUIDE.md)
 - [Distribution](docs/DISTRIBUTION.md)
 
+## Ecosystem
+
+- **Organization:** [github.com/retineohq](https://github.com/retineohq)
+- **Landing page:** [retineo.dev](https://retineo.dev) *(coming soon)*
+
 ## License
 
-Apache 2.0 — see LICENSE file.
+Apache 2.0 — see [LICENSE](LICENSE) file.
+
+Copyright © 2026 Valery Kot

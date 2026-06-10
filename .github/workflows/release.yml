@@ -80,8 +80,8 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: echo-core-${{ matrix.target }}
-          path: dist/echo-core-*
+          name: retineo-${{ matrix.target }}
+          path: dist/retineo-*
 
   release-github:
     needs: [publish-npm, build-binaries]
@@ -92,7 +92,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
-          pattern: echo-core-*
+          pattern: retineo-*
           merge-multiple: true
 
       - uses: softprops/action-gh-release@v2

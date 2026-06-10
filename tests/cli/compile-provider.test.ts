@@ -8,7 +8,7 @@ import type { CLICommandsDeps, CompileCLIOptions } from '../../packages/core/src
 
 function makeDeps(configOverride?: { llm?: { defaultProvider: string; providers: Array<{ id: string; type: string; model: string }> } }): CLICommandsDeps {
   const defaultConfig = {
-    dataDir: '/tmp/echo',
+    dataDir: '/tmp/retineo',
     defaultAdapter: 'file',
     llmProvider: 'ollama',
     embeddingModel: 'nomic-embed-text',
@@ -82,7 +82,7 @@ function makeDeps(configOverride?: { llm?: { defaultProvider: string; providers:
       load: async () => config,
       save: async () => {},
       getDataDir: () => config.dataDir,
-      getConfigPath: () => '/tmp/echo/config.yaml',
+      getConfigPath: () => '/tmp/retineo/config.yaml',
       configExists: () => true,
     } as any,
     pipeline: {
@@ -98,7 +98,7 @@ function makeDeps(configOverride?: { llm?: { defaultProvider: string; providers:
       list: async () => [],
       listMasked: async () => ({}),
     } as any,
-    cas: { getObjectPath: () => '/tmp/echo/objects/ab/cdef', read: async () => Buffer.from(''), exists: () => false, write: async () => '', delete: async () => {}, writeObject: async () => {}, readObject: async () => ({ node: {} as any, artifacts: { content: '', meta: {} as any } }) },
+    cas: { getObjectPath: () => '/tmp/retineo/objects/ab/cdef', read: async () => Buffer.from(''), exists: () => false, write: async () => '', delete: async () => {}, writeObject: async () => {}, readObject: async () => ({ node: {} as any, artifacts: { content: '', meta: {} as any } }) },
   };
 }
 

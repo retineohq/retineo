@@ -1,5 +1,5 @@
 /**
- * ECHO Core — CLI Commands
+ * RETINEO Core — CLI Commands
  * Phase 8: Interactive init wizard, worker/bridge/daemon lifecycle, --watch.
  */
 
@@ -9,7 +9,7 @@ import type { RetrievalService } from '../search/retrieval-service.js';
 import type { QueryAnalyzer } from '../search/query-analyzer.js';
 import type { ContextAssembler } from '../search/context-assembler.js';
 import type { Registry } from '../storage/registry.js';
-import type { ConfigManager, EchoConfig, ProviderConfigEntry } from '../storage/config.js';
+import type { ConfigManager, RetineoConfig, ProviderConfigEntry } from '../storage/config.js';
 import type { CompilationPipeline } from '../layers/pipeline.js';
 import type { SecretsManager } from '../storage/secrets.js';
 import { formatSearchResult, formatStatus, formatJobs, formatIngestResult, formatConfig, formatRecoverResult } from './formatters.js';
@@ -450,7 +450,7 @@ export class CLICommands {
   }
 
   private async initInteractive(): Promise<void> {
-    console.log('ECHO Core Setup Wizard');
+    console.log('RETINEO Core Setup Wizard');
     console.log('══════════════════════');
     console.log('');
 
@@ -576,7 +576,7 @@ export class CLICommands {
         // Also save the key to secrets
         if (apiKey) {
           const { FileSecretsManager } = await import('../storage/secrets.js');
-          const dataDir = path.join(os.homedir(), '.echo');
+          const dataDir = path.join(os.homedir(), '.retineo');
           const secrets = new FileSecretsManager(path.join(dataDir, 'secrets.json'));
           await secrets.set(provider, apiKey);
           console.log(`  🔑 Saved API key for ${provider} to secrets store.`);
@@ -587,15 +587,15 @@ export class CLICommands {
           { id: 'mock-embed', type: 'mock', model: 'mock-embedder', concurrency: 1, dimension: 384 },
         ];
       } else {
-        console.log('Please install Ollama from https://ollama.com and re-run `echoc init`.');
+        console.log('Please install Ollama from https://ollama.com and re-run `retineo init`.');
         return;
       }
     }
 
     // [3/4] Data directory
     console.log('');
-    const dataDirAns = await ask({ question: 'Data directory', defaultValue: path.join(os.homedir(), '.echo') });
-    const dataDir = dataDirAns.trim() || path.join(os.homedir(), '.echo');
+    const dataDirAns = await ask({ question: 'Data directory', defaultValue: path.join(os.homedir(), '.retineo') });
+    const dataDir = dataDirAns.trim() || path.join(os.homedir(), '.retineo');
 
     // [4/4] Bridge port
     console.log('');
@@ -607,7 +607,7 @@ export class CLICommands {
     const embedOnly = llmProviders.filter((p) => p.id.endsWith('-embed') || p.type === 'mock');
     const llmProvider = llmOnly[0]!;
     const embedProvider = embedOnly[0] ?? llmOnly[0]!;
-    const config: EchoConfig = {
+    const config: RetineoConfig = {
       dataDir,
       defaultAdapter: 'file',
       llmProvider: llmProvider.id,
@@ -628,7 +628,7 @@ export class CLICommands {
 
     console.log('');
     console.log(`✅ Configuration saved to ${path.join(dataDir, 'config.yaml')}`);
-    console.log(`✅ Database initialized at ${path.join(dataDir, 'echo.sqlite')}`);
+    console.log(`✅ Database initialized at ${path.join(dataDir, 'retineo.sqlite')}`);
     console.log(`✅ Directory structure created`);
 
     // Offer to start worker
@@ -644,27 +644,27 @@ export class CLICommands {
 
     console.log('');
     console.log('Next steps:');
-    console.log('  echoc ingest <file>     # Add documents');
-    console.log('  echoc search <query>    # Search your knowledge base');
-    console.log('  echoc worker status     # Check compilation progress');
+    console.log('  retineo ingest <file>     # Add documents');
+    console.log('  retineo search <query>    # Search your knowledge base');
+    console.log('  retineo worker status     # Check compilation progress');
     process.exit(0);
   }
 
   private async initNonInteractive(options?: InitCLIOptions): Promise<void> {
     const { FileConfigManager } = await import('../storage/config.js');
 
-    const dataDir = process.env.ECHO_DATA_DIR ?? path.join(os.homedir(), '.echo');
-    const llmModel = options?.llmModel ?? process.env.ECHO_LLM_MODEL;
-    const embedModel = options?.embedModel ?? process.env.ECHO_EMBED_MODEL;
+    const dataDir = process.env.RETINEO_DATA_DIR ?? path.join(os.homedir(), '.retineo');
+    const llmModel = options?.llmModel ?? process.env.RETINEO_LLM_MODEL;
+    const embedModel = options?.embedModel ?? process.env.RETINEO_EMBED_MODEL;
 
     if (!llmModel || !embedModel) {
       console.error('Error: --non-interactive requires --llm-model and --embed-model.');
-      console.error('Usage: echoc init --non-interactive --llm-model <model> --embed-model <model>');
+      console.error('Usage: retineo init --non-interactive --llm-model <model> --embed-model <model>');
       process.exitCode = 1;
       return;
     }
 
-    const port = parseInt(process.env.ECHO_BRIDGE_PORT ?? '37891', 10);
+    const port = parseInt(process.env.RETINEO_BRIDGE_PORT ?? '37891', 10);
     const ollamaBaseUrl = process.env.OLLAMA_BASE_URL ?? 'http://localhost:11434';
 
     const llmProviders: ProviderConfigEntry[] = [
@@ -692,7 +692,7 @@ export class CLICommands {
     ];
 
     const configManager = new FileConfigManager(dataDir);
-    const config: EchoConfig = {
+    const config: RetineoConfig = {
       dataDir,
       defaultAdapter: 'file',
       llmProvider: 'ollama',
@@ -709,7 +709,7 @@ export class CLICommands {
     await configManager.save(config);
     await configManager.initializeDataDir();
 
-    console.log(`ECHO Core initialized at ${dataDir}`);
+    console.log(`RETINEO Core initialized at ${dataDir}`);
     console.log(`LLM: ${llmModel}  Embedding: ${embedModel}  Port: ${port}`);
   }
 
@@ -799,10 +799,10 @@ export class CLICommands {
 
     const env: NodeJS.ProcessEnv = {
       ...process.env,
-      ECHO_DATA_DIR: dataDir(),
-      ECHO_WORKER_SCRIPT: service === 'worker' ? '1' : undefined,
-      ECHO_BRIDGE_SCRIPT: service === 'bridge' ? '1' : undefined,
-      ECHO_DAEMON: service === 'daemon' ? '1' : undefined,
+      RETINEO_DATA_DIR: dataDir(),
+      RETINEO_WORKER_SCRIPT: service === 'worker' ? '1' : undefined,
+      RETINEO_BRIDGE_SCRIPT: service === 'bridge' ? '1' : undefined,
+      RETINEO_DAEMON: service === 'daemon' ? '1' : undefined,
     };
 
     const child: ChildProcess = spawn(
@@ -886,7 +886,7 @@ export class CLICommands {
     try {
       const cfg = await this.deps.configManager.load();
       const { SQLiteRegistry } = await import('../storage/registry.js');
-      const reg = new SQLiteRegistry(path.join(cfg.dataDir, 'echo.sqlite'));
+      const reg = new SQLiteRegistry(path.join(cfg.dataDir, 'retineo.sqlite'));
       const counts = reg.getJobCounts();
       const lastHb = reg.getLastHeartbeat(info.pid.toString());
       console.log(`  Jobs: pending=${counts.pending} running=${counts.running} completed=${counts.completed} failed=${counts.failed} dead=${counts.dead}`);
@@ -1009,7 +1009,7 @@ export class CLICommands {
   private async startInlineWorker(): Promise<void> {
     // Spawn a background worker (detached) so the parent can poll the
     // registry while the worker drains the queue. This is identical to
-    // running `echoc worker start` programmatically.
+    // running `retineo worker start` programmatically.
     await this.startService('worker');
   }
 
@@ -1186,7 +1186,7 @@ async function ensureDataDirsForDataDir(dataDir: string): Promise<void> {
 }
 
 // Default config sections used by the wizard (inlined to avoid circular loads)
-const DEFAULT_SEARCH: EchoConfig['search'] = {
+const DEFAULT_SEARCH: RetineoConfig['search'] = {
   defaultLanguage: 'en',
   languageDetection: { provider: 'franc', fallback: 'heuristic', confidenceThreshold: 0.7 },
   semantic: { topK: 100, threshold: 0.5, hybridWeight: 0.7 },
@@ -1197,9 +1197,9 @@ const DEFAULT_SEARCH: EchoConfig['search'] = {
   crossLingual: { enabled: true },
 };
 
-const DEFAULT_I18N: EchoConfig['i18n'] = { defaultLanguage: 'en', packs: [] };
+const DEFAULT_I18N: RetineoConfig['i18n'] = { defaultLanguage: 'en', packs: [] };
 
-const DEFAULT_LOGGING: EchoConfig['logging'] = {
+const DEFAULT_LOGGING: RetineoConfig['logging'] = {
   level: 'info',
   console: true,
   file: true,

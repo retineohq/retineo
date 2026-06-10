@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Graceful Shutdown Manager
+ * RETINEO Core — Graceful Shutdown Manager
  * Phase 6: SIGTERM/SIGINT handling with 12-step clean shutdown
  */
 

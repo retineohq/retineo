@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Rate Limiter
+ * RETINEO Core — Rate Limiter
  * Phase 3: Per-provider concurrency control via semaphore
  */
 

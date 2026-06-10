@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Compilation Pipeline
+ * RETINEO Core — Compilation Pipeline
  * Phase 3: Orchestrates L1 → L2 → L3 generation via job queue.
  */
 
@@ -83,7 +83,7 @@ export class DefaultCompilationPipeline implements CompilationPipeline {
   private ensureLLMProvider(): LLMProvider {
     const provider = this.deps.llmProvider;
     if (!provider) {
-      throw new Error('LLM provider not configured. Run "echoc init" to set up a provider (e.g. Ollama).');
+      throw new Error('LLM provider not configured. Run "retineo init" to set up a provider (e.g. Ollama).');
     }
     return provider;
   }
@@ -91,7 +91,7 @@ export class DefaultCompilationPipeline implements CompilationPipeline {
   private ensureEmbeddingProvider(): EmbeddingProvider {
     const provider = this.deps.embeddingProvider;
     if (!provider) {
-      throw new Error('Embedding provider not configured. Run "echoc init" to set up a provider (e.g. Ollama).');
+      throw new Error('Embedding provider not configured. Run "retineo init" to set up a provider (e.g. Ollama).');
     }
     return provider;
   }

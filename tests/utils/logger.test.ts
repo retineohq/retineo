@@ -11,7 +11,7 @@ import os from 'os';
 let tmpDir: string;
 
 beforeEach(() => {
-  tmpDir = mkdtempSync(path.join(os.tmpdir(), 'echo-log-'));
+  tmpDir = mkdtempSync(path.join(os.tmpdir(), 'retineo-log-'));
 });
 
 afterEach(() => {
@@ -48,7 +48,7 @@ describe('DualLogger', () => {
       level: 'info',
       console: true,
       file: true,
-      filePath: '/root/.echo/logs/impossible.log',
+      filePath: '/root/.retineo/logs/impossible.log',
       pretty: false,
     });
     expect(() => logger.info('still works')).not.toThrow();

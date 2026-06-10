@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Real Integration Test Suite
+ * RETINEO Core — Real Integration Test Suite
  * Uses actual files, actual Ollama API, actual SQLite database.
  * No mocks.
  */
@@ -18,8 +18,8 @@ import { DefaultQueryAnalyzer } from '../../packages/core/src/search/query-analy
 import { DefaultLLMProviderFactory, DefaultEmbeddingProviderFactory } from '../../packages/core/src/llm/factory.js';
 import { FileSecretsManager } from '../../packages/core/src/storage/secrets.js';
 
-const DATA_DIR = process.env.ECHO_DATA_DIR ?? path.join(os.homedir(), '.echo');
-const TEST_FILE = path.join(os.homedir(), 'echo-beta-test', 'test.md');
+const DATA_DIR = process.env.RETINEO_DATA_DIR ?? path.join(os.homedir(), '.retineo');
+const TEST_FILE = path.join(os.homedir(), 'retineo-beta-test', 'test.md');
 const CONFIG_PATH = path.join(DATA_DIR, 'config.yaml');
 
 function findFile(dir: string, filename: string): string | null {
@@ -38,7 +38,7 @@ function findFile(dir: string, filename: string): string | null {
 
 function runCommand(cmd: string): string {
   try {
-    return execSync(cmd, { encoding: 'utf-8', timeout: 120_000, cwd: path.join(os.homedir(), 'MY_Brand/ECHO/echo-core') });
+    return execSync(cmd, { encoding: 'utf-8', timeout: 120_000, cwd: path.join(os.homedir(), 'MY_Brand/RETINEO/retineo') });
   } catch (err: unknown) {
     const e = err as { stdout?: string; stderr?: string; message?: string };
     throw new Error(`Command failed: ${cmd}\nstdout: ${e.stdout ?? ''}\nstderr: ${e.stderr ?? e.message ?? ''}`);
@@ -276,7 +276,7 @@ describe('E2E Real: L2 Artifact Quality', () => {
 
 describe('E2E Real: Compile with Provider', () => {
   it('compile --provider nonexistent fails with clear error', () => {
-    const output = runCommand('node bin/echo-core.js compile /home/ryzen/echo-beta-test/test.md --provider nonexistent 2>&1 || true');
+    const output = runCommand('node bin/retineo.js compile /home/ryzen/retineo-beta-test/test.md --provider nonexistent 2>&1 || true');
     expect(output).toMatch(/Provider 'nonexistent' not found/);
   });
 });

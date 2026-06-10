@@ -31,7 +31,7 @@ let service: DefaultIngestionService;
 let pipeline: DefaultCompilationPipeline;
 
 beforeEach(async () => {
-  tmpDir = mkdtempSync(path.join(os.tmpdir(), 'echo-img-int-'));
+  tmpDir = mkdtempSync(path.join(os.tmpdir(), 'retineo-img-int-'));
   dataDir = path.join(tmpDir, 'data');
   adaptersDir = path.join(tmpDir, 'adapters');
   dbPath = path.join(dataDir, 'registry.sqlite');

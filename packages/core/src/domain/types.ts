@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Domain Types
+ * RETINEO Core — Domain Types
  * Phase 0: Interfaces & Type Definitions
  */
 

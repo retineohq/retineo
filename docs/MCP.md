@@ -1,4 +1,4 @@
-# ECHO Core MCP Integration
+# RETINEO Core MCP Integration
 
 ## Setup
 
@@ -7,21 +7,21 @@ Add to Claude Desktop `claude_desktop_config.json`:
 ```json
 {
   "mcpServers": {
-    "echoc": {
+    "retineo": {
       "command": "node",
-      "args": ["/path/to/echo-core/bin/echo-mcp.js"]
+      "args": ["/path/to/retineo/bin/retineo-mcp.js"]
     }
   }
 }
 ```
 
-Or after `npm install -g echo-core`, use the `echo-mcp` command directly:
+Or after `npm install -g retineo`, use the `retineo-mcp` command directly:
 
 ```json
 {
   "mcpServers": {
-    "echoc": {
-      "command": "echo-mcp"
+    "retineo": {
+      "command": "retineo-mcp"
     }
   }
 }
@@ -29,7 +29,7 @@ Or after `npm install -g echo-core`, use the `echo-mcp` command directly:
 
 ## Tools
 
-### `echo_search`
+### `retineo_search`
 
 Search the knowledge base.
 
@@ -44,7 +44,7 @@ Input:
 
 Returns assembled context with citations.
 
-### `echo_ingest`
+### `retineo_ingest`
 
 Ingest a file.
 
@@ -58,11 +58,11 @@ Input:
 
 Returns sourceId and rootHash.
 
-### `echo_status`
+### `retineo_status`
 
 Get engine status.
 
-### `echo_get_node`
+### `retineo_get_node`
 
 Get node by hash.
 
@@ -75,5 +75,5 @@ Input:
 
 ## Resources (Future)
 
-- `echo://nodes/{hash}` — read node content
-- `echo://sources/{id}` — read source metadata
+- `retineo://nodes/{hash}` — read node content
+- `retineo://sources/{id}` — read source metadata

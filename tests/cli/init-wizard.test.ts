@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Init Wizard Tests
+ * RETINEO Core — Init Wizard Tests
  *
  * Validates that:
  *  - Non-interactive `init` writes a working Ollama-first config
@@ -39,19 +39,19 @@ function makeDeps() {
     } as any,
     pipeline: { processJob: async () => {}, enqueueL1: () => {}, enqueueL2: () => {}, enqueueL3: () => {} },
     secretsManager: { set: async () => {}, get: async () => undefined, delete: async () => {}, list: async () => [], listMasked: async () => ({}) },
-    cas: { getObjectPath: () => '/tmp/echo/objects/ab/cdef', read: async () => Buffer.from(''), exists: () => false, write: async () => '', delete: async () => {}, writeObject: async () => {}, readObject: async () => ({ node: {} as any, artifacts: { content: '', meta: {} as any } }) },
+    cas: { getObjectPath: () => '/tmp/retineo/objects/ab/cdef', read: async () => Buffer.from(''), exists: () => false, write: async () => '', delete: async () => {}, writeObject: async () => {}, readObject: async () => ({ node: {} as any, artifacts: { content: '', meta: {} as any } }) },
   };
 }
 
 describe('init wizard — non-interactive', () => {
-  const testDir = path.join(os.tmpdir(), 'echo-init-wizard-' + Date.now() + '-' + Math.random().toString(36).slice(2));
+  const testDir = path.join(os.tmpdir(), 'retineo-init-wizard-' + Date.now() + '-' + Math.random().toString(36).slice(2));
 
   beforeEach(() => {
     if (existsSync(testDir)) rmSync(testDir, { recursive: true });
-    delete process.env.ECHO_DATA_DIR;
-    delete process.env.ECHO_LLM_MODEL;
-    delete process.env.ECHO_EMBED_MODEL;
-    delete process.env.ECHO_BRIDGE_PORT;
+    delete process.env.RETINEO_DATA_DIR;
+    delete process.env.RETINEO_LLM_MODEL;
+    delete process.env.RETINEO_EMBED_MODEL;
+    delete process.env.RETINEO_BRIDGE_PORT;
   });
 
   afterEach(() => {
@@ -59,14 +59,14 @@ describe('init wizard — non-interactive', () => {
   });
 
   it('writes Ollama-first config and initializes data dir', async () => {
-    process.env.ECHO_DATA_DIR = testDir;
+    process.env.RETINEO_DATA_DIR = testDir;
 
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     const cmds = new CLICommands(makeDeps());
     await cmds.init({ nonInteractive: true, llmModel: 'gemma4:31b-cloud', embedModel: 'nomic-embed-text-v2-moe:latest' });
 
     expect(existsSync(path.join(testDir, 'config.yaml'))).toBe(true);
-    expect(existsSync(path.join(testDir, 'echo.sqlite'))).toBe(true);
+    expect(existsSync(path.join(testDir, 'retineo.sqlite'))).toBe(true);
     expect(existsSync(path.join(testDir, 'objects'))).toBe(true);
     expect(existsSync(path.join(testDir, 'logs'))).toBe(true);
 
@@ -86,7 +86,7 @@ describe('init wizard — non-interactive', () => {
   });
 
   it('requires --llm-model and --embed-model in non-interactive mode', async () => {
-    process.env.ECHO_DATA_DIR = testDir;
+    process.env.RETINEO_DATA_DIR = testDir;
     const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     const cmds = new CLICommands(makeDeps());
@@ -99,9 +99,9 @@ describe('init wizard — non-interactive', () => {
   });
 
   it('falls back to env vars when flags are not set', async () => {
-    process.env.ECHO_DATA_DIR = testDir;
-    process.env.ECHO_LLM_MODEL = 'gemma4:31b-cloud';
-    process.env.ECHO_EMBED_MODEL = 'nomic-embed-text-v2-moe:latest';
+    process.env.RETINEO_DATA_DIR = testDir;
+    process.env.RETINEO_LLM_MODEL = 'gemma4:31b-cloud';
+    process.env.RETINEO_EMBED_MODEL = 'nomic-embed-text-v2-moe:latest';
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
 
     const cmds = new CLICommands(makeDeps());
@@ -117,7 +117,7 @@ describe('init wizard — non-interactive', () => {
   });
 
   it('config includes bridge section with default port', async () => {
-    process.env.ECHO_DATA_DIR = testDir;
+    process.env.RETINEO_DATA_DIR = testDir;
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
 
     const cmds = new CLICommands(makeDeps());
@@ -130,9 +130,9 @@ describe('init wizard — non-interactive', () => {
     log.mockRestore();
   });
 
-  it('respects ECHO_BRIDGE_PORT env var', async () => {
-    process.env.ECHO_DATA_DIR = testDir;
-    process.env.ECHO_BRIDGE_PORT = '40000';
+  it('respects RETINEO_BRIDGE_PORT env var', async () => {
+    process.env.RETINEO_DATA_DIR = testDir;
+    process.env.RETINEO_BRIDGE_PORT = '40000';
 
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
 
@@ -145,7 +145,7 @@ describe('init wizard — non-interactive', () => {
   });
 
   it('sets search.semantic.threshold to 0.5', async () => {
-    process.env.ECHO_DATA_DIR = testDir;
+    process.env.RETINEO_DATA_DIR = testDir;
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
 
     const cmds = new CLICommands(makeDeps());
@@ -163,10 +163,10 @@ describe('Ollama probe', () => {
     // The internal probe fetches http://localhost:11434/api/tags
     // If Ollama isn't running in the test env, the probe returns null.
     // This test simply asserts the non-interactive flow still completes with explicit flags.
-    const testDir = path.join(os.tmpdir(), 'echo-no-ollama-' + Date.now());
+    const testDir = path.join(os.tmpdir(), 'retineo-no-ollama-' + Date.now());
     if (existsSync(testDir)) rmSync(testDir, { recursive: true });
 
-    process.env.ECHO_DATA_DIR = testDir;
+    process.env.RETINEO_DATA_DIR = testDir;
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
 
     const cmds = new CLICommands(makeDeps());
@@ -190,8 +190,8 @@ describe('init wizard — interactive exit', () => {
     const chooseSpy = vi.spyOn(promptMod, 'choose').mockResolvedValue('mock');
     const confirmSpy = vi.spyOn(promptMod, 'confirm').mockResolvedValue(false);
 
-    const testDir = path.join(os.tmpdir(), 'echo-init-exit-' + Date.now());
-    process.env.ECHO_DATA_DIR = testDir;
+    const testDir = path.join(os.tmpdir(), 'retineo-init-exit-' + Date.now());
+    process.env.RETINEO_DATA_DIR = testDir;
 
     const cmds = new CLICommands(makeDeps());
     // interactive init will use mocked prompts and hit process.exit(0) at end

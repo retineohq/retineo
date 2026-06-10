@@ -14,7 +14,7 @@ let dbPath: string;
 let registry: SQLiteRegistry;
 
 beforeEach(() => {
-  tmpDir = mkdtempSync(path.join(os.tmpdir(), 'echo-reg-'));
+  tmpDir = mkdtempSync(path.join(os.tmpdir(), 'retineo-reg-'));
   dbPath = path.join(tmpDir, 'test.sqlite');
   registry = new SQLiteRegistry(dbPath);
 });

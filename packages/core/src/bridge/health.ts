@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Health Checks
+ * RETINEO Core — Health Checks
  * Phase 7: Liveness and readiness probes.
  */
 

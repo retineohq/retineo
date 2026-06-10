@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Adapter Process Runner
+ * RETINEO Core — Adapter Process Runner
  * Phase 2: Spawns adapters, auto-initializes, graceful shutdown
  */
 

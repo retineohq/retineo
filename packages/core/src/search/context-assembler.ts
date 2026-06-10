@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Context Assembler
+ * RETINEO Core — Context Assembler
  * Phase 4: Token budget allocation, citation generation, drill-down segments.
  */
 

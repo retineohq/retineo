@@ -1,11 +1,11 @@
 /**
- * ECHO Core — Daemon
+ * RETINEO Core — Daemon
  *
  * Runs the worker and bridge in a single process. Graceful shutdown order:
  * bridge → worker → registry.
  *
  * MCP is intentionally NOT started here because it owns stdio (which would
- * conflict with the daemon's CLI output). Use the standalone `echo-mcp`
+ * conflict with the daemon's CLI output). Use the standalone `retineo-mcp`
  * entry point for MCP clients.
  */
 
@@ -54,7 +54,7 @@ function resolveAdaptersDir(): string {
 }
 
 export async function startDaemonServices(): Promise<DaemonServices> {
-  const configManager = new FileConfigManager(process.env.ECHO_DATA_DIR);
+  const configManager = new FileConfigManager(process.env.RETINEO_DATA_DIR);
   const config = await configManager.load();
   const dataDir = config.dataDir;
   const indexDir = path.join(dataDir, 'index');
@@ -63,7 +63,7 @@ export async function startDaemonServices(): Promise<DaemonServices> {
 
   // Storage
   const cas = new LocalCASStorage(dataDir);
-  const registry = new SQLiteRegistry(path.join(dataDir, 'echo.sqlite'));
+  const registry = new SQLiteRegistry(path.join(dataDir, 'retineo.sqlite'));
 
   // Adapters
   const adapterRunner = new DefaultAdapterProcessRunner(dataDir, logger);
@@ -224,7 +224,7 @@ export async function runDaemon(): Promise<void> {
   services.logger.info('daemon.worker.ready', { pid: process.pid });
 }
 
-if (process.env.ECHO_DAEMON === '1' || process.argv[1]?.endsWith('daemon.js')) {
+if (process.env.RETINEO_DAEMON === '1' || process.argv[1]?.endsWith('daemon.js')) {
   runDaemon().catch((err) => {
     console.error('Daemon failed:', err);
     process.exit(1);

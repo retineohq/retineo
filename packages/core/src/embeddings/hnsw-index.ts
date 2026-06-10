@@ -1,5 +1,5 @@
 /**
- * ECHO Core — HNSW Vector Index
+ * RETINEO Core — HNSW Vector Index
  * Phase 7: Approximate nearest neighbor search with brute-force fallback.
  */
 

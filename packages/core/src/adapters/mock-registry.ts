@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Mock Adapter Registry
+ * RETINEO Core — Mock Adapter Registry
  * Phase 2.5: Central registry for mock multimodal adapters.
  * Used by tests and CLI to discover built-in mock adapters.
  */

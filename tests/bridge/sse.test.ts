@@ -1,5 +1,5 @@
 /**
- * ECHO Core — SSE Tests
+ * RETINEO Core — SSE Tests
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';

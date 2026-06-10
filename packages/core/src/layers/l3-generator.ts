@@ -1,5 +1,5 @@
 /**
- * ECHO Core — L3 Generator
+ * RETINEO Core — L3 Generator
  * Phase 7: Embedding indexer with batch embedding support.
  */
 

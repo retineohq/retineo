@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Language Pack Interface
+ * RETINEO Core — Language Pack Interface
  * Phase 4: Multilingual support with per-language prompts and search tuning.
  */
 

@@ -1,5 +1,5 @@
 /**
- * ECHO Core — End-to-End Integration Test
+ * RETINEO Core — End-to-End Integration Test
  * Phase 5: CLI ingest → HTTP search → MCP status
  */
 
@@ -104,7 +104,7 @@ describe('End-to-end: ingest → search → status', () => {
 
   it('MCP status reflects ingested source', async () => {
     const handlers = createHandlers(deps);
-    const res = await handlers.echo_status();
+    const res = await handlers.retineo_status();
     expect(res.content.length).toBeGreaterThan(0);
     const text = (res.content[0] as { text: string }).text;
     const parsed = JSON.parse(text);

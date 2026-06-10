@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Secrets Manager
+ * RETINEO Core — Secrets Manager
  * Phase 7: Encrypted secrets storage with AES-256-GCM.
  */
 
@@ -30,7 +30,7 @@ const IV_LEN = 16;
 const AUTH_TAG_LEN = 16;
 
 function getMasterKey(salt: Buffer): Buffer {
-  const envKey = process.env.ECHO_MASTER_KEY;
+  const envKey = process.env.RETINEO_MASTER_KEY;
   if (envKey) {
     return crypto.scryptSync(envKey, salt, KEY_LEN);
   }
@@ -68,7 +68,7 @@ export class FileSecretsManager implements SecretsManager {
   private secretsPath: string;
 
   constructor(secretsPath?: string) {
-    this.secretsPath = secretsPath ?? path.join(os.homedir(), '.echo', 'secrets.json');
+    this.secretsPath = secretsPath ?? path.join(os.homedir(), '.retineo', 'secrets.json');
   }
 
   private async loadFile(): Promise<SecretsFile> {

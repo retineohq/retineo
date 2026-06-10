@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Public API
+ * RETINEO Core — Public API
  * Phase 0: Type exports
  */
 

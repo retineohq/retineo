@@ -14,7 +14,7 @@ let tmpDir: string;
 let adaptersDir: string;
 
 beforeEach(() => {
-  tmpDir = mkdtempSync(path.join(os.tmpdir(), 'echo-video-pipe-'));
+  tmpDir = mkdtempSync(path.join(os.tmpdir(), 'retineo-video-pipe-'));
   adaptersDir = path.join(tmpDir, 'adapters');
   mkdirSync(adaptersDir);
 

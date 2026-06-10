@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Adapter IPC Layer
+ * RETINEO Core — Adapter IPC Layer
  * Phase 2: Transport, Runner, Manager, IngestionService
  */
 

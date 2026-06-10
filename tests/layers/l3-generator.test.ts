@@ -17,7 +17,7 @@ describe('DefaultL3Generator', () => {
   const gen = new DefaultL3Generator();
 
   beforeEach(() => {
-    tmpDir = mkdtempSync(path.join(os.tmpdir(), 'echo-l3-'));
+    tmpDir = mkdtempSync(path.join(os.tmpdir(), 'retineo-l3-'));
     indexDir = path.join(tmpDir, 'index');
   });
 
@@ -76,7 +76,7 @@ describe('bruteForceSearch', () => {
   const gen = new DefaultL3Generator();
 
   beforeEach(() => {
-    tmpDir = mkdtempSync(path.join(os.tmpdir(), 'echo-l3-'));
+    tmpDir = mkdtempSync(path.join(os.tmpdir(), 'retineo-l3-'));
     indexDir = path.join(tmpDir, 'index');
   });
 

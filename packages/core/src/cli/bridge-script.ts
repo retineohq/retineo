@@ -1,8 +1,8 @@
 /**
- * ECHO Core — Standalone Bridge Script
+ * RETINEO Core — Standalone Bridge Script
  *
  * Used as the entry point for `child_process.fork()` from
- * `echoc bridge start`. Wires real services: SQLiteRegistry, CAS,
+ * `retineo bridge start`. Wires real services: SQLiteRegistry, CAS,
  * IngestionService, FastifyBridgeServer. Listens for SIGTERM.
  */
 
@@ -38,7 +38,7 @@ export interface RunningBridgeServices {
 }
 
 export async function startBridgeServices(): Promise<RunningBridgeServices> {
-  const configManager = new FileConfigManager(process.env.ECHO_DATA_DIR);
+  const configManager = new FileConfigManager(process.env.RETINEO_DATA_DIR);
   const config = await configManager.load();
   const dataDir = config.dataDir;
   const indexDir = path.join(dataDir, 'index');
@@ -46,7 +46,7 @@ export async function startBridgeServices(): Promise<RunningBridgeServices> {
   const logger = createLogger(config.logging);
 
   const cas = new LocalCASStorage(dataDir);
-  const registry = new SQLiteRegistry(path.join(dataDir, 'echo.sqlite'));
+  const registry = new SQLiteRegistry(path.join(dataDir, 'retineo.sqlite'));
 
   const adapterRunner = new DefaultAdapterProcessRunner(dataDir, logger);
   const adapterManager = new DefaultAdapterManager(resolveAdaptersDir(), adapterRunner);
@@ -138,7 +138,7 @@ async function main(): Promise<void> {
   services.logger.info('bridge.ready', { port: services.bridge.getPort() });
 }
 
-if (process.env.ECHO_BRIDGE_SCRIPT === '1' || process.argv[1]?.endsWith('bridge-script.js')) {
+if (process.env.RETINEO_BRIDGE_SCRIPT === '1' || process.argv[1]?.endsWith('bridge-script.js')) {
   main().catch((err) => {
     console.error('Bridge failed:', err);
     process.exit(1);

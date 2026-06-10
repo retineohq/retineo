@@ -44,7 +44,7 @@ describe('doctor', () => {
   it('formatDoctor produces lines', async () => {
     const result = await runDoctor();
     const out = formatDoctor(result);
-    expect(out).toContain('ECHO Core Dependency Check');
+    expect(out).toContain('RETINEO Core Dependency Check');
     expect(out).toContain('Node.js');
     expect(out).toContain('whisper.cpp');
     expect(out).toContain('whisper model');

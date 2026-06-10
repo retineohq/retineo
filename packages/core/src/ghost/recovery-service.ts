@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Ghost Recovery Service
+ * RETINEO Core — Ghost Recovery Service
  * List, recover, and purge orphaned objects.
  */
 

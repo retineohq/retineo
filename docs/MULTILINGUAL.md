@@ -1,6 +1,6 @@
-# ECHO Core — Multilingual Support
+# RETINEO Core — Multilingual Support
 
-ECHO Core supports multiple languages through **language packs**, **configurable detection**, and **cross-lingual search** via shared embedding spaces.
+RETINEO Core supports multiple languages through **language packs**, **configurable detection**, and **cross-lingual search** via shared embedding spaces.
 
 ---
 

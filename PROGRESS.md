@@ -1,4 +1,4 @@
-# Progress: ECHO Core v0.1.1 → v0.2.0 Architectural Fixes
+# Progress: RETINEO Core v0.1.1 → v0.2.0 Architectural Fixes
 
 ## ✅ Completed
 - [x] Section 1: ContextNode Drift Fix — ContextNodeRepository, pipeline refactor, CAS parentId persistence

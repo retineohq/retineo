@@ -1,12 +1,12 @@
 /**
- * ECHO Core — Circuit Breaker Integration Tests
+ * RETINEO Core — Circuit Breaker Integration Tests
  * Phase 7: End-to-end fallback and recovery.
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { DefaultLLMProviderFactory } from '../../packages/core/src/llm/factory.js';
 import { MockLLMProvider } from '../../packages/core/src/llm/providers/mock.js';
-import type { EchoConfig } from '../../packages/core/src/storage/config.js';
+import type { RetineoConfig } from '../../packages/core/src/storage/config.js';
 import { FileSecretsManager } from '../../packages/core/src/storage/secrets.js';
 
 describe('Circuit Breaker Integration', () => {
@@ -45,8 +45,8 @@ describe('Circuit Breaker Integration', () => {
   });
 
   it('factory loads circuit breaker config from config', async () => {
-    const config: EchoConfig = {
-      dataDir: '/tmp/echo',
+    const config: RetineoConfig = {
+      dataDir: '/tmp/retineo',
       defaultAdapter: 'file',
       llmProvider: 'mock',
       embeddingModel: 'mock',

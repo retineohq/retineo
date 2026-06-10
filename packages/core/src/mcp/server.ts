@@ -1,5 +1,5 @@
 /**
- * ECHO Core — MCP Server
+ * RETINEO Core — MCP Server
  * Phase 5: Model Context Protocol server over stdio.
  */
 
@@ -26,7 +26,7 @@ export interface MCPServerOptions {
   logger?: Logger;
 }
 
-export class EchoMCPServer implements MCPServer {
+export class RetineoMCPServer implements MCPServer {
   private server: Server;
   private transport: StdioServerTransport;
   private deps: MCPHandlersDeps;
@@ -36,7 +36,7 @@ export class EchoMCPServer implements MCPServer {
     this.deps = opts.deps;
     this.logger = opts.logger ?? getGlobalLogger().child({ layer: 'mcp' });
     this.server = new Server(
-      { name: 'echo-core', version: opts.deps.version },
+      { name: 'retineo', version: opts.deps.version },
       { capabilities: { tools: {} } }
     );
     this.transport = new StdioServerTransport();

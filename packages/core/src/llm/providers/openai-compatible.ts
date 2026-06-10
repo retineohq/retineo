@@ -1,5 +1,5 @@
 /**
- * ECHO Core — OpenAI-Compatible Provider
+ * RETINEO Core — OpenAI-Compatible Provider
  * Phase 3: LLM + Embedding via OpenAI-compatible HTTP API
  * Works with OpenAI, OpenRouter, DeepSeek, and any /chat/completions + /embeddings API
  */

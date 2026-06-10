@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Ingest Route Tests
+ * RETINEO Core — Ingest Route Tests
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';

@@ -6,7 +6,7 @@
 - [x] **Section 1: ContextNode Drift Fix** — `ContextNodeRepository` created, pipeline refactored to load/save via repository, `cas.ts` updated to persist `parentId` and `sourceRef` in `node.json`
 - [x] **Section 2: HNSW as Default** — `hnswlib-node` installed as dependency, `NativeHNSWWrapper` now maps labels→hashes, save/load preserves mapping via `.labels.json`, fallback warns via logger
 - [x] **Section 3: BM25 → Okapi BM25** — `OkapiBM25` class with IDF/k1/b, `bm25.json` extended format (`invertedIndex` + `docLengths`), retrieval service uses raw BM25 scores (no normalization, keyword mode skips threshold)
-- [x] **Section 4: Ghost System Lifecycle** — `DefaultOrphanDetector` (detects deleted sources), `DefaultGhostRecoveryService` (list/recover/purge), CLI commands (`echoc ghost list/recover/purge`)
+- [x] **Section 4: Ghost System Lifecycle** — `DefaultOrphanDetector` (detects deleted sources), `DefaultGhostRecoveryService` (list/recover/purge), CLI commands (`retineo ghost list/recover/purge`)
 - [x] **Section 5: Document Hit + L1 Navigation** — `DocumentHit`/`ChunkHit`/`NavigationNode` types, `calculateDocumentScore` (coverage/density bonus), `buildNavigationTree` from L1 sections, `aggregateDocumentHits` groups chunks by document
 
 ### Tests

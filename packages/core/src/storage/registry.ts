@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Registry
+ * RETINEO Core — Registry
  * Phase 1: SQLite-backed registry with job lease model
  */
 

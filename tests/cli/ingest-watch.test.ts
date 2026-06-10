@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Ingest --watch Test
+ * RETINEO Core — Ingest --watch Test
  *
  * Validates that `ingest` with `watch:true` polls jobs and exits when
  * all are COMPLETED. Uses an in-memory mock registry that completes jobs
@@ -62,7 +62,7 @@ function makeDeps(opts: { jobsAfterDelay?: FakeJob[] } = {}) {
       configManager: { load: async () => ({ dataDir: '' }), save: async () => {} } as any,
       pipeline: { processJob: async () => {}, enqueueL1: () => {}, enqueueL2: () => {}, enqueueL3: () => {} },
       secretsManager: { set: async () => {}, get: async () => undefined, delete: async () => {}, list: async () => [], listMasked: async () => ({}) },
-      cas: { getObjectPath: () => '/tmp/echo/objects/ab/cdef', read: async () => Buffer.from(''), exists: () => false, write: async () => '', delete: async () => {}, writeObject: async () => {}, readObject: async () => ({ node: {} as any, artifacts: { content: '', meta: {} as any } }) },
+      cas: { getObjectPath: () => '/tmp/retineo/objects/ab/cdef', read: async () => Buffer.from(''), exists: () => false, write: async () => '', delete: async () => {}, writeObject: async () => {}, readObject: async () => ({ node: {} as any, artifacts: { content: '', meta: {} as any } }) },
     } as any,
     pollCount: () => pollCount,
   };

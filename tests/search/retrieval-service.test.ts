@@ -98,7 +98,7 @@ describe('DefaultRetrievalService', () => {
   let provider: MockLLMProvider;
 
   beforeEach(async () => {
-    tmpDir = mkdtempSync(path.join(os.tmpdir(), 'echo-retrieval-'));
+    tmpDir = mkdtempSync(path.join(os.tmpdir(), 'retineo-retrieval-'));
     indexDir = path.join(tmpDir, 'index');
     mkdirSync(indexDir, { recursive: true });
     cas = new LocalCASStorage(tmpDir);

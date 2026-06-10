@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Worker Lifecycle Tests
+ * RETINEO Core — Worker Lifecycle Tests
  *
  * Verifies:
  *  - PID file read/write/remove
@@ -47,14 +47,14 @@ function makeDeps() {
     configManager: { load: async () => ({ dataDir: dataDir() }), save: async () => {} } as any,
     pipeline: { processJob: async () => {}, enqueueL1: () => {}, enqueueL2: () => {}, enqueueL3: () => {} },
     secretsManager: { set: async () => {}, get: async () => undefined, delete: async () => {}, list: async () => [], listMasked: async () => ({}) },
-    cas: { getObjectPath: () => '/tmp/echo/objects/ab/cdef', read: async () => Buffer.from(''), exists: () => false, write: async () => '', delete: async () => {}, writeObject: async () => {}, readObject: async () => ({ node: {} as any, artifacts: { content: '', meta: {} as any } }) },
+    cas: { getObjectPath: () => '/tmp/retineo/objects/ab/cdef', read: async () => Buffer.from(''), exists: () => false, write: async () => '', delete: async () => {}, writeObject: async () => {}, readObject: async () => ({ node: {} as any, artifacts: { content: '', meta: {} as any } }) },
   };
 }
 
 describe('process-manager', () => {
   beforeEach(async () => {
     if (existsSync(dataDir())) {
-      // Don't blow away real ~/.echo if it has the real config
+      // Don't blow away real ~/.retineo if it has the real config
       const testPid = path.join(dataDir(), 'worker.pid');
       if (existsSync(testPid)) rmSync(testPid);
     }

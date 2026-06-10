@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Dependency Checker (echo doctor)
+ * RETINEO Core — Dependency Checker (retineo doctor)
  * Checks external tools: ffmpeg, tesseract, whisper.cpp, whisper API key, ollama.
  */
 
@@ -87,7 +87,7 @@ async function checkWhisperCpp(): Promise<DependencyCheck> {
     };
   }
   // Check fallback path
-  const fallback = path.join(homedir(), '.echo', 'bin', 'whisper-cli');
+  const fallback = path.join(homedir(), '.retineo', 'bin', 'whisper-cli');
   try {
     await access(fallback);
     return {
@@ -107,7 +107,7 @@ async function checkWhisperCpp(): Promise<DependencyCheck> {
 }
 
 async function checkWhisperModel(): Promise<DependencyCheck> {
-  const modelDir = path.join(homedir(), '.echo', 'models', 'whisper');
+  const modelDir = path.join(homedir(), '.retineo', 'models', 'whisper');
   try {
     const files = await (await import('fs/promises')).readdir(modelDir);
     const model = files.find((f: string) => f.startsWith('ggml-') && f.endsWith('.bin'));
@@ -126,7 +126,7 @@ async function checkWhisperModel(): Promise<DependencyCheck> {
     name: 'whisper model',
     required: false,
     installed: false,
-    message: 'Download a model (e.g., ggml-base.bin) to ~/.echo/models/whisper/ (https://huggingface.co/ggerganov/whisper.cpp)',
+    message: 'Download a model (e.g., ggml-base.bin) to ~/.retineo/models/whisper/ (https://huggingface.co/ggerganov/whisper.cpp)',
   };
 }
 
@@ -178,7 +178,7 @@ export async function runDoctor(): Promise<DoctorResult> {
 
 export function formatDoctor(result: DoctorResult): string {
   const lines: string[] = [];
-  lines.push('ECHO Core Dependency Check');
+  lines.push('RETINEO Core Dependency Check');
   lines.push('─────────────────────────');
   for (const c of result.checks) {
     const icon = c.installed ? '✓' : (c.required ? '✗' : '✗');

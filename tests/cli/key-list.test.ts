@@ -1,5 +1,5 @@
 /**
- * ECHO Core — CLI Key List Tests
+ * RETINEO Core — CLI Key List Tests
  */
 
 import { describe, it, expect, vi } from 'vitest';
@@ -15,7 +15,7 @@ function makeDeps(masked: Record<string, string> = {}) {
     registry: { listSources: () => [], getPendingJobs: () => [], recoverOrphan: () => {}, getOrphan: () => null } as any,
     configManager: { load: async () => ({ dataDir: '', defaultAdapter: '', llmProvider: '', embeddingModel: '', search: {} as any, i18n: {} as any }), save: async () => {} } as any,
     pipeline: { processJob: async () => {}, enqueueL1: () => {}, enqueueL2: () => {}, enqueueL3: () => {} },
-    cas: { getObjectPath: () => '/tmp/echo/objects/ab/cdef', read: async () => Buffer.from(''), exists: () => false, write: async () => '', delete: async () => {}, writeObject: async () => {}, readObject: async () => ({ node: {} as any, artifacts: { content: '', meta: {} as any } }) },
+    cas: { getObjectPath: () => '/tmp/retineo/objects/ab/cdef', read: async () => Buffer.from(''), exists: () => false, write: async () => '', delete: async () => {}, writeObject: async () => {}, readObject: async () => ({ node: {} as any, artifacts: { content: '', meta: {} as any } }) },
     secretsManager: {
       set: async () => {},
       get: async () => undefined,

@@ -1,5 +1,5 @@
 /**
- * ECHO Core — SSE Stream
+ * RETINEO Core — SSE Stream
  * Phase 5: Server-Sent Events for job progress and search streaming.
  */
 

@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Bridge Handlers
+ * RETINEO Core — Bridge Handlers
  * Phase 5: Request handlers calling core services.
  */
 

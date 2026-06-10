@@ -23,7 +23,7 @@ let builder: DefaultNodeBuilder;
 let service: DefaultIngestionService;
 
 beforeEach(async () => {
-  tmpDir = mkdtempSync(path.join(os.tmpdir(), 'echo-ingest-'));
+  tmpDir = mkdtempSync(path.join(os.tmpdir(), 'retineo-ingest-'));
   dataDir = path.join(tmpDir, 'data');
   adaptersDir = path.join(tmpDir, 'adapters');
   dbPath = path.join(dataDir, 'registry.sqlite');
@@ -126,7 +126,7 @@ rl.on('line', async (line) => {
 describe('DefaultIngestionService', () => {
   it('ingests a text file through full pipeline', async () => {
     const filePath = path.join(tmpDir, 'hello.txt');
-    writeFileSync(filePath, 'Hello ECHO');
+    writeFileSync(filePath, 'Hello RETINEO');
 
     const result = await service.ingestFile(filePath);
     const node = result.node;
@@ -139,10 +139,10 @@ describe('DefaultIngestionService', () => {
 
     // CAS has object (readObject verifies content.md + node.json)
     const obj = await cas.readObject(node.id);
-    expect(obj.artifacts.content).toBe('Hello ECHO');
+    expect(obj.artifacts.content).toBe('Hello RETINEO');
 
     // Registry has source
-    const rawHash = computeHash(Buffer.from('Hello ECHO'));
+    const rawHash = computeHash(Buffer.from('Hello RETINEO'));
     const source = registry.getSourceByRawHash(rawHash);
     expect(source).not.toBeNull();
     expect(source!.uri).toBe(filePath);

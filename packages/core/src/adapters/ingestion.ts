@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Ingestion Service
+ * RETINEO Core — Ingestion Service
  * Phase 2: Orchestrator — file → adapter → CAS → registry → ContextNode
  */
 

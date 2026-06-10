@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Okapi BM25
+ * RETINEO Core — Okapi BM25
  * Proper BM25 with IDF, document length normalization, k1/b parameters.
  */
 

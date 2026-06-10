@@ -24,7 +24,7 @@ let builder: DefaultNodeBuilder;
 let service: DefaultIngestionService;
 
 beforeEach(async () => {
-  tmpDir = mkdtempSync(path.join(os.tmpdir(), 'echo-mm-'));
+  tmpDir = mkdtempSync(path.join(os.tmpdir(), 'retineo-mm-'));
   dataDir = path.join(tmpDir, 'data');
   adaptersDir = path.join(tmpDir, 'adapters');
   dbPath = path.join(dataDir, 'registry.sqlite');

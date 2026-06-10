@@ -1,4 +1,4 @@
-# ECHO Core — Health Checks & Metrics
+# RETINEO Core — Health Checks & Metrics
 
 ## Overview
 
@@ -71,10 +71,10 @@ Counters are in-memory and reset on restart (acceptable for MVP).
 ### `GET /v1/metrics/prometheus` — Prometheus Text Format
 
 ```text
-# TYPE echo_nodes gauge
-echo_nodes 1234
-# TYPE echo_searches_total counter
-echo_searches_total 2000
+# TYPE retineo_nodes gauge
+retineo_nodes 1234
+# TYPE retineo_searches_total counter
+retineo_searches_total 2000
 ...
 ```
 
@@ -86,7 +86,7 @@ Add scrape config:
 
 ```yaml
 scrape_configs:
-  - job_name: 'echo-core'
+  - job_name: 'retineo'
     static_configs:
       - targets: ['localhost:37891']
     metrics_path: /v1/metrics/prometheus
@@ -95,11 +95,11 @@ scrape_configs:
 ### Alerting Rules (Example)
 
 ```yaml
-- alert: EchoUnhealthy
-  expr: echo_nodes == 0
+- alert: RetineoUnhealthy
+  expr: retineo_nodes == 0
   for: 5m
 
-- alert: EchoCircuitOpen
-  expr: echo_llm_errors_total > 100
+- alert: RetineoCircuitOpen
+  expr: retineo_llm_errors_total > 100
   for: 5m
 ```

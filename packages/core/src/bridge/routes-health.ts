@@ -1,5 +1,5 @@
 /**
- * ECHO Core — Health & Metrics Routes
+ * RETINEO Core — Health & Metrics Routes
  * Phase 7: Register /v1/health, /v1/ready, /v1/metrics.
  */
 
