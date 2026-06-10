@@ -21,8 +21,11 @@ import { DefaultCompilationPipeline } from '../dist/layers/pipeline.js';
 import { createLogger } from '../dist/utils/logger.js';
 import path from 'path';
 import os from 'os';
+import { readFileSync } from 'fs';
 
-const VERSION = '0.1.0';
+const __dirname = path.dirname(new URL(import.meta.url).pathname);
+const pkg = JSON.parse(readFileSync(path.join(__dirname, '..', 'package.json'), 'utf-8'));
+const VERSION = pkg.version;
 
 async function main() {
   // --- Config (load first so we can use logging settings) ---

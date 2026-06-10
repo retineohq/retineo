@@ -20,8 +20,11 @@ import { MockLLMProvider } from '../dist/llm/providers/mock.js';
 import { createLogger } from '../dist/utils/logger.js';
 import path from 'path';
 import os from 'os';
+import { readFileSync } from 'fs';
 
-const VERSION = '0.1.0';
+const __dirname = path.dirname(new URL(import.meta.url).pathname);
+const pkg = JSON.parse(readFileSync(path.join(__dirname, '..', 'package.json'), 'utf-8'));
+const VERSION = pkg.version;
 
 async function main() {
   const logger = createLogger({ level: 'info', format: 'json' });
