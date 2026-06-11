@@ -26,20 +26,20 @@ retineo search "cognitive overload in user onboarding"
 
 # 3. Retineo surfaces relevant passages across all documents
 ┌─────────────────────────────────────────────────────────────┐
-│  Results (sorted by semantic relevance)                       │
+│  Results (sorted by semantic relevance)                     │
 │                                                             │
 │  📄 research-papers/cognitive-load-2024.pdf                 │
-│     "Users experience decision paralysis when presented    │
-│      with more than 7 options during first interaction"    │
+│     "Users experience decision paralysis when presented     │
+│      with more than 7 options during first interaction"     │
 │     Relevance: 0.94                                         │
 │                                                             │
 │  📄 meeting-notes/product-sync-jan.md                       │
-│     "Activation funnel: 68% drop-off at step 3 —           │
+│     "Activation funnel: 68% drop-off at step 3 —            │
 │      'too many choices' cited as reason"                    │
 │     Relevance: 0.91                                         │
 │                                                             │
 │  📄 support-tickets/bug-442.md                              │
-│     "Customer reports: 'I don't know where to start'"      │
+│     "Customer reports: 'I don't know where to start'"       │
 │     Relevance: 0.87                                         │
 └─────────────────────────────────────────────────────────────┘
 ```
