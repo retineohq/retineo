@@ -41,7 +41,9 @@ export const RelationSchema = z.object({
 
 export const L2ArtifactSchema = z.object({
   summary: z.string(),
+  language: z.string().optional(),
   concepts: z.array(z.string()),
+  conceptsEn: z.array(z.string()).optional(),
   entities: z.array(z.string()),
   claims: z.array(z.string()),
   relations: z.array(RelationSchema),

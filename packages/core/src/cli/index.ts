@@ -59,10 +59,11 @@ export function createCLI(deps: CLICommandsDeps): Command {
     .description('Compile pending jobs or a specific file')
     .option('--layer <layer>', 'Compile only specific layer')
     .option('--provider <id>', 'Override LLM provider for this compilation')
+    .option('--rebuild-l2', 'Delete existing L2 artifacts and re-generate L2/L3 for all sources')
     .option('-w, --watch', 'Block until all queued jobs are COMPLETED')
     .option('-t, --timeout <seconds>', 'Watch timeout in seconds (default 1800)', parseInt)
-    .action(async (filePath?: string, options?: { layer?: string; provider?: string; watch?: boolean; timeout?: number }) => {
-      await commands.compile(filePath, { layer: options?.layer, provider: options?.provider, watch: options?.watch, timeout: options?.timeout });
+    .action(async (filePath?: string, options?: { layer?: string; provider?: string; rebuildL2?: boolean; watch?: boolean; timeout?: number }) => {
+      await commands.compile(filePath, { layer: options?.layer, provider: options?.provider, rebuildL2: options?.rebuildL2, watch: options?.watch, timeout: options?.timeout });
     });
 
   const configCmd = program.command('config').description('Read or write configuration values');

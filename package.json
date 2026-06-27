@@ -1,6 +1,6 @@
 {
   "name": "@retineo/core",
-  "version": "0.3.3",
+  "version": "0.4.0",
   "description": "Connection discovery engine (L0–L3). Open-source core for the Retineo ecosystem.",
   "type": "module",
   "main": "dist/index.js",

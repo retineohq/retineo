@@ -63,7 +63,9 @@ export interface L1Artifact {
 
 export interface L2Artifact {
   summary: string;
+  language?: string;
   concepts: string[];
+  conceptsEn?: string[];
   entities: string[];
   claims: string[];
   relations: Relation[];

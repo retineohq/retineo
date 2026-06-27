@@ -24,10 +24,12 @@ const mockConfig: SearchConfig = {
   crossLingual: { enabled: true },
 };
 
-function createL2(summary: string, concepts: string[]): L2Artifact {
+function createL2(summary: string, concepts: string[], language = 'en'): L2Artifact {
   return {
     summary,
+    language,
     concepts,
+    conceptsEn: language === 'en' ? undefined : concepts,
     entities: [],
     claims: [],
     relations: [],
@@ -39,12 +41,14 @@ async function seedIndex(indexDir: string, cas: LocalCASStorage, provider: MockL
   const l2b = createL2('Document about dogs and canines.', ['dogs', 'canines']);
   const l2c = createL2('Document about birds and aves.', ['birds', 'aves']);
   const l2d = createL2('Document about fish and marine life.', ['fish', 'marine']);
+  const l2e = createL2('Документ о кошках и фелинах.', ['кошки', 'фелины'], 'ru');
 
   // Generate embeddings via mock provider
   const [veca] = await provider.embed([l2a.summary]);
   const [vecb] = await provider.embed([l2b.summary]);
   const [vecc] = await provider.embed([l2c.summary]);
   const [vecd] = await provider.embed([l2d.summary]);
+  const [vece] = await provider.embed([l2e.summary]);
 
   // Write embeddings.jsonl
   const lines = [
@@ -52,6 +56,7 @@ async function seedIndex(indexDir: string, cas: LocalCASStorage, provider: MockL
     JSON.stringify({ hash: 'hash-b', vector: vecb }),
     JSON.stringify({ hash: 'hash-c', vector: vecc }),
     JSON.stringify({ hash: 'hash-d', vector: vecd }),
+    JSON.stringify({ hash: 'hash-e', vector: vece }),
   ];
   writeFileSync(path.join(indexDir, 'embeddings.jsonl'), lines.join('\n') + '\n', 'utf-8');
 
@@ -66,12 +71,15 @@ async function seedIndex(indexDir: string, cas: LocalCASStorage, provider: MockL
       aves: ['hash-c'],
       fish: ['hash-d'],
       marine: ['hash-d'],
+      кошки: ['hash-e'],
+      фелины: ['hash-e'],
     },
     docLengths: {
       'hash-a': 2,
       'hash-b': 2,
       'hash-c': 2,
       'hash-d': 2,
+      'hash-e': 2,
     },
   };
   writeFileSync(path.join(indexDir, 'bm25.json'), JSON.stringify(bm25Data), 'utf-8');
@@ -82,6 +90,7 @@ async function seedIndex(indexDir: string, cas: LocalCASStorage, provider: MockL
     ['hash-b', l2b],
     ['hash-c', l2c],
     ['hash-d', l2d],
+    ['hash-e', l2e],
   ] as const) {
     const objDir = cas.getObjectPath(hash);
     mkdirSync(objDir, { recursive: true });
@@ -148,6 +157,53 @@ describe('DefaultRetrievalService', () => {
     const result = await service.search(query, { mode: 'keyword', topK: 5 });
     expect(result.candidates.length).toBeGreaterThan(0);
     expect(result.candidates[0].nodeId).toBe('hash-b');
+  });
+
+  it('performs keyword search with Cyrillic tokens', async () => {
+    const service = new DefaultRetrievalService({
+      embeddingProvider: provider,
+      casStorage: cas,
+      indexDir,
+      config: mockConfig,
+    });
+    const query: AnalyzedQuery = {
+      originalQuery: 'кошки',
+      language: 'ru',
+      confidence: 1,
+      intent: 'vague',
+      enrichedQuery: 'кошки',
+      entities: ['кошки'],
+      signals: [],
+    };
+    const result = await service.search(query, { mode: 'keyword', topK: 5 });
+    expect(result.candidates.length).toBeGreaterThan(0);
+    expect(result.candidates[0].nodeId).toBe('hash-e');
+  });
+
+  it('ranks same-language documents higher in rerank', async () => {
+    const service = new DefaultRetrievalService({
+      embeddingProvider: provider,
+      casStorage: cas,
+      indexDir,
+      config: mockConfig,
+    });
+    const query: AnalyzedQuery = {
+      originalQuery: 'cats',
+      language: 'en',
+      confidence: 1,
+      intent: 'vague',
+      enrichedQuery: 'cats',
+      entities: ['cats'],
+      signals: [],
+    };
+    const result = await service.search(query, { mode: 'hybrid', topK: 5 });
+    const ranked = result.candidates.slice(0, 3);
+    const englishDocs = ranked.filter((c) => c.nodeId !== 'hash-e');
+    const russianDoc = ranked.find((c) => c.nodeId === 'hash-e');
+    if (russianDoc) {
+      expect(englishDocs.length).toBeGreaterThan(0);
+      expect(englishDocs[0].score).toBeGreaterThanOrEqual(russianDoc.score);
+    }
   });
 
   it('performs hybrid search', async () => {

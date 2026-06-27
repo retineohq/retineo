@@ -139,11 +139,12 @@ retineo/
 
 | File                   | Exports                                                                                                        | Description                                                                       |
 | ---------------------- | -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| `query-analyzer.ts`    | `QueryAnalyzer`, `DefaultQueryAnalyzer`, `AnalyzedQuery`, `QueryIntent`, `QuerySignal`, `SessionContext`       | Language detection, intent classification, entity extraction, pronoun resolution. |
+| `query-analyzer.ts`    | `QueryAnalyzer`, `DefaultQueryAnalyzer`, `AnalyzedQuery`, `QueryIntent`, `QuerySignal`, `SessionContext`       | Language detection, intent classification, entity extraction, pronoun resolution, cross-lingual entity translation. |
+| `query-translator.ts`  | `QueryTranslator`, `TranslatedTerms`, `LLMQueryTranslator`, `NoOpQueryTranslator`                              | Translates non-English query entities into English for cross-lingual BM25 matching. |
 | `bm25.ts`              | `OkapiBM25`, `tokenize`                                                                          | Okapi BM25 with IDF, document length normalization, k1/b parameters.             |
-| `retrieval-service.ts` | `RetrievalService`, `DefaultRetrievalService`, `CandidateNode`, `RetrievalResult`, `Citation`, `SearchOptions`, `DocumentHit`, `ChunkHit`, `NavigationNode`, `calculateDocumentScore`, `buildNavigationTree`, `aggregateDocumentHits` | L3 semantic/BM25/hybrid search, L2 rerank, L1/L0 cascade, DocumentHit aggregation. |
+| `retrieval-service.ts` | `RetrievalService`, `DefaultRetrievalService`, `CandidateNode`, `RetrievalResult`, `Citation`, `SearchOptions`, `DocumentHit`, `ChunkHit`, `NavigationNode`, `calculateDocumentScore`, `buildNavigationTree`, `aggregateDocumentHits` | L3 semantic/BM25/hybrid search, language-aware L2 rerank, L1/L0 cascade, DocumentHit aggregation. |
 | `context-assembler.ts` | `ContextAssembler`, `DefaultContextAssembler`, `AssembledContext`, `ContextSegment`                            | Token budget allocation, citation generation, drill-down segments.                |
-| `index.ts`             | Barrel export of `query-analyzer.js`, `retrieval-service.js`, `context-assembler.js`                           | Public search API entrypoint.                                                     |
+| `index.ts`             | Barrel export of `query-analyzer.js`, `query-translator.js`, `retrieval-service.js`, `context-assembler.js`    | Public search API entrypoint.                                                     |
 
 ### `src/llm/` — LLM Provider Abstraction
 
@@ -163,8 +164,8 @@ retineo/
 | File              | Exports                                                                                                   | Description                                                    |
 | ----------------- | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
 | `l1-generator.ts` | `L1Generator`, `DefaultL1Generator`, `L1Result`, `L1Index`, `Section`, `Chunk`                            | Rule-based markdown structural parser.                         |
-| `l2-generator.ts` | `L2Generator`, `DefaultL2Generator`                                                                       | LLM-powered semantic extraction with Zod validation and retry. |
-| `l3-generator.ts` | `L3Generator`, `DefaultL3Generator`, `L3Result`, `L3Metadata`, `bruteForceSearch`, `BatchEmbeddingConfig` | Embedding indexer with batch embedding support. Deduplicates embeddings by hash on write. |
+| `l2-generator.ts` | `L2Generator`, `DefaultL2Generator`                                                                       | LLM-powered semantic extraction with Zod validation and retry. Detects document language and emits English concepts (`conceptsEn`). |
+| `l3-generator.ts` | `L3Generator`, `DefaultL3Generator`, `L3Result`, `L3Metadata`, `bruteForceSearch`, `BatchEmbeddingConfig` | Embedding indexer with batch embedding support. Deduplicates embeddings by hash on write. Indexes both original and English concepts; preserves Cyrillic/CJK tokens. |
 | `pipeline.ts`     | `CompilationPipeline`, `DefaultCompilationPipeline`, `CompilationPipelineDeps`                            | Orchestrates L1→L2→L3 via job queue. `llmProvider` and `embeddingProvider` are nullable; pipeline throws clear error if null when L2/L3 job processed. |
 | `worker.ts`       | `QueueWorker`, `DefaultQueueWorker`, `QueueWorkerOptions`                                                 | Lease-based job processor with heartbeat.                      |
 | `index.ts`        | Barrel export of `l1-generator.js`, `l2-generator.js`, `l3-generator.js`, `pipeline.js`, `worker.js`      | Public layers API entrypoint.                                  |
@@ -283,8 +284,8 @@ retineo/
 | File                   | Tests                                                                                       | Description                               |
 | ---------------------- | ------------------------------------------------------------------------------------------- | ----------------------------------------- |
 | `l1-generator.test.ts` | Heading detection, section tree, chunking, code block preservation, frontmatter             | DefaultL1Generator structural parsing.    |
-| `l2-generator.test.ts` | Prompt building, JSON validation, retry on invalid JSON/Zod failure, truncation, real provider id/model passthrough, no mock fallback on error | DefaultL2Generator LLM extraction.        |
-| `l3-generator.test.ts` | Embedding generation, jsonl/bm25/manifest writes, manifest increment, brute-force search    | DefaultL3Generator indexing.              |
+| `l2-generator.test.ts` | Prompt building, JSON validation, retry on invalid JSON/Zod failure, truncation, real provider id/model passthrough, no mock fallback on error, language/conceptsEn output, heuristic fallback | DefaultL2Generator LLM extraction.        |
+| `l3-generator.test.ts` | Embedding generation, jsonl/bm25/manifest writes, manifest increment, brute-force search, conceptsEn indexing, Cyrillic token preservation    | DefaultL3Generator indexing.              |
 | `pipeline.test.ts`     | GENERATE_L1 → L2 enqueue, GENERATE_L2 → L3 enqueue, GENERATE_L3 manifest update, end-to-end | DefaultCompilationPipeline orchestration. |
 | `worker.test.ts`       | processNext, empty queue, crash recovery, retry on failure, start/stop lifecycle            | DefaultQueueWorker lease model.           |
 
@@ -292,8 +293,9 @@ retineo/
 
 | File                        | Tests                                                                                                                            | Description                          |
 | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
-| `query-analyzer.test.ts`    | Language detection (heuristic/franc), intent classification (rule/LLM), entity extraction, pronoun resolution, signal generation | DefaultQueryAnalyzer correctness.    |
-| `retrieval-service.test.ts` | L3 semantic search, keyword search, hybrid mode, threshold filtering, L2 rerank scoring, L1/L0 cascade, trace                    | DefaultRetrievalService correctness. |
+| `query-analyzer.test.ts`    | Language detection (heuristic/franc), intent classification (rule/LLM), entity extraction, pronoun resolution, signal generation, cross-lingual translation injection | DefaultQueryAnalyzer correctness.    |
+| `query-translator.test.ts`  | LLM translation, invalid JSON fallback, length mismatch fallback, no-op translator                                                                              | QueryTranslator correctness.         |
+| `retrieval-service.test.ts` | L3 semantic search, keyword search, Cyrillic keyword search, hybrid mode, threshold filtering, language-aware L2 rerank, L1/L0 cascade, trace                    | DefaultRetrievalService correctness. |
 | `context-assembler.test.ts` | Token budgets per intent, cascade modes, citation generation, drill-down children, language propagation                          | DefaultContextAssembler correctness. |
 | `document-hit.test.ts`      | calculateDocumentScore (coverage/density bonus), aggregateDocumentHits, L1 integration                                          | DocumentHit scoring and aggregation. |
 | `navigation-tree.test.ts`   | L1 H1/H2/H3 → tree, chunk→section mapping, section order                                                                      | Navigation tree construction.        |
@@ -422,6 +424,9 @@ retineo/
 | **Detect language of a query**                          | `createDetector`                               | `src/i18n/detector.ts`                              | `FrancDetector`, `HeuristicDetector`, `CLD3Detector`             |
 | **Load or register a language pack**                    | `DefaultLanguagePackRegistry`                  | `src/i18n/registry.ts`                              | `LanguagePack`, `enPack`, `ruPack`, `zhPack`                     |
 | **Add a new language to RETINEO**                          | `LanguagePack` + `DefaultLanguagePackRegistry` | `src/i18n/packs/{code}.ts`                          | `docs/MULTILINGUAL.md`                                           |
+| **Translate query entities for cross-lingual keyword search** | `LLMQueryTranslator` / `NoOpQueryTranslator`   | `src/search/query-translator.ts`                    | `DefaultQueryAnalyzer`, `SearchConfig.crossLingual`              |
+| **Search across languages via embeddings + keywords**   | `DefaultRetrievalService`                      | `src/search/retrieval-service.ts`                   | `conceptsEn` in `L2Artifact`, BM25 indexing, language-aware rerank |
+| **Regenerate L2 artifacts for an existing collection**  | `CLICommands.compile` with `--rebuild-l2`      | `src/cli/commands.ts`                               | Deletes cached `L2.json` and re-queues `GENERATE_L2` jobs.       |
 | **Configure search behavior**                           | `FileConfigManager`                            | `src/storage/config.ts`                             | `SearchConfig`, `I18nConfig`                                     |
 | **Expose RETINEO over HTTP/WebSocket**                     | `FastifyBridgeServer`                          | `src/bridge/server.ts`                              | `bridge/routes.ts`, `bridge/sse.ts`                              |
 | **Serve as an MCP server**                              | `RetineoMCPServer`                                | `src/mcp/server.ts`                                 | `mcp/tools.ts`, `mcp/handlers.ts`                                |

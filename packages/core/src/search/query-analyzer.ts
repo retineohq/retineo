@@ -9,6 +9,8 @@ import { createDetector } from '../i18n/detector.js';
 import type { LanguagePackRegistry } from '../i18n/registry.js';
 import { DefaultLanguagePackRegistry } from '../i18n/registry.js';
 import type { SearchConfig } from '../storage/config.js';
+import type { QueryTranslator } from './query-translator.js';
+import { LLMQueryTranslator, NoOpQueryTranslator } from './query-translator.js';
 
 export type QueryIntent = 'vague' | 'section' | 'precision';
 
@@ -132,12 +134,14 @@ export interface QueryAnalyzerDeps {
   registry?: LanguagePackRegistry;
   llmProvider?: LLMProvider;
   searchConfig?: SearchConfig;
+  translator?: QueryTranslator;
 }
 
 export class DefaultQueryAnalyzer implements QueryAnalyzer {
   private detector: LanguageDetector;
   private registry: LanguagePackRegistry;
   private llmProvider?: LLMProvider;
+  private translator: QueryTranslator;
   private config: SearchConfig;
 
   constructor(deps: QueryAnalyzerDeps = {}) {
@@ -149,11 +153,20 @@ export class DefaultQueryAnalyzer implements QueryAnalyzer {
       cascade: { budgets: { vague: 500, section: 800, precision: 1500 } },
       citations: { format: 'markdown', includeLineNumbers: true, includeTimestamps: true },
       prompts: {},
-      crossLingual: { enabled: true },
+      crossLingual: { enabled: true, translateQuery: 'llm', targetLanguages: ['en'] },
     };
     this.detector = deps.detector ?? createDetector(this.config.languageDetection.provider, this.config.languageDetection.confidenceThreshold);
     this.registry = deps.registry ?? new DefaultLanguagePackRegistry();
     this.llmProvider = deps.llmProvider;
+    this.translator = deps.translator ?? this.makeDefaultTranslator();
+  }
+
+  private makeDefaultTranslator(): QueryTranslator {
+    const crossLingual = this.config.crossLingual;
+    if (!crossLingual?.enabled) return new NoOpQueryTranslator();
+    if (crossLingual.translateQuery === 'none') return new NoOpQueryTranslator();
+    if (this.llmProvider) return new LLMQueryTranslator(this.llmProvider);
+    return new NoOpQueryTranslator();
   }
 
   async analyze(query: string, sessionContext?: SessionContext): Promise<AnalyzedQuery> {
@@ -161,7 +174,10 @@ export class DefaultQueryAnalyzer implements QueryAnalyzer {
     const detected = await this.detector.detect(query);
     let language = detected.code;
     let confidence = detected.confidence;
-    if (confidence < this.config.languageDetection.confidenceThreshold) {
+    // Trust non-Latin script detection even when confidence is below the threshold.
+    // Short queries in Cyrillic/CJK/Arabic/etc. are unambiguous by script.
+    const isNonLatinScript = detected.script !== 'latin' && detected.script !== 'unknown' && detected.script !== '';
+    if (confidence < this.config.languageDetection.confidenceThreshold && !isNonLatinScript) {
       language = this.config.defaultLanguage;
       confidence = 0.5;
     }
@@ -206,13 +222,27 @@ export class DefaultQueryAnalyzer implements QueryAnalyzer {
       }
     }
 
-    // 5. Query enrichment (pronoun resolution + entity injection)
+    // 5. Cross-lingual query translation (append English equivalents for BM25)
+    let englishEntities: string[] = [];
+    if (language !== 'en' && entities.length > 0) {
+      try {
+        const translated = await this.translator.translate(entities, language);
+        englishEntities = translated.english.filter((t) => t.length > 0);
+      } catch {
+        // ignore translation failures
+      }
+    }
+
+    // 6. Query enrichment (pronoun resolution + entity injection + English terms)
     let enrichedQuery = resolvePronouns(query, sessionContext);
     if (entities.length > 0) {
       enrichedQuery += ` [entities: ${entities.join(', ')}]`;
     }
+    if (englishEntities.length > 0) {
+      enrichedQuery += ` [en: ${englishEntities.join(', ')}]`;
+    }
 
-    // 6. Signals
+    // 7. Signals
     const signals = extractSignals(enrichedQuery);
 
     return {

@@ -51,6 +51,8 @@ export interface SearchConfig {
   };
   crossLingual: {
     enabled: boolean;
+    translateQuery: 'none' | 'dictionary' | 'llm';
+    targetLanguages: string[];
   };
 }
 
@@ -158,6 +160,8 @@ const DEFAULT_SEARCH_CONFIG: SearchConfig = {
   prompts: {},
   crossLingual: {
     enabled: true,
+    translateQuery: 'llm',
+    targetLanguages: ['en'],
   },
 };
 
@@ -262,6 +266,8 @@ function mergeSearchConfig(raw: unknown): SearchConfig {
     },
     crossLingual: {
       enabled: (s.crossLingual as Record<string, unknown>)?.enabled as boolean ?? DEFAULT_SEARCH_CONFIG.crossLingual.enabled,
+      translateQuery: ((s.crossLingual as Record<string, unknown>)?.translateQuery as 'none' | 'dictionary' | 'llm') ?? DEFAULT_SEARCH_CONFIG.crossLingual.translateQuery,
+      targetLanguages: ((s.crossLingual as Record<string, unknown>)?.targetLanguages as string[]) ?? DEFAULT_SEARCH_CONFIG.crossLingual.targetLanguages,
     },
   };
 }

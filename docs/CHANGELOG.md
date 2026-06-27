@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.4.0] - 2026-06-27
+
+### Added
+- **Full cross-lingual keyword search:**
+  - `L2Artifact` now stores `language` and `conceptsEn` (English translation of concepts).
+  - `DefaultL2Generator` asks the LLM for document language and English concepts, with heuristic fallback when the LLM omits them.
+  - `DefaultL3Generator` indexes both `concepts` and `conceptsEn` in BM25 and preserves Cyrillic/CJK tokens.
+  - `DefaultQueryAnalyzer` translates non-English query entities into English via the new `QueryTranslator` and appends them as `[en: ...]` for keyword matching.
+  - `LLMQueryTranslator` and `NoOpQueryTranslator` are available; translation can be disabled with `search.crossLingual.translateQuery: "none"`.
+  - `DefaultRetrievalService` rerank is now language-aware: it boosts same-language documents and matches query terms against both `concepts` and `conceptsEn`.
+- **`retineo compile --rebuild-l2`:** deletes cached `L2.json` artifacts and re-queues `GENERATE_L2` jobs for all sources so existing collections can be upgraded to the multilingual format.
+- **Expanded `search.crossLingual` config:** supports `enabled`, `translateQuery` (`none` | `llm`), and `targetLanguages`.
+
+### Fixed
+- **BM25 tokenization for non-Latin scripts:** the previous regex stripped all non-Latin characters, making Cyrillic/CJK keyword search return empty results. Tokenization now keeps Cyrillic (`\u0400-\u04FF`) and CJK (`\u4E00-\u9FFF`) characters.
+
+### Tests
+- Added/updated tests for `query-translator`, L2 generator language fallback, L3 generator `conceptsEn`/Cyrillic indexing, retrieval-service Cyrillic keyword search, and same-language rerank boost.
+- 406 tests passing, 14 skipped.
+
+## [0.3.4] - 2026-06-27
+
+### Fixed
+- **Language detection for non-Latin scripts:** `DefaultQueryAnalyzer` now preserves heuristic detection results for Cyrillic, CJK, Arabic, and other non-Latin scripts, even when confidence is below the configured threshold. Short queries like `фрактальная память` are now correctly reported as `ru` instead of being forced back to the default `en`.
+
+### Tests
+- Updated `query-analyzer.test.ts` and `end-to-end.test.ts` expectations to reflect correct Russian/Chinese detection.
+
 ## [0.2.0] - 2026-06-09
 
 ### Architectural Fixes

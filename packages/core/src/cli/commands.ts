@@ -48,6 +48,7 @@ export interface CompileCLIOptions {
   provider?: string;
   watch?: boolean;
   timeout?: number;
+  rebuildL2?: boolean;
 }
 
 export interface SearchCLIOptions {
@@ -289,6 +290,26 @@ export class CLICommands {
         await this.watchJobs(res.node.id, { timeoutSec: options.timeout ?? 1800 });
       }
     } else {
+      // Optional: force re-generation of L2 artifacts for all sources
+      if (options?.rebuildL2) {
+        const { rmSync, existsSync } = await import('fs');
+        const pathMod = await import('path');
+        const sources = this.deps.registry.listSources();
+        let queued = 0;
+        for (const src of sources) {
+          const nodeHash = src.rootHash;
+          if (!nodeHash) continue;
+          const objPath = this.deps.cas.getObjectPath(nodeHash);
+          const l2Path = pathMod.join(objPath, 'L2.json');
+          if (existsSync(l2Path)) {
+            rmSync(l2Path);
+          }
+          this.deps.pipeline.enqueueL2(nodeHash);
+          queued++;
+        }
+        console.log(`Queued ${queued} source(s) for L2 rebuild`);
+      }
+
       const pending = this.deps.registry.getPendingJobs(100);
       console.log(`Compiling ${pending.length} pending jobs...`);
 
@@ -1212,7 +1233,7 @@ const DEFAULT_SEARCH: RetineoConfig['search'] = {
   cascade: { budgets: { vague: 500, section: 800, precision: 1500 } },
   citations: { format: 'markdown', includeLineNumbers: true, includeTimestamps: true },
   prompts: {},
-  crossLingual: { enabled: true },
+  crossLingual: { enabled: true, translateQuery: 'llm', targetLanguages: ['en'] },
 };
 
 const DEFAULT_I18N: RetineoConfig['i18n'] = { defaultLanguage: 'en', packs: [] };

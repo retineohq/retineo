@@ -120,7 +120,7 @@ export class DefaultContextAssembler implements ContextAssembler {
       cascade: { budgets: { vague: 500, section: 800, precision: 1500 } },
       citations: { format: 'markdown', includeLineNumbers: true, includeTimestamps: true },
       prompts: {},
-      crossLingual: { enabled: true },
+      crossLingual: { enabled: true, translateQuery: 'llm', targetLanguages: ['en'] },
     };
   }
 

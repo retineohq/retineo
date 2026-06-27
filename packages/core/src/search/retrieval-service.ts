@@ -17,6 +17,7 @@ import { getGlobalLogger } from '../utils/logger.js';
 import type { LRUCache } from '../utils/cache.js';
 import { SimpleLRUCache } from '../utils/cache.js';
 import { OkapiBM25, tokenize } from './bm25.js';
+import { HeuristicDetector } from '../i18n/detector.js';
 
 const readFileAsync = promisify(readFile);
 
@@ -281,6 +282,7 @@ export class DefaultRetrievalService implements RetrievalService {
   private embeddingCache: LRUCache<string, number[]>;
   private l2Cache: LRUCache<string, L2Artifact>;
   private searchCache: LRUCache<string, RetrievalResult>;
+  private languageDetector: HeuristicDetector;
 
   constructor(deps: RetrievalServiceDeps) {
     this.embedder = deps.embeddingProvider;
@@ -298,8 +300,9 @@ export class DefaultRetrievalService implements RetrievalService {
       cascade: { budgets: { vague: 500, section: 800, precision: 1500 } },
       citations: { format: 'markdown', includeLineNumbers: true, includeTimestamps: true },
       prompts: {},
-      crossLingual: { enabled: true },
+      crossLingual: { enabled: true, translateQuery: 'llm', targetLanguages: ['en'] },
     };
+    this.languageDetector = new HeuristicDetector();
   }
 
   async search(query: AnalyzedQuery, options: SearchOptions = {}): Promise<RetrievalResult> {
@@ -340,7 +343,7 @@ export class DefaultRetrievalService implements RetrievalService {
     }
 
     // Keyword search (Okapi BM25)
-    let kwScores = new Map<string, number>();
+    const kwScores = new Map<string, number>();
     if (mode === 'keyword' || mode === 'hybrid') {
       trace.steps.push('L3: BM25 search');
       const bm25 = await loadOkapiBM25(this.indexDir);
@@ -385,7 +388,7 @@ export class DefaultRetrievalService implements RetrievalService {
     for (const s of l3Scores) {
       const l2 = await this.loadL2(s.hash);
       if (!l2) continue;
-      const rerankScore = this.scoreL2(l2, query, queryLang);
+      const rerankScore = await this.scoreL2(l2, query, queryLang);
       candidates.push({
         nodeId: s.hash,
         score: rerankScore,
@@ -457,12 +460,26 @@ export class DefaultRetrievalService implements RetrievalService {
     }
   }
 
-  private scoreL2(l2: L2Artifact, query: AnalyzedQuery, queryLang: string): number {
+  private async scoreL2(l2: L2Artifact, query: AnalyzedQuery, queryLang: string): Promise<number> {
     const w = this.config.rerank.weights;
     let score = 0;
 
+    // Detect document language (prefer stored field, fallback to heuristic on summary)
+    let docLang = l2.language;
+    if (!docLang) {
+      const detected = await this.languageDetector.detect(l2.summary.slice(0, 1000));
+      docLang = detected.code;
+    }
+    const sameLanguage = docLang === queryLang;
+
+    // Query terms include entities, signals, and English translations injected by analyzer
     const qTerms = new Set(query.entities.concat(query.signals.map((s) => s.value)));
+
+    // Concept overlap: match against original concepts and English translations
     const concepts = new Set(l2.concepts.map((c) => c.toLowerCase()));
+    if (l2.conceptsEn) {
+      for (const c of l2.conceptsEn) concepts.add(c.toLowerCase());
+    }
     let conceptHits = 0;
     for (const t of qTerms) {
       for (const c of concepts) {
@@ -487,7 +504,10 @@ export class DefaultRetrievalService implements RetrievalService {
     }
     score += summaryHits * w.summary;
 
-    score += w.language * 0.5;
+    // Language match boost: only when document and query share a language
+    if (sameLanguage) {
+      score += w.language * 0.5;
+    }
 
     return score;
   }

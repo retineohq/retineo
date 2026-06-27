@@ -7,6 +7,7 @@ import { z } from 'zod';
 import type { LLMProvider, GenerateOptions } from '../llm/provider.js';
 import { L2ArtifactSchema } from '../domain/schemas.js';
 import type { L2Artifact } from '../domain/types.js';
+import { HeuristicDetector } from '../i18n/detector.js';
 
 export interface L2Generator {
   generate(l1Markdown: string, provider: LLMProvider): Promise<L2Artifact>;
@@ -33,13 +34,20 @@ ${l1Markdown}
 Respond with valid JSON only:
 {
   "summary": "2-3 paragraph semantic summary",
-  "concepts": ["concept 1", "concept 2", ...],
+  "language": "ISO 639-1 language code of the document's primary language (e.g. 'en', 'ru', 'zh')",
+  "concepts": ["concept 1 in the document's primary language", "concept 2", ...],
+  "conceptsEn": ["English translation of concept 1", "English translation of concept 2", ...],
   "entities": ["entity 1", "entity 2", ...],
   "claims": ["factual claim 1", "factual claim 2", ...],
   "relations": [
     {"source": "concept A", "target": "concept B", "type": "depends_on"}
   ]
-}`;
+}
+
+Rules:
+- The 'conceptsEn' array must have the same length and order as 'concepts'.
+- If the document is already in English, 'conceptsEn' may be identical to 'concepts'.
+- Use lowercase for concept strings.`;
 }
 
 function stripCodeFences(text: string): string {
@@ -76,9 +84,11 @@ function truncateMarkdown(l1Markdown: string, maxChars: number): string {
 
 export class DefaultL2Generator implements L2Generator {
   private opts: Required<L2GeneratorOptions>;
+  private languageDetector: HeuristicDetector;
 
   constructor(options?: L2GeneratorOptions) {
     this.opts = { ...DEFAULT_OPTIONS, ...options };
+    this.languageDetector = new HeuristicDetector();
   }
 
   async generate(l1Markdown: string, provider: LLMProvider): Promise<L2Artifact> {
@@ -101,7 +111,7 @@ export class DefaultL2Generator implements L2Generator {
         const cleaned = stripCodeFences(raw);
         const parsed = JSON.parse(cleaned);
         const validated = L2ArtifactSchema.parse(parsed);
-        return validated;
+        return this.normalizeArtifact(validated, l1Markdown);
       } catch (err) {
         lastError = err;
         if (err instanceof z.ZodError) {
@@ -116,5 +126,30 @@ export class DefaultL2Generator implements L2Generator {
     throw new Error(
       `L2 generation failed after ${this.opts.maxRetries} attempts: ${lastError instanceof Error ? lastError.message : String(lastError)}`
     );
+  }
+
+  private async normalizeArtifact(artifact: L2Artifact, sourceText: string): Promise<L2Artifact> {
+    // Fallback: detect language if LLM omitted it
+    if (!artifact.language) {
+      const detected = await this.languageDetector.detect(sourceText.slice(0, 2000));
+      artifact.language = detected.code;
+    }
+
+    // Fallback: if conceptsEn missing, treat concepts as monolingual
+    if (!artifact.conceptsEn) {
+      artifact.conceptsEn = artifact.language === 'en' ? artifact.concepts : [];
+    }
+
+    // Safety: ensure conceptsEn length matches concepts length
+    if (artifact.conceptsEn.length !== artifact.concepts.length) {
+      if (artifact.language === 'en') {
+        artifact.conceptsEn = artifact.concepts;
+      } else {
+        // Pad with empty strings so downstream code can zip safely
+        artifact.conceptsEn = artifact.concepts.map((_, i) => artifact.conceptsEn?.[i] ?? '');
+      }
+    }
+
+    return artifact;
   }
 }

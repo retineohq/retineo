@@ -13,6 +13,7 @@ import {
 import { DefaultLanguagePackRegistry } from '../../packages/core/src/i18n/registry.js';
 import { MockLLMProvider } from '../../packages/core/src/llm/providers/mock.js';
 import type { SearchConfig } from '../../packages/core/src/storage/config.js';
+import type { QueryTranslator, TranslatedTerms } from '../../packages/core/src/search/query-translator.js';
 
 const mockConfig: SearchConfig = {
   defaultLanguage: 'en',
@@ -39,14 +40,20 @@ describe('DefaultQueryAnalyzer — heuristic detection', () => {
 
   it('detects Russian via heuristic', async () => {
     const result = await analyzer.analyze('Что такое машинное обучение?');
-    // confidence 0.6 is below threshold 0.7, so falls back to defaultLanguage 'en'
-    expect(result.language).toBe('en');
-    expect(result.confidence).toBe(0.5);
+    // Cyrillic script is unambiguous, so the detected language is preserved.
+    expect(result.language).toBe('ru');
+    expect(result.confidence).toBe(0.6);
   });
 
   it('detects Chinese via heuristic', async () => {
     const result = await analyzer.analyze('什么是机器学习？');
-    // confidence 0.6 is below threshold 0.7, so falls back to defaultLanguage 'en'
+    // CJK script is unambiguous, so the detected language is preserved.
+    expect(result.language).toBe('zh');
+    expect(result.confidence).toBe(0.6);
+  });
+
+  it('falls back to defaultLanguage for short Latin query below threshold', async () => {
+    const result = await analyzer.analyze('hello');
     expect(result.language).toBe('en');
     expect(result.confidence).toBe(0.5);
   });
@@ -91,6 +98,28 @@ describe('DefaultQueryAnalyzer — heuristic detection', () => {
     const temporal = result.signals.find((s) => s.type === 'temporal');
     expect(temporal).toBeDefined();
     expect(temporal!.value).toBe('last week');
+  });
+
+  it('injects English translations for non-English queries', async () => {
+    const fakeTranslator: QueryTranslator = {
+      async translate(terms: string[]): Promise<TranslatedTerms> {
+        const map: Record<string, string> = {
+          'машинное обучение': 'machine learning',
+        };
+        return {
+          original: terms,
+          english: terms.map((t) => map[t] ?? t),
+        };
+      },
+    };
+    const analyzerWithTranslator = new DefaultQueryAnalyzer({
+      detector: new HeuristicDetector(),
+      searchConfig: mockConfig,
+      translator: fakeTranslator,
+    });
+    const result = await analyzerWithTranslator.analyze('Что такое "машинное обучение"?');
+    expect(result.language).toBe('ru');
+    expect(result.enrichedQuery).toContain('[en: machine learning]');
   });
 });
 

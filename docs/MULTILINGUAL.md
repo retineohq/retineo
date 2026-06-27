@@ -46,17 +46,43 @@ If detection confidence is below the threshold, the system uses `search.defaultL
 
 ## Cross-Lingual Search
 
-Embedding models like `text-embedding-3-large` map multiple languages into a shared vector space. This means:
+RETINEO combines two cross-lingual mechanisms:
 
-- A **Russian query** can match **English documents** via embeddings.
-- L2 rerank applies a language boost (`+0.3`) when query language == document language.
-- Cross-lingual search can be disabled:
+1. **Shared embedding space** — embedding models like `nomic-embed-text` map multiple languages into the same vector space, so a Russian query can match an English document semantically.
+2. **Keyword bridge** — every L2 artifact stores both the original `concepts` and an English translation `conceptsEn`. The BM25 index contains both sets of tokens, and non-English queries have their entities translated into English before keyword matching.
+
+This means:
+
+- A **Russian query** can match **English documents** via embeddings *and* via English concept tokens.
+- A **Russian query** can match **Russian documents** via Cyrillic tokens.
+- L2 rerank applies a language boost (`+0.3`) when query language == document language, so same-language results rank higher.
+- Cross-lingual search can be disabled or tuned:
 
 ```yaml
 search:
   crossLingual:
-    enabled: false
+    enabled: true
+    translateQuery: "llm"          # none | llm
+    targetLanguages: ["en"]        # languages to bridge into
 ```
+
+### How it works in practice
+
+For a document written in Russian:
+
+- L2 generator detects `language: ru` and emits both `concepts` (`["нейросети", "глубокое обучение"]`) and `conceptsEn` (`["neural networks", "deep learning"]`).
+- L3 generator writes both Cyrillic and English tokens into `index/bm25.json`.
+- A query such as `нейросети` matches directly; a query such as `neural networks` matches via `conceptsEn`.
+
+### Re-indexing after enabling cross-lingual search
+
+Existing indexes do **not** contain `language` or `conceptsEn`. To upgrade an existing collection:
+
+```bash
+retineo compile --rebuild-l2
+```
+
+This deletes all cached `L2.json` artifacts, re-queues `GENERATE_L2` jobs for every source, and regenerates L3 indexes. Run the worker if needed (`retineo daemon start` or `retineo worker`) to process the jobs.
 
 ---
 

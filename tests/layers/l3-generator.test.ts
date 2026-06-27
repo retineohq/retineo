@@ -67,6 +67,40 @@ describe('DefaultL3Generator', () => {
     expect(Object.keys(invertedIndex).length).toBeGreaterThan(0);
     expect(invertedIndex['learning']).toContain('hash1');
   });
+
+  it('includes conceptsEn in bm25 terms', async () => {
+    const l2WithEn: L2Artifact = {
+      ...l2,
+      language: 'ru',
+      concepts: ['нейросети', 'глубокое обучение'],
+      conceptsEn: ['neural networks', 'deep learning'],
+    };
+    await gen.generate(l2WithEn, provider, 'hash2', indexDir);
+
+    const bm25Path = path.join(indexDir, 'bm25.json');
+    const bm25 = JSON.parse(require('fs').readFileSync(bm25Path, 'utf-8'));
+    const invertedIndex = bm25.invertedIndex ?? bm25;
+    expect(invertedIndex['networks']).toContain('hash2');
+    expect(invertedIndex['learning']).toContain('hash2');
+  });
+
+  it('preserves Cyrillic tokens in bm25 index', async () => {
+    const l2Ru: L2Artifact = {
+      summary: 'Документ о кошках.',
+      language: 'ru',
+      concepts: ['кошки', 'фелины'],
+      entities: [],
+      claims: [],
+      relations: [],
+    };
+    await gen.generate(l2Ru, provider, 'hash3', indexDir);
+
+    const bm25Path = path.join(indexDir, 'bm25.json');
+    const bm25 = JSON.parse(require('fs').readFileSync(bm25Path, 'utf-8'));
+    const invertedIndex = bm25.invertedIndex ?? bm25;
+    expect(invertedIndex['кошки']).toContain('hash3');
+    expect(invertedIndex['фелины']).toContain('hash3');
+  });
 });
 
 describe('bruteForceSearch', () => {

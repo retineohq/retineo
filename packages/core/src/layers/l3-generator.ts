@@ -63,9 +63,15 @@ function buildEmbeddingText(l2: L2Artifact): string {
 
 /** Build BM25 inverted index terms from L2 artifact */
 function buildTerms(l2: L2Artifact): string[] {
-  const text = [l2.summary, ...l2.concepts, ...l2.entities, ...l2.claims].join(' ').toLowerCase();
+  const text = [
+    l2.summary,
+    ...l2.concepts,
+    ...(l2.conceptsEn ?? []),
+    ...l2.entities,
+    ...l2.claims,
+  ].join(' ').toLowerCase();
   return text
-    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/[^a-z0-9\u0400-\u04FF\u4E00-\u9FFF\s]/g, ' ')
     .split(/\s+/)
     .filter((t) => t.length > 2);
 }
