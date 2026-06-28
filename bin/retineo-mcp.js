@@ -59,17 +59,25 @@ async function main() {
 
   const ingestionService = new DefaultIngestionService(cas, registry, nodeBuilder, adapterManager, computeHash, logger);
 
-  const queryAnalyzer = new DefaultQueryAnalyzer({ searchConfig: config.search });
-
-  // Load real embedding provider from config (same as retineo.js)
-  const { DefaultEmbeddingProviderFactory } = await import('../dist/llm/factory.js');
+  // Load LLM provider from config so the analyzer can extract entities and
+  // translate non-English queries for cross-lingual keyword search.
+  const { DefaultLLMProviderFactory, DefaultEmbeddingProviderFactory } = await import('../dist/llm/factory.js');
+  const llmFactory = new DefaultLLMProviderFactory();
   const embedFactory = new DefaultEmbeddingProviderFactory();
+  try {
+    await llmFactory.loadFromConfig(config, secretsManager);
+  } catch {
+    // search will fall back to rule-based analysis
+  }
   try {
     await embedFactory.loadFromConfig(config, secretsManager);
   } catch {
     // fallback to mock
   }
+  const llmProvider = llmFactory.list().length > 0 ? llmFactory.getDefault() : undefined;
   const embedder = embedFactory.list().length > 0 ? embedFactory.getDefault() : new MockLLMProvider({ id: 'mock-embedder', type: 'mock', dimension: 384 });
+
+  const queryAnalyzer = new DefaultQueryAnalyzer({ searchConfig: config.search, llmProvider });
   const retrievalService = new DefaultRetrievalService({
     embeddingProvider: embedder,
     casStorage: cas,

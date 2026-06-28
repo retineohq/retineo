@@ -148,7 +148,6 @@ async function main() {
 
   // --- Search ---
   const secretsManager = new FileSecretsManager(path.join(resolvedDataDir, 'secrets.json'));
-  const queryAnalyzer = new DefaultQueryAnalyzer({ searchConfig: config.search });
 
   // --- LLM / Embedding providers from config ---
   const llmFactory = new DefaultLLMProviderFactory();
@@ -169,6 +168,13 @@ async function main() {
   if (!embedder) {
     logger.warn('cli.noEmbedProvider', { message: 'No embedding provider configured. L3 generation will fail. Run retineo init to configure.' });
   }
+
+  // Analyzer needs the LLM provider for entity extraction and cross-lingual
+  // query translation.
+  const queryAnalyzer = new DefaultQueryAnalyzer({
+    searchConfig: config.search,
+    llmProvider: llmProvider ?? undefined,
+  });
 
   const retrievalService = new DefaultRetrievalService({
     embeddingProvider: embedder || new (await import('../dist/llm/providers/mock.js')).MockLLMProvider({ id: 'mock-embedder', type: 'mock', dimension: 384 }),

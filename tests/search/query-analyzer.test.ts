@@ -121,6 +121,33 @@ describe('DefaultQueryAnalyzer — heuristic detection', () => {
     expect(result.language).toBe('ru');
     expect(result.enrichedQuery).toContain('[en: machine learning]');
   });
+
+  it('falls back to query words as entities for non-English keyword queries', async () => {
+    const fakeTranslator: QueryTranslator = {
+      async translate(terms: string[]): Promise<TranslatedTerms> {
+        const map: Record<string, string> = {
+          нейронные: 'neural',
+          сети: 'networks',
+        };
+        return {
+          original: terms,
+          english: terms.map((t) => map[t] ?? t),
+        };
+      },
+    };
+    const analyzerWithTranslator = new DefaultQueryAnalyzer({
+      detector: new HeuristicDetector(),
+      searchConfig: mockConfig,
+      translator: fakeTranslator,
+    });
+    const result = await analyzerWithTranslator.analyze('нейронные сети');
+    expect(result.language).toBe('ru');
+    expect(result.entities).toContain('нейронные');
+    expect(result.entities).toContain('сети');
+    expect(result.enrichedQuery).toContain('[en:');
+    expect(result.enrichedQuery).toContain('neural');
+    expect(result.enrichedQuery).toContain('networks');
+  });
 });
 
 describe('DefaultQueryAnalyzer — with LLM fallback', () => {

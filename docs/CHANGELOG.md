@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.4.3] - 2026-06-27
+
+### Fixed
+- **Cross-lingual query translation in CLI and MCP:** `bin/retineo.js` and `bin/retineo-mcp.js` now pass the configured LLM provider to `DefaultQueryAnalyzer`, enabling LLM entity extraction and English translation of non-English queries.
+- **Entity extraction fallback for non-English keyword queries:** when a Cyrillic/CJK keyword query contains no capitalized words or quoted phrases, `DefaultQueryAnalyzer` now falls back to the meaningful query words as entities so they can be translated and matched against `conceptsEn`.
+
+### Tests
+- Added `query-analyzer.test.ts` coverage for the non-English keyword fallback.
+- 407 tests passing, 14 skipped.
+
 ## [0.4.2] - 2026-06-27
 
 ### Fixed

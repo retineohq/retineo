@@ -205,6 +205,17 @@ export class DefaultQueryAnalyzer implements QueryAnalyzer {
 
     // 4. Entity extraction
     let entities = extractEntities(query);
+
+    // Fallback for non-English keyword-style queries: if no capitalized words
+    // or quoted phrases were found, treat the meaningful words themselves as
+    // entities so they can be translated into English for cross-lingual BM25.
+    if (entities.length === 0 && language !== 'en') {
+      entities = query
+        .toLowerCase()
+        .split(/\s+/)
+        .map((w) => w.replace(/[^a-z0-9\u0400-\u04FF\u4E00-\u9FFF]/g, ''))
+        .filter((w) => w.length > 2);
+    }
     if (this.llmProvider) {
       const promptTemplate =
         this.config.prompts.entityExtraction ??
