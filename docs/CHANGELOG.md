@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.4.4] - 2026-06-27
+
+### Fixed
+- **Stale README/INSTALL/SECURITY version references:** updated hardcoded `Version: 0.2.0`, test count, install command (`npm install -g @retineo/core`), and supported-versions table to reflect the current `@retineo/core@0.4.x` release.
+
 ## [0.4.3] - 2026-06-27
 
 ### Fixed

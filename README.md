@@ -4,9 +4,9 @@
 [![CI](https://github.com/retineohq/retineo/actions/workflows/ci.yml/badge.svg)](https://github.com/retineohq/retineo/actions)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-**Version:** 0.2.0  
+**Version:** 0.4.3  
 **License:** Apache 2.0  
-**Status:** Production-ready — 408 tests passing
+**Status:** Production-ready — 407 tests passing
 
 ## What is Retineo Core?
 

@@ -1,6 +1,6 @@
 {
   "name": "@retineo/core",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "description": "Connection discovery engine (L0–L3). Open-source core for the Retineo ecosystem.",
   "type": "module",
   "main": "dist/index.js",
@@ -25,6 +25,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "@retineo/core": "^0.4.3",
     "better-sqlite3": "^12.10.0",
     "commander": "^15.0.0",
     "fastify": "^5.8.5",

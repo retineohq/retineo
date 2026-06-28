@@ -30,13 +30,13 @@ node --version  # v20.x.x or higher
 ## Install via npm
 
 ```bash
-npm install -g retineo
+npm install -g @retineo/core
 ```
 
 Or run without installing:
 
 ```bash
-npx retineo <command>
+npx @retineo/core <command>
 ```
 
 ### Initialize RETINEO
