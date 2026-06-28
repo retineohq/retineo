@@ -67,7 +67,7 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/retineohq/retineo.git"
+    "url": "git+https://github.com/retineohq/retineo.git"
   },
   "bugs": {
     "url": "https://github.com/retineohq/retineo/issues"
