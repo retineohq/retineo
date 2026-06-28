@@ -45,9 +45,18 @@ Respond with valid JSON only:
 }
 
 Rules:
-- The 'conceptsEn' array must have the same length and order as 'concepts'.
+- Detect the document's primary language and set 'language' to its ISO 639-1 code.
+- The 'concepts' array MUST be written in the document's primary language.
+- The 'conceptsEn' array must have the same length and order as 'concepts' and contain English translations.
 - If the document is already in English, 'conceptsEn' may be identical to 'concepts'.
-- Use lowercase for concept strings.`;
+- Use lowercase for concept strings.
+
+Example for a Russian document:
+{
+  "language": "ru",
+  "concepts": ["фрактальная геометрия", "нейронная сеть", "иерархическая память"],
+  "conceptsEn": ["fractal geometry", "neural network", "hierarchical memory"]
+}`;
 }
 
 function stripCodeFences(text: string): string {
@@ -110,7 +119,16 @@ export class DefaultL2Generator implements L2Generator {
         const raw = await provider.generate(prompt, opts);
         const cleaned = stripCodeFences(raw);
         const parsed = JSON.parse(cleaned);
-        const validated = L2ArtifactSchema.parse(parsed);
+        // Some local LLMs omit empty arrays; fill required array fields so Zod passes.
+        const withDefaults = {
+          concepts: [],
+          conceptsEn: undefined,
+          entities: [],
+          claims: [],
+          relations: [],
+          ...parsed,
+        };
+        const validated = L2ArtifactSchema.parse(withDefaults);
         return this.normalizeArtifact(validated, l1Markdown);
       } catch (err) {
         lastError = err;

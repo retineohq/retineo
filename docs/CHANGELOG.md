@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.4.2] - 2026-06-27
+
+### Fixed
+- **L2 generator robustness for local LLMs:** some local models (e.g., Ollama `granite3.1-dense`) omit empty required arrays such as `relations`, `entities`, or `claims`. `DefaultL2Generator` now pre-fills missing arrays with `[]` before Zod validation, preventing spurious parse failures and retries.
+- **L2 prompt language fidelity:** added an explicit Russian example and stricter instructions so non-English documents are summarized with concepts in the document's language and English translations in `conceptsEn`.
+- **Removed self-dependency:** `@retineo/core` no longer declares itself as a dependency, which avoids duplicate/older copies being installed inside the package.
+
+### Tests
+- 406 tests passing, 14 skipped.
+
+## [0.4.1] - 2026-06-27
+
+### Fixed
+- **npm package metadata:** deprecated the legacy `retineo-core` package in favor of `@retineo/core` and updated the repository URL to `https://github.com/retineohq/retineo.git`.
+- **Transitive dependency vulnerabilities:** added `pnpm.overrides` for `hono >=4.12.27`, `esbuild >=0.28.1`, and `vite ^6.4.3`; `pnpm audit` now reports no actionable vulnerabilities.
+
 ## [0.4.0] - 2026-06-27
 
 ### Added
