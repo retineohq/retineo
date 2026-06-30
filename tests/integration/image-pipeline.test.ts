@@ -136,7 +136,7 @@ describe('Image Pipeline', () => {
     expect(job!.type).toBe('GENERATE_L1');
   });
 
-  it('processes GENERATE_L1 → L2 → L3 for blank image', async () => {
+  it('skips L2/L3 for blank image with empty content', async () => {
     const filePath = path.join(tmpDir, 'blank.png');
     writeFileSync(filePath, createMinimalPNG());
 
@@ -148,19 +148,19 @@ describe('Image Pipeline', () => {
     await pipeline.processJob(l1Job);
     registry.completeJob(l1Job.id);
 
-    // L2
-    const l2Lease = registry.acquireLease('worker-1', 60000)!;
-    await pipeline.processJob(l2Lease);
-    registry.completeJob(l2Lease.id);
-
-    // L3
-    const l3Lease = registry.acquireLease('worker-1', 60000)!;
-    await pipeline.processJob(l3Lease);
-    registry.completeJob(l3Lease.id);
+    // Empty source should not produce L2/L3 jobs.
+    const pending = registry.getPendingJobs(10);
+    const hasL2 = pending.some((j) => j.type === 'GENERATE_L2');
+    const hasL3 = pending.some((j) => j.type === 'GENERATE_L3');
+    expect(hasL2).toBe(false);
+    expect(hasL3).toBe(false);
 
     const objPath = cas.getObjectPath(node.id);
     const { existsSync } = require('fs');
     expect(existsSync(path.join(objPath, 'L1.md'))).toBe(true);
-    expect(existsSync(path.join(objPath, 'L2.json'))).toBe(true);
+    expect(existsSync(path.join(objPath, 'L2.json'))).toBe(false);
+
+    const l1 = await cas.readObject(node.id);
+    expect(l1.artifacts.l1 ?? '').toContain('chunkCount: 0');
   });
 });

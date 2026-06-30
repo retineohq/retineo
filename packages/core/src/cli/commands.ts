@@ -48,7 +48,9 @@ export interface CompileCLIOptions {
   provider?: string;
   watch?: boolean;
   timeout?: number;
+  rebuildL1?: boolean;
   rebuildL2?: boolean;
+  rebuildL3?: boolean;
 }
 
 export interface SearchCLIOptions {
@@ -290,6 +292,26 @@ export class CLICommands {
         await this.watchJobs(res.node.id, { timeoutSec: options.timeout ?? 1800 });
       }
     } else {
+      // Optional: force re-generation of L1 artifacts for all sources
+      if (options?.rebuildL1) {
+        const { rmSync, existsSync } = await import('fs');
+        const pathMod = await import('path');
+        const sources = this.deps.registry.listSources();
+        let queued = 0;
+        for (const src of sources) {
+          const nodeHash = src.rootHash;
+          if (!nodeHash) continue;
+          const objPath = this.deps.cas.getObjectPath(nodeHash);
+          for (const file of ['L1.md', 'L1.index.json']) {
+            const p = pathMod.join(objPath, file);
+            if (existsSync(p)) rmSync(p);
+          }
+          this.deps.pipeline.enqueueL1(nodeHash, src.id);
+          queued++;
+        }
+        console.log(`Queued ${queued} source(s) for L1 rebuild`);
+      }
+
       // Optional: force re-generation of L2 artifacts for all sources
       if (options?.rebuildL2) {
         const { rmSync, existsSync } = await import('fs');
@@ -344,6 +366,29 @@ export class CLICommands {
       }
       if (missingL3 > 0) {
         console.log(`Queued ${missingL3} missing L3 job(s)`);
+      }
+
+      // Optional: force full L3 index rebuild for all sources with L2.
+      if (options?.rebuildL3) {
+        const { rmSync, existsSync } = await import('fs');
+        const pathMod = await import('path');
+        const cfg = await this.deps.configManager.load();
+        const indexDir = pathMod.join(cfg.dataDir, 'index');
+        if (existsSync(indexDir)) {
+          rmSync(indexDir, { recursive: true, force: true });
+        }
+        const sources = this.deps.registry.listSources();
+        let queued = 0;
+        for (const src of sources) {
+          const nodeHash = src.rootHash;
+          if (!nodeHash) continue;
+          const objPath = this.deps.cas.getObjectPath(nodeHash);
+          if (existsSync(pathMod.join(objPath, 'L2.json'))) {
+            this.deps.pipeline.enqueueL3(nodeHash);
+            queued++;
+          }
+        }
+        console.log(`Queued ${queued} source(s) for L3 rebuild`);
       }
 
       if (options?.watch) {

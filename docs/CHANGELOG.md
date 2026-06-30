@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.4.5] - 2026-06-27
+
+### Fixed
+- **L1 title extraction:** `DefaultL1Generator` now derives the document title from the first markdown heading, the first non-empty line, or the source filename. This eliminates `Untitled Document` for PDFs, images, and plain-text files.
+- **L1 chunking:** documents with only an H1 title now get chunks for the body; long documents without headings are split by `maxLinesPerChunk`. `chunkCount` is now `0` only for empty sources.
+- **Empty source handling:** `CompilationPipeline` skips L2/L3 generation when L0 content is empty, avoiding wasted LLM calls.
+- **Plain-text log segmentation:** files without markdown headings that contain log-style markers (ISO dates, `ECHO ... COMPLETE`, `STATUS:`) are split into pseudo-sections for navigation.
+- **Source context in L1:** `L1Generator.generate` now receives `sourceRef` (URI + MIME type) so generators can use filename and media type.
+
+### Added
+- CLI flags `--rebuild-l1` and `--rebuild-l3` for `retineo compile`.
+
+### Tests
+- 412 tests passing, 14 skipped.
+
 ## [0.4.4] - 2026-06-27
 
 ### Fixed

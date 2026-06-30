@@ -75,7 +75,7 @@ Show engine status.
 retineo status
 ```
 
-### `retineo compile [filePath] [--watch] [--timeout <sec>] [--provider <id>]`
+### `retineo compile [filePath] [--watch] [--timeout <sec>] [--provider <id>] [--rebuild-l1] [--rebuild-l2] [--rebuild-l3]`
 
 Compile pending jobs or a specific file. Same `--watch` semantics as `ingest`.
 
@@ -84,6 +84,9 @@ retineo compile
 retineo compile ./notes.md --layer l2 --watch
 retineo compile ./notes.md --provider ollama   # override config provider for this run
 retineo compile ./notes.md --provider mock     # explicitly use mock for testing
+retineo compile --rebuild-l1                   # regenerate L1, L2 and L3 for all sources
+retineo compile --rebuild-l2                   # regenerate L2 and L3 for all sources
+retineo compile --rebuild-l3                   # rebuild the global L3 index from existing L2 artifacts
 ```
 
 When run without a file path, `compile` also:
@@ -91,6 +94,11 @@ When run without a file path, `compile` also:
 - **Queues missing L3 jobs** — finds nodes that have completed L2 but have no L3 job (pending, running, completed, or dead) and enqueues `GENERATE_L3`.
 
 The `--provider` flag overrides the configured `llm.defaultProvider` for this compilation only. If the provider id is not found in `config.yaml`, the command exits with an error listing available providers.
+
+Rebuild flags affect the whole collection and cannot be combined with a `filePath`:
+- `--rebuild-l1` deletes cached `L1.md` / `L1.index.json` and re-queues L1→L2→L3 for every source.
+- `--rebuild-l2` deletes cached `L2.json` and re-queues L2→L3 for every source.
+- `--rebuild-l3` deletes the global `index/` directory and re-queues L3 for every node that already has L2.
 
 ### `retineo config set|get|list`
 

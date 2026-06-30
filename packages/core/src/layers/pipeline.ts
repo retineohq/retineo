@@ -108,8 +108,20 @@ export class DefaultCompilationPipeline implements CompilationPipeline {
     const objPath = cas.getObjectPath(nodeHash);
     const content = await readFile(path.join(objPath, 'content.md'), 'utf-8');
 
+    // Skip empty sources: no point generating essence or vectors.
+    if (content.trim().length === 0) {
+      const l1 = await l1Generator.generate(content, node.sourceRef);
+      await writeFile(path.join(objPath, 'L1.md'), l1.markdown);
+      await writeFile(path.join(objPath, 'L1.index.json'), JSON.stringify(l1.index, null, 2));
+      node.build.nodeVersion++;
+      node.build.generators.l1 = makeGeneratorInfo('outline-parser', '1.0.0');
+      await writeFile(path.join(objPath, 'node.json'), JSON.stringify(node.build, null, 2));
+      this.logger.info('pipeline.l1.empty', { nodeHash, source: node.sourceRef.uri });
+      return;
+    }
+
     // Generate L1
-    const l1 = await l1Generator.generate(content);
+    const l1 = await l1Generator.generate(content, node.sourceRef);
 
     // Write L1 artifacts to CAS
     await writeFile(path.join(objPath, 'L1.md'), l1.markdown);
