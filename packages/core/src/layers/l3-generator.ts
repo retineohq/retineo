@@ -17,6 +17,11 @@ export interface L3Chunk {
   rootHash: string; // contentHash/rootHash of originating L0
   text: string;
   vector: number[];
+  chunkId?: string;
+  lineStart?: number;
+  lineEnd?: number;
+  charStart?: number;
+  charEnd?: number;
 }
 
 export interface L3Result {
@@ -116,7 +121,7 @@ export class DefaultL3Generator implements L3Generator {
     const toEmbed = chunks.map((chunk) => {
       const text = sliceChunk(input.content, chunk);
       return {
-        hash: computeHash(text),
+        hash: chunk.contentHash ?? computeHash(text),
         text,
       };
     });
@@ -124,19 +129,37 @@ export class DefaultL3Generator implements L3Generator {
     const embedded = await this.batchEmbed(toEmbed, provider);
 
     const rootHash = input.rootHash ?? contentHash;
-    const l3Chunks: L3Chunk[] = embedded.map((item, idx) => ({
-      chunkHash: item.hash,
-      parentId: input.sourcePath,
-      rootHash,
-      text: toEmbed[idx].text,
-      vector: item.vector,
-    }));
+    const l3Chunks: L3Chunk[] = embedded.map((item, idx) => {
+      const chunk = chunks[idx];
+      return {
+        chunkHash: item.hash,
+        parentId: input.sourcePath,
+        rootHash,
+        text: toEmbed[idx].text,
+        vector: item.vector,
+        chunkId: chunk.id,
+        lineStart: chunk.lineStart,
+        lineEnd: chunk.lineEnd,
+        charStart: chunk.charStart,
+        charEnd: chunk.charEnd,
+      };
+    });
 
     await mkdir(indexDir, { recursive: true });
 
     // Update embeddings.jsonl: dedup by chunkHash, append new entries
     const embeddingsPath = path.join(indexDir, 'embeddings.jsonl');
-    const newLines = l3Chunks.map((c) => JSON.stringify({ hash: c.chunkHash, vector: c.vector, parentId: c.parentId, rootHash: c.rootHash }));
+    const newLines = l3Chunks.map((c) => JSON.stringify({
+      hash: c.chunkHash,
+      vector: c.vector,
+      parentId: c.parentId,
+      rootHash: c.rootHash,
+      chunkId: c.chunkId,
+      lineStart: c.lineStart,
+      lineEnd: c.lineEnd,
+      charStart: c.charStart,
+      charEnd: c.charEnd,
+    }));
     let existingLines: string[] = [];
     if (existsSync(embeddingsPath)) {
       const existing = await readFile(embeddingsPath, 'utf-8');

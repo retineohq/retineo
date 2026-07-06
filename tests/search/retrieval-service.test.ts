@@ -8,7 +8,7 @@ import path from 'path';
 import os from 'os';
 import { DefaultRetrievalService } from '../../packages/core/src/search/retrieval-service.js';
 import { MockLLMProvider } from '../../packages/core/src/llm/providers/mock.js';
-import { LocalCASStorage } from '../../packages/core/src/storage/cas.js';
+import { LocalCASStorage, computeHash } from '../../packages/core/src/storage/cas.js';
 import { SQLiteRegistry } from '../../packages/core/src/storage/registry.js';
 import type { AnalyzedQuery } from '../../packages/core/src/search/query-analyzer.js';
 import type { L2Artifact } from '../../packages/core/src/domain/types.js';
@@ -318,5 +318,81 @@ describe('DefaultRetrievalService', () => {
     expect(ghost?.l0Preview).toBeUndefined();
     expect(result.citations.find((c) => c.nodeId === 'hash-a')?.isGhost).toBe(true);
     registry.close();
+  });
+});
+
+describe('DefaultRetrievalService exact cascade', () => {
+  let tmpDir: string;
+  let indexDir: string;
+  let cas: LocalCASStorage;
+  let provider: MockLLMProvider;
+
+  beforeEach(async () => {
+    tmpDir = mkdtempSync(path.join(os.tmpdir(), 'retineo-cascade-'));
+    indexDir = path.join(tmpDir, 'index');
+    mkdirSync(indexDir, { recursive: true });
+    cas = new LocalCASStorage(tmpDir);
+    provider = new MockLLMProvider({ id: 'mock', type: 'mock', model: 'test', dimension: 384 });
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('returns exact L0 slice for precision intent when chunk geometry is present', async () => {
+    const content = 'Alpha cats here.\n\nBeta dogs there.\n\nGamma birds elsewhere.';
+    const chunks = [
+      { text: 'Alpha cats here.', charStart: 0, charEnd: 15, lineStart: 0, lineEnd: 0, concept: 'cats' },
+      { text: 'Beta dogs there.', charStart: 18, charEnd: 33, lineStart: 2, lineEnd: 2, concept: 'dogs' },
+      { text: 'Gamma birds elsewhere.', charStart: 36, charEnd: 57, lineStart: 4, lineEnd: 4, concept: 'birds' },
+    ];
+
+    const records: string[] = [];
+    for (const chunk of chunks) {
+      const hash = computeHash(chunk.text);
+      const [vector] = await provider.embed([chunk.text]);
+      records.push(
+        JSON.stringify({
+          hash,
+          vector,
+          parentId: '/docs/animals.md',
+          rootHash: hash,
+          chunkId: `chunk-${chunk.concept}`,
+          lineStart: chunk.lineStart,
+          lineEnd: chunk.lineEnd,
+          charStart: chunk.charStart,
+          charEnd: chunk.charEnd,
+        })
+      );
+
+      const objDir = cas.getObjectPath(hash);
+      mkdirSync(objDir, { recursive: true });
+      writeFileSync(path.join(objDir, 'content.md'), content, 'utf-8');
+      writeFileSync(path.join(objDir, 'L2.json'), JSON.stringify(createL2(chunk.text, [chunk.concept])), 'utf-8');
+    }
+    writeFileSync(path.join(indexDir, 'embeddings.jsonl'), records.join('\n') + '\n', 'utf-8');
+
+    const service = new DefaultRetrievalService({
+      embeddingProvider: provider,
+      casStorage: cas,
+      indexDir,
+      config: mockConfig,
+    });
+
+    const query: AnalyzedQuery = {
+      originalQuery: 'Alpha cats here.',
+      language: 'en',
+      confidence: 1,
+      intent: 'precision',
+      enrichedQuery: 'Alpha cats here.',
+      entities: [],
+      signals: [],
+    };
+
+    const result = await service.search(query, { mode: 'semantic', finalTopK: 3 });
+    const selected = result.selected.find((c) => c.l0Preview === 'Alpha cats here.');
+    expect(selected).toBeDefined();
+    expect(selected?.lineRange).toEqual({ start: 0, end: 0 });
+    expect(selected?.sourcePath).toBe('/docs/animals.md');
   });
 });

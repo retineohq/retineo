@@ -4,6 +4,8 @@
  * Splits content into sections (headings) and chunks.
  */
 
+import { computeHash } from '../storage/cas.js';
+
 export interface Section {
   level: number;
   title: string;
@@ -19,6 +21,7 @@ export interface Chunk {
   charStart: number;
   charEnd: number;
   heading?: string;
+  contentHash?: string;
 }
 
 export interface L1Index {
@@ -232,6 +235,7 @@ function splitRangeIntoChunks(
         charStart: lines.slice(0, currentStart).join('\n').length + (currentStart > 0 ? 1 : 0),
         charEnd: lines.slice(0, chunkEnd).join('\n').length + (chunkEnd > 0 ? 1 : 0) - 1,
         heading,
+        contentHash: computeHash(text),
       });
       currentStart = chunkEnd;
       currentLineCount = 0;

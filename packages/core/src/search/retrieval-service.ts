@@ -225,6 +225,11 @@ interface EmbeddingRecord {
   vector: number[];
   parentId?: string;
   rootHash?: string;
+  chunkId?: string;
+  lineStart?: number;
+  lineEnd?: number;
+  charStart?: number;
+  charEnd?: number;
 }
 
 /** Load embedding metadata (hash → sourcePath/rootHash) from jsonl. */
@@ -308,7 +313,18 @@ export class DefaultRetrievalService implements RetrievalService {
   private hnswIndex: HNSWIndex | null = null;
   private hnswInit: Promise<void> | null = null;
   private model: string;
-  private chunkToSource: Map<Hash, { sourcePath: string; rootHash: Hash }> = new Map();
+  private chunkToSource: Map<
+    Hash,
+    {
+      sourcePath: string;
+      rootHash: Hash;
+      chunkId?: string;
+      lineStart?: number;
+      lineEnd?: number;
+      charStart?: number;
+      charEnd?: number;
+    }
+  > = new Map();
 
   constructor(deps: RetrievalServiceDeps) {
     this.embedder = deps.embeddingProvider;
@@ -352,6 +368,11 @@ export class DefaultRetrievalService implements RetrievalService {
         this.chunkToSource.set(rec.hash, {
           sourcePath: rec.parentId,
           rootHash: rec.rootHash ?? rec.hash,
+          chunkId: rec.chunkId,
+          lineStart: rec.lineStart,
+          lineEnd: rec.lineEnd,
+          charStart: rec.charStart,
+          charEnd: rec.charEnd,
         });
       }
     }
@@ -365,6 +386,11 @@ export class DefaultRetrievalService implements RetrievalService {
       this.chunkToSource.set(c.chunkHash, {
         sourcePath: c.parentId,
         rootHash: c.rootHash,
+        chunkId: c.chunkId,
+        lineStart: c.lineStart,
+        lineEnd: c.lineEnd,
+        charStart: c.charStart,
+        charEnd: c.charEnd,
       });
     }
     const hnswPath = path.join(this.indexDir, 'hnsw.bin');
@@ -617,20 +643,34 @@ export class DefaultRetrievalService implements RetrievalService {
         const l0Path = path.join(objPath, 'content.md');
         if (existsSync(l0Path)) {
           const l0Raw = await readFileAsync(l0Path, 'utf-8');
-          const chunks = l0Raw.split('\n\n');
-          let bestChunk = chunks[0] ?? l0Raw.slice(0, 512);
-          let bestScore = -1;
-          for (const chunk of chunks) {
-            const score = this.chunkScore(chunk, candidate.l2Artifact);
-            if (score > bestScore) {
-              bestScore = score;
-              bestChunk = chunk;
+
+          // Exact slice from L1/L3 chunk geometry if available.
+          if (
+            sourceInfo?.charStart !== undefined &&
+            sourceInfo?.charEnd !== undefined &&
+            sourceInfo.lineStart !== undefined &&
+            sourceInfo.lineEnd !== undefined
+          ) {
+            const exact = l0Raw.slice(sourceInfo.charStart, sourceInfo.charEnd + 1);
+            candidate.l0Preview = exact.slice(0, 1500);
+            candidate.lineRange = { start: sourceInfo.lineStart, end: sourceInfo.lineEnd };
+          } else {
+            // Fallback: heuristic paragraph search.
+            const chunks = l0Raw.split('\n\n');
+            let bestChunk = chunks[0] ?? l0Raw.slice(0, 512);
+            let bestScore = -1;
+            for (const chunk of chunks) {
+              const score = this.chunkScore(chunk, candidate.l2Artifact);
+              if (score > bestScore) {
+                bestScore = score;
+                bestChunk = chunk;
+              }
             }
+            candidate.l0Preview = bestChunk.slice(0, 512);
+            const linesBefore = l0Raw.slice(0, l0Raw.indexOf(bestChunk)).split('\n').length - 1;
+            const lineCount = bestChunk.split('\n').length;
+            candidate.lineRange = { start: linesBefore, end: linesBefore + lineCount };
           }
-          candidate.l0Preview = bestChunk.slice(0, 512);
-          const linesBefore = l0Raw.slice(0, l0Raw.indexOf(bestChunk)).split('\n').length - 1;
-          const lineCount = bestChunk.split('\n').length;
-          candidate.lineRange = { start: linesBefore, end: linesBefore + lineCount };
         }
       } catch {
         // ignore
