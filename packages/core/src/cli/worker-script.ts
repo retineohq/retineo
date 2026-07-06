@@ -25,6 +25,7 @@ import { DefaultL2Generator } from '../layers/l2-generator.js';
 import { DefaultL3Generator } from '../layers/l3-generator.js';
 import { createLogger } from '../utils/logger.js';
 import { DefaultShutdownManager } from '../utils/shutdown.js';
+import { DefaultRetrievalService } from '../search/retrieval-service.js';
 import path from 'path';
 
 export interface WorkerScriptOptions {
@@ -107,6 +108,16 @@ export async function startWorkerServices(
   const l3Generator = new DefaultL3Generator();
 
   const contextNodeRepository = new DefaultContextNodeRepository(cas, registry);
+  const indexDir = path.join(dataDir, 'index');
+  const retrievalService = new DefaultRetrievalService({
+    embeddingProvider: embedder,
+    casStorage: cas,
+    registry,
+    indexDir,
+    config: config.search,
+    logger,
+    model: embedder.config.model,
+  });
   const pipeline = new DefaultCompilationPipeline({
     cas,
     registry,
@@ -116,6 +127,7 @@ export async function startWorkerServices(
     l3Generator,
     llmProvider,
     embeddingProvider: embedder,
+    retrievalService,
     dataDir,
     logger,
   });

@@ -29,6 +29,7 @@ function makeSource(id: string): SourceRecord {
     id,
     protocol: 'file',
     uri: '/tmp/test.md',
+    sourcePath: 'test.md',
     mimeType: 'text/markdown',
     adapterId: 'file',
     rawHash: 'r'.repeat(64),

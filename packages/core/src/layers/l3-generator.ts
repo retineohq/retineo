@@ -3,14 +3,24 @@
  * Phase 7: Embedding indexer with batch embedding support.
  */
 
-import { mkdir, readFile, writeFile, access } from 'fs/promises';
+import { mkdir, readFile, writeFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
 import type { EmbeddingProvider } from '../llm/provider.js';
-import type { L2Artifact, HNSWManifest } from '../domain/types.js';
+import type { HNSWManifest } from '../domain/types.js';
+import { computeHash } from '../storage/cas.js';
+import type { Chunk } from './l1-generator.js';
+
+export interface L3Chunk {
+  chunkHash: string;
+  parentId: string; // sourcePath of originating L0
+  rootHash: string; // contentHash/rootHash of originating L0
+  text: string;
+  vector: number[];
+}
 
 export interface L3Result {
-  vector: number[];
+  chunks: L3Chunk[];
   metadata: L3Metadata;
 }
 
@@ -20,8 +30,15 @@ export interface L3Metadata {
   dimension: number;
 }
 
+export interface L3Input {
+  content: string;
+  chunks: Chunk[];
+  sourcePath: string;
+  rootHash?: string;
+}
+
 export interface L3Generator {
-  generate(l2Artifact: L2Artifact, provider: EmbeddingProvider, contentHash: string, indexDir: string): Promise<L3Result>;
+  generate(input: L3Input, provider: EmbeddingProvider, contentHash: string, indexDir: string): Promise<L3Result>;
 }
 
 export interface L3GeneratorOptions {
@@ -56,21 +73,15 @@ function cosineSimilarity(a: number[], b: number[]): number {
   return dot / (Math.sqrt(normA) * Math.sqrt(normB) || 1);
 }
 
-/** Build embedding text from L2 artifact */
-function buildEmbeddingText(l2: L2Artifact): string {
-  return [l2.summary, ...l2.concepts].join('\n');
+function sliceChunk(content: string, chunk: Chunk): string {
+  const end = chunk.charEnd + 1;
+  return content.slice(chunk.charStart, end);
 }
 
-/** Build BM25 inverted index terms from L2 artifact */
-function buildTerms(l2: L2Artifact): string[] {
-  const text = [
-    l2.summary,
-    ...l2.concepts,
-    ...(l2.conceptsEn ?? []),
-    ...l2.entities,
-    ...l2.claims,
-  ].join(' ').toLowerCase();
+/** Build BM25 inverted index terms from raw chunk text */
+function buildTerms(text: string): string[] {
   return text
+    .toLowerCase()
     .replace(/[^a-z0-9\u0400-\u04FF\u4E00-\u9FFF\s]/g, ' ')
     .split(/\s+/)
     .filter((t) => t.length > 2);
@@ -79,8 +90,6 @@ function buildTerms(l2: L2Artifact): string[] {
 export class DefaultL3Generator implements L3Generator {
   private opts: Required<L3GeneratorOptions>;
   private batchConfig: BatchEmbeddingConfig;
-  private pendingBatches = new Map<string, Array<{ hash: string; text: string; resolve: (v: L3Result) => void; reject: (e: Error) => void }>>();
-  private flushTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(options?: L3GeneratorOptions, batchConfig?: Partial<BatchEmbeddingConfig>) {
     this.opts = { ...DEFAULT_OPTIONS, ...options };
@@ -88,45 +97,69 @@ export class DefaultL3Generator implements L3Generator {
   }
 
   async generate(
-    l2Artifact: L2Artifact,
+    input: L3Input,
     provider: EmbeddingProvider,
     contentHash: string,
     indexDir: string
   ): Promise<L3Result> {
-    const embedText = buildEmbeddingText(l2Artifact);
-    const [vector] = await provider.embed([embedText]);
     const dim = provider.dimension();
     const model = provider.config.model;
 
+    const chunks = input.chunks.length > 0 ? input.chunks : [{
+      id: 'chunk-001',
+      lineStart: 0,
+      lineEnd: input.content.split('\n').length - 1,
+      charStart: 0,
+      charEnd: input.content.length - 1,
+    }];
+
+    const toEmbed = chunks.map((chunk) => {
+      const text = sliceChunk(input.content, chunk);
+      return {
+        hash: computeHash(text),
+        text,
+      };
+    });
+
+    const embedded = await this.batchEmbed(toEmbed, provider);
+
+    const rootHash = input.rootHash ?? contentHash;
+    const l3Chunks: L3Chunk[] = embedded.map((item, idx) => ({
+      chunkHash: item.hash,
+      parentId: input.sourcePath,
+      rootHash,
+      text: toEmbed[idx].text,
+      vector: item.vector,
+    }));
+
     await mkdir(indexDir, { recursive: true });
 
-    // Append to embeddings.jsonl (with dedup: replace existing entry for same hash)
+    // Update embeddings.jsonl: dedup by chunkHash, append new entries
     const embeddingsPath = path.join(indexDir, 'embeddings.jsonl');
-    const line = JSON.stringify({ hash: contentHash, vector });
+    const newLines = l3Chunks.map((c) => JSON.stringify({ hash: c.chunkHash, vector: c.vector, parentId: c.parentId, rootHash: c.rootHash }));
+    let existingLines: string[] = [];
     if (existsSync(embeddingsPath)) {
       const existing = await readFile(embeddingsPath, 'utf-8');
-      const existingLines = existing.trim().split('\n').filter((l) => l.trim());
-      const filtered = existingLines.filter((l) => {
-        try {
-          const rec = JSON.parse(l) as { hash: string };
-          return rec.hash !== contentHash;
-        } catch {
-          return true;
-        }
-      });
-      filtered.push(line);
-      await writeFile(embeddingsPath, filtered.join('\n') + '\n');
-    } else {
-      await writeFile(embeddingsPath, line + '\n');
+      existingLines = existing.trim().split('\n').filter((l) => l.trim());
     }
+    const newHashes = new Set(l3Chunks.map((c) => c.chunkHash));
+    const filtered = existingLines.filter((l) => {
+      try {
+        const rec = JSON.parse(l) as { hash: string };
+        return !newHashes.has(rec.hash);
+      } catch {
+        return true;
+      }
+    });
+    filtered.push(...newLines);
+    await writeFile(embeddingsPath, filtered.join('\n') + '\n');
 
-    // Update BM25 inverted index
+    // Update BM25 inverted index from L0 chunk bodies
     const bm25Path = path.join(indexDir, 'bm25.json');
     let bm25Data: { invertedIndex: Record<string, string[]>; docLengths: Record<string, number> } = { invertedIndex: {}, docLengths: {} };
     if (existsSync(bm25Path)) {
       try {
         const raw = JSON.parse(await readFile(bm25Path, 'utf-8'));
-        // Backward compat: old format was Record<string, string[]>
         if (raw.invertedIndex) {
           bm25Data = raw;
         } else {
@@ -136,13 +169,14 @@ export class DefaultL3Generator implements L3Generator {
         bm25Data = { invertedIndex: {}, docLengths: {} };
       }
     }
-    const terms = buildTerms(l2Artifact);
-    for (const term of terms) {
-      if (!bm25Data.invertedIndex[term]) bm25Data.invertedIndex[term] = [];
-      if (!bm25Data.invertedIndex[term].includes(contentHash)) bm25Data.invertedIndex[term].push(contentHash);
+    for (const c of l3Chunks) {
+      const terms = buildTerms(c.text);
+      for (const term of terms) {
+        if (!bm25Data.invertedIndex[term]) bm25Data.invertedIndex[term] = [];
+        if (!bm25Data.invertedIndex[term].includes(c.chunkHash)) bm25Data.invertedIndex[term].push(c.chunkHash);
+      }
+      bm25Data.docLengths[c.chunkHash] = terms.length;
     }
-    // Store document length for Okapi BM25
-    bm25Data.docLengths[contentHash] = terms.length;
     await writeFile(bm25Path, JSON.stringify(bm25Data, null, 2));
 
     // Update HNSW manifest
@@ -154,7 +188,7 @@ export class DefaultL3Generator implements L3Generator {
       embeddingProvider: provider.id,
       dimension: dim,
       metric: 'cosine',
-      vectorCount: 1,
+      vectorCount: l3Chunks.length,
       createdAt: new Date().toISOString(),
     };
 
@@ -164,7 +198,7 @@ export class DefaultL3Generator implements L3Generator {
         manifest = {
           ...existing,
           indexVersion: existing.indexVersion + 1,
-          vectorCount: existing.vectorCount + 1,
+          vectorCount: existing.vectorCount + l3Chunks.length,
           embeddingModel: model,
           embeddingProvider: provider.id,
           dimension: dim,
@@ -176,7 +210,7 @@ export class DefaultL3Generator implements L3Generator {
     await writeFile(manifestPath, JSON.stringify(manifest, null, 2));
 
     return {
-      vector,
+      chunks: l3Chunks,
       metadata: {
         contentHash,
         model,

@@ -21,6 +21,7 @@ import type { Registry } from '../storage/registry.js';
 import type { CASStorage } from '../storage/cas.js';
 import type { ConfigManager } from '../storage/config.js';
 import type { JobRecord } from '../domain/types.js';
+import { BaseRetineoError } from '../utils/errors.js';
 import { createSSEStream } from './sse.js';
 import { readFile, existsSync } from 'fs';
 import { promisify } from 'util';
@@ -45,6 +46,20 @@ function errorReply(reply: FastifyReply, status: number, code: string, message: 
     error: { code, message, details },
   };
   return reply.status(status).send(body);
+}
+
+function handleKnownError(reply: FastifyReply, err: unknown) {
+  if (err instanceof BaseRetineoError) {
+    return reply.status(err.statusCode).send({
+      error: {
+        code: err.code,
+        message: err.message,
+        details: err.details,
+      },
+    });
+  }
+  const msg = err instanceof Error ? err.message : String(err);
+  return errorReply(reply, 500, 'INTERNAL_ERROR', msg);
 }
 
 export function createHandlers(deps: BridgeHandlersDeps) {
@@ -72,8 +87,7 @@ export function createHandlers(deps: BridgeHandlersDeps) {
           durationMs,
         });
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        return errorReply(reply, 500, 'SEARCH_FAILED', msg);
+        return handleKnownError(reply, err);
       }
     },
 
@@ -103,8 +117,12 @@ export function createHandlers(deps: BridgeHandlersDeps) {
         stream.write('complete', { event: 'complete', assembled });
         stream.close();
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        stream.write('error', { event: 'error', message: msg });
+        if (err instanceof BaseRetineoError) {
+          stream.write('error', { event: 'error', code: err.code, message: err.message });
+        } else {
+          const msg = err instanceof Error ? err.message : String(err);
+          stream.write('error', { event: 'error', message: msg });
+        }
         stream.close();
       }
     },
@@ -126,6 +144,11 @@ export function createHandlers(deps: BridgeHandlersDeps) {
           jobs,
         });
       } catch (err) {
+        if (err instanceof BaseRetineoError) {
+          return reply.status(err.statusCode).send({
+            error: { code: err.code, message: err.message, details: { ...err.details, sourcePath, adapterId } },
+          });
+        }
         const msg = err instanceof Error ? err.message : String(err);
         return errorReply(reply, 422, 'INGEST_FAILED', msg, { sourcePath, adapterId });
       }
@@ -169,8 +192,7 @@ export function createHandlers(deps: BridgeHandlersDeps) {
         };
         return reply.send(body);
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        return errorReply(reply, 500, 'INTERNAL_ERROR', msg);
+        return handleKnownError(reply, err);
       }
     },
 
@@ -191,8 +213,7 @@ export function createHandlers(deps: BridgeHandlersDeps) {
         const buildRaw = await readFileAsync(path.join(objPath, 'node.json'), 'utf-8');
         return reply.send({ node, artifacts, build: JSON.parse(buildRaw) });
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        return errorReply(reply, 500, 'INTERNAL_ERROR', msg);
+        return handleKnownError(reply, err);
       }
     },
 
@@ -211,8 +232,7 @@ export function createHandlers(deps: BridgeHandlersDeps) {
         }
         return reply.send({ nodes, total: nodes.length });
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        return errorReply(reply, 500, 'INTERNAL_ERROR', msg);
+        return handleKnownError(reply, err);
       }
     },
 

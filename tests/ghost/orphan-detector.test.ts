@@ -34,6 +34,7 @@ describe('DefaultOrphanDetector', () => {
       id: `src-${rootHash.slice(0, 8)}`,
       protocol: 'file',
       uri,
+      sourcePath: uri,
       mimeType: 'text/markdown',
       adapterId: 'markdown',
       rawHash: rootHash,

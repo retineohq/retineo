@@ -85,11 +85,13 @@ export class LocalCASStorage implements CASStorage {
       await mkdir(dir, { recursive: true });
     }
 
-    // Persist parentId and sourceRef alongside BuildManifest for ContextNode reconstruction
+    // Persist parentId, sourcePath, sourceRef and semanticLinks alongside BuildManifest for ContextNode reconstruction
     const nodePayload = {
       ...node.build,
       parentId: node.parentId ?? null,
+      sourcePath: node.sourcePath,
       sourceRef: node.sourceRef,
+      semanticLinks: node.semanticLinks ?? [],
     };
     await writeFile(path.join(dir, 'node.json'), JSON.stringify(nodePayload, null, 2));
     await writeFile(path.join(dir, 'content.md'), artifacts.content);
@@ -132,13 +134,17 @@ export class LocalCASStorage implements CASStorage {
     }
 
     const sourceRef = rawManifest.sourceRef as SourceRef | undefined ?? { protocol: 'file', uri: '', mimeType: '' };
+    const sourcePath = (rawManifest.sourcePath as string | undefined) ?? sourceRef.uri ?? '';
+    const semanticLinks = (rawManifest.semanticLinks as ContextNode['semanticLinks']) ?? undefined;
     const node: ContextNode = {
       id: hash,
       sourceRef,
-      parentId: rawManifest.parentId as Hash | undefined,
+      sourcePath,
+      parentId: (rawManifest.parentId as string | undefined) ?? undefined,
       childrenIds: [],
       depth: 0,
       artifacts: {},
+      semanticLinks,
       build: buildManifest,
       createdAt: buildManifest.buildTimestamp,
       updatedAt: buildManifest.buildTimestamp,

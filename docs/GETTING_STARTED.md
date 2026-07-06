@@ -104,7 +104,7 @@ retineo search "pricing objections"
 Expected output:
 
 ```
-Query: "pricing objections" (detected: en, intent: informational)
+Query: "pricing objections" (detected: en, intent: vague)
 ───────────────────────────────
 [1] [[a1b2c3d4]]
     L2: Common pricing objections include budget constraints...
@@ -150,7 +150,7 @@ Response:
 {
   "query": "pricing objections",
   "language": "en",
-  "intent": "informational",
+  "intent": "vague",
   "results": { ... },
   "citations": [...],
   "durationMs": 42

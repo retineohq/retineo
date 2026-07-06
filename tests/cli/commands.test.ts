@@ -15,6 +15,7 @@ function makeDeps(): CLICommandsDeps {
           node: {
             id: 'hash123',
             sourceRef: { protocol: 'file' as const, uri: filePath, mimeType: 'text/plain' },
+            sourcePath: filePath,
             childrenIds: [],
             depth: 0,
             artifacts: {},
@@ -130,6 +131,40 @@ describe('CLICommands', () => {
     const cmds = new CLICommands(deps);
     await cmds.recover('deadbeef');
     expect(log).toHaveBeenCalledWith('Recover failed: deadbeef — not found in registry');
+    log.mockRestore();
+  });
+
+  it('rebuild queues L1 jobs for all sources and deletes index', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const deps = makeDeps();
+    deps.configManager.load = async () => ({
+      dataDir: '/tmp/retineo-rebuild-test',
+      defaultAdapter: '',
+      llmProvider: '',
+      embeddingModel: '',
+      search: {} as any,
+      i18n: {} as any,
+    });
+    deps.registry.listSources = () => [
+      {
+        id: 'src1',
+        protocol: 'file',
+        uri: '/tmp/a.md',
+        mimeType: 'text/markdown',
+        adapterId: 'markdown',
+        rawHash: 'hash1',
+        rootHash: 'hash1',
+        lastSeenAt: new Date().toISOString(),
+      },
+    ];
+    const enqueueL1 = vi.fn();
+    deps.pipeline.enqueueL1 = enqueueL1;
+
+    const cmds = new CLICommands(deps);
+    await cmds.rebuild({});
+    expect(enqueueL1).toHaveBeenCalledWith('hash1', 'src1');
+    const output = log.mock.calls.find((c) => typeof c[0] === 'string' && c[0].includes('Queued'))?.[0] as string;
+    expect(output).toContain('Queued 1 source(s)');
     log.mockRestore();
   });
 

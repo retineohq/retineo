@@ -31,7 +31,7 @@ export interface Registry {
   getSourceByRootHash(rootHash: Hash): SourceRecord | null;
   getSourcesByRootHash(rootHash: Hash): SourceRecord[];
   updateSource(id: string, updates: Partial<SourceRecord>): void;
-  updateSourcePath(id: string, uri: string): void;
+  updateSourcePath(id: string, uri: string, sourcePath?: string): void;
   deleteSource(id: string): void;
   listSources(): SourceRecord[];
 
@@ -63,6 +63,7 @@ export interface Registry {
   recoverOrphan(hash: Hash): void;
   listOrphans(): OrphanRecord[];
   purgeOrphansOlderThan(days: number): number;
+  isOrphan(hash: Hash): boolean;
 }
 
 function rowToSource(row: Record<string, unknown>): SourceRecord {
@@ -70,6 +71,7 @@ function rowToSource(row: Record<string, unknown>): SourceRecord {
     id: row.id as string,
     protocol: row.protocol as string,
     uri: row.uri as string,
+    sourcePath: row.source_path as string,
     mimeType: row.mime_type as string,
     adapterId: row.adapter_id as string,
     rawHash: row.raw_hash as Hash,
@@ -147,13 +149,14 @@ export class SQLiteRegistry implements Registry {
 
   insertSource(source: SourceRecord): void {
     const stmt = this.db.prepare(
-      `INSERT INTO sources (id, protocol, uri, mime_type, adapter_id, raw_hash, root_hash, last_seen_at, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`
+      `INSERT INTO sources (id, protocol, uri, source_path, mime_type, adapter_id, raw_hash, root_hash, last_seen_at, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`
     );
     stmt.run(
       source.id,
       source.protocol,
       source.uri,
+      source.sourcePath,
       source.mimeType,
       source.adapterId,
       source.rawHash,
@@ -193,6 +196,7 @@ export class SQLiteRegistry implements Registry {
     const values: unknown[] = [];
     if (updates.protocol !== undefined) { sets.push('protocol = ?'); values.push(updates.protocol); }
     if (updates.uri !== undefined) { sets.push('uri = ?'); values.push(updates.uri); }
+    if (updates.sourcePath !== undefined) { sets.push('source_path = ?'); values.push(updates.sourcePath); }
     if (updates.mimeType !== undefined) { sets.push('mime_type = ?'); values.push(updates.mimeType); }
     if (updates.adapterId !== undefined) { sets.push('adapter_id = ?'); values.push(updates.adapterId); }
     if (updates.rawHash !== undefined) { sets.push('raw_hash = ?'); values.push(updates.rawHash); }
@@ -204,10 +208,10 @@ export class SQLiteRegistry implements Registry {
     stmt.run(...values);
   }
 
-  updateSourcePath(id: string, uri: string): void {
+  updateSourcePath(id: string, uri: string, sourcePath?: string): void {
     this.db.prepare(
-      `UPDATE sources SET uri = ?, updated_at = datetime('now') WHERE id = ?`
-    ).run(uri, id);
+      `UPDATE sources SET uri = ?, source_path = ?, updated_at = datetime('now') WHERE id = ?`
+    ).run(uri, sourcePath ?? uri, id);
   }
 
   deleteSource(id: string): void {
@@ -457,5 +461,12 @@ export class SQLiteRegistry implements Registry {
       `DELETE FROM orphaned_objects WHERE scheduled_purge_at < ? AND recovered_at IS NULL`
     ).run(cutoff);
     return result.changes;
+  }
+
+  isOrphan(hash: Hash): boolean {
+    const row = this.db.prepare(
+      `SELECT 1 FROM orphaned_objects WHERE hash = ? AND recovered_at IS NULL`
+    ).get(hash) as { '1': number } | undefined;
+    return row !== undefined;
   }
 }

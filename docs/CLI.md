@@ -100,6 +100,21 @@ Rebuild flags affect the whole collection and cannot be combined with a `filePat
 - `--rebuild-l2` deletes cached `L2.json` and re-queues L2→L3 for every source.
 - `--rebuild-l3` deletes the global `index/` directory and re-queues L3 for every node that already has L2.
 
+### `retineo rebuild`
+
+Full collection rebuild. Use after schema changes (for example, when L3 indexing target changed) or when you want a clean recompile.
+
+```bash
+retineo rebuild
+```
+
+What it does:
+1. Deletes the global `index/` directory (`embeddings.jsonl`, `hnsw.bin`, `hnsw.manifest.json`, `bm25.json`).
+2. Deletes cached `L1.md` / `L1.index.json` and `L2.json` for every registered source.
+3. Queues `GENERATE_L1` jobs for all sources. The pipeline naturally chains `L1` → `L2` → `L3`.
+
+> **Note:** This is a destructive local operation. It only affects compiled artifacts in the data directory; original source files are untouched.
+
 ### `retineo config set|get|list`
 
 Read or write config values.

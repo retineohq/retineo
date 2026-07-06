@@ -72,6 +72,7 @@ export async function startBridgeServices(): Promise<RunningBridgeServices> {
   const retrievalService = new DefaultRetrievalService({
     embeddingProvider: embedder,
     casStorage: cas,
+    registry,
     indexDir,
     config: config.search,
     logger,

@@ -57,6 +57,7 @@ export class DefaultNodeBuilder implements NodeBuilder {
         uri: source.uri,
         mimeType: source.mimeType,
       },
+      sourcePath: source.sourcePath,
       childrenIds: [],
       depth: 0,
       artifacts: {
@@ -67,6 +68,7 @@ export class DefaultNodeBuilder implements NodeBuilder {
           charCount: normalized.content.length,
         },
       },
+      semanticLinks: [],
       build,
       createdAt: now,
       updatedAt: now,
@@ -91,7 +93,8 @@ export class DefaultNodeBuilder implements NodeBuilder {
           uri: source.uri,
           mimeType: source.mimeType,
         },
-        parentId: parent.id,
+        sourcePath: parent.sourcePath,
+        parentId: parent.sourcePath,
         childrenIds: [],
         depth: parent.depth + 1,
         artifacts: {
@@ -102,6 +105,7 @@ export class DefaultNodeBuilder implements NodeBuilder {
             charCount: seg.content.length,
           },
         },
+        semanticLinks: [],
         build,
         createdAt: now,
         updatedAt: now,

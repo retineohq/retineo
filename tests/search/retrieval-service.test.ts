@@ -9,6 +9,7 @@ import os from 'os';
 import { DefaultRetrievalService } from '../../packages/core/src/search/retrieval-service.js';
 import { MockLLMProvider } from '../../packages/core/src/llm/providers/mock.js';
 import { LocalCASStorage } from '../../packages/core/src/storage/cas.js';
+import { SQLiteRegistry } from '../../packages/core/src/storage/registry.js';
 import type { AnalyzedQuery } from '../../packages/core/src/search/query-analyzer.js';
 import type { L2Artifact } from '../../packages/core/src/domain/types.js';
 import type { SearchConfig } from '../../packages/core/src/storage/config.js';
@@ -52,11 +53,11 @@ async function seedIndex(indexDir: string, cas: LocalCASStorage, provider: MockL
 
   // Write embeddings.jsonl
   const lines = [
-    JSON.stringify({ hash: 'hash-a', vector: veca }),
-    JSON.stringify({ hash: 'hash-b', vector: vecb }),
-    JSON.stringify({ hash: 'hash-c', vector: vecc }),
-    JSON.stringify({ hash: 'hash-d', vector: vecd }),
-    JSON.stringify({ hash: 'hash-e', vector: vece }),
+    JSON.stringify({ hash: 'hash-a', vector: veca, parentId: '/docs/cats.md', rootHash: 'hash-a' }),
+    JSON.stringify({ hash: 'hash-b', vector: vecb, parentId: '/docs/dogs.md', rootHash: 'hash-b' }),
+    JSON.stringify({ hash: 'hash-c', vector: vecc, parentId: '/docs/birds.md', rootHash: 'hash-c' }),
+    JSON.stringify({ hash: 'hash-d', vector: vecd, parentId: '/docs/fish.md', rootHash: 'hash-d' }),
+    JSON.stringify({ hash: 'hash-e', vector: vece, parentId: '/docs/cats-ru.md', rootHash: 'hash-e' }),
   ];
   writeFileSync(path.join(indexDir, 'embeddings.jsonl'), lines.join('\n') + '\n', 'utf-8');
 
@@ -275,5 +276,47 @@ describe('DefaultRetrievalService', () => {
     const result = await service.search(makeQuery('cats'));
     expect(result.trace.steps.length).toBeGreaterThan(0);
     expect(result.trace.durationMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it('marks deleted sources as ghosts and skips L0 read', async () => {
+    const dbPath = path.join(tmpDir, 'retineo.sqlite');
+    const registry = new SQLiteRegistry(dbPath);
+    registry.insertSource({
+      id: 'src-a',
+      protocol: 'file',
+      uri: '/docs/cats.md',
+      sourcePath: '/docs/cats.md',
+      mimeType: 'text/markdown',
+      adapterId: 'text',
+      rawHash: 'hash-a',
+      rootHash: 'hash-a',
+      lastSeenAt: new Date().toISOString(),
+    });
+    registry.insertOrphan('hash-a', 'src-a', '/docs/cats.md');
+
+    const service = new DefaultRetrievalService({
+      embeddingProvider: provider,
+      casStorage: cas,
+      registry,
+      indexDir,
+      config: mockConfig,
+    });
+    const query: AnalyzedQuery = {
+      originalQuery: 'cats',
+      language: 'en',
+      confidence: 1,
+      intent: 'precision',
+      enrichedQuery: 'cats',
+      entities: ['cats'],
+      signals: [],
+    };
+    const result = await service.search(query, { mode: 'semantic', topK: 5 });
+    const ghost = result.selected.find((c) => c.nodeId === 'hash-a');
+    expect(ghost).toBeDefined();
+    expect(ghost?.isGhost).toBe(true);
+    expect(ghost?.sourcePath).toBe('/docs/cats.md');
+    expect(ghost?.l0Preview).toBeUndefined();
+    expect(result.citations.find((c) => c.nodeId === 'hash-a')?.isGhost).toBe(true);
+    registry.close();
   });
 });

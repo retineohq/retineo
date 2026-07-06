@@ -13,6 +13,7 @@ function makeSource(): SourceRecord {
     id: 'test.md',
     protocol: 'file',
     uri: '/tmp/test.md',
+    sourcePath: 'test.md',
     mimeType: 'text/markdown',
     adapterId: 'file',
     rawHash: 'r'.repeat(64),
@@ -67,8 +68,8 @@ describe('buildSegments', () => {
 
     expect(children.length).toBe(2);
     expect(children[0].depth).toBe(1);
-    expect(children[0].parentId).toBe(root.id);
-    expect(children[1].parentId).toBe(root.id);
+    expect(children[0].parentId).toBe(root.sourcePath);
+    expect(children[1].parentId).toBe(root.sourcePath);
     expect(children[0].id).not.toBe(children[1].id);
   });
 

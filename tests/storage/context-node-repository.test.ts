@@ -34,6 +34,7 @@ describe('DefaultContextNodeRepository', () => {
     return {
       id: hash,
       sourceRef: { protocol: 'file', uri: '/test.md', mimeType: 'text/markdown' },
+      sourcePath: '/test.md',
       childrenIds: [],
       depth: 0,
       artifacts: {},
@@ -63,6 +64,7 @@ describe('DefaultContextNodeRepository', () => {
       id: `src-${hash.slice(0, 8)}`,
       protocol: 'file',
       uri: sourceUri,
+      sourcePath: sourceUri,
       mimeType: 'text/markdown',
       adapterId: 'markdown',
       rawHash: hash,
@@ -166,6 +168,7 @@ describe('DefaultContextNodeRepository', () => {
         id: `src-${childHash.slice(0, 8)}`,
         protocol: 'file',
         uri: `/${content}.md`,
+        sourcePath: `/${content}.md`,
         mimeType: 'text/markdown',
         adapterId: 'markdown',
         rawHash: childHash,

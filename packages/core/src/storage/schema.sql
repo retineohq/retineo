@@ -6,6 +6,7 @@ CREATE TABLE sources (
     id          TEXT PRIMARY KEY,           -- sourceId (e.g., filename or UUID)
     protocol    TEXT NOT NULL,              -- file | http | https
     uri         TEXT NOT NULL,              -- full path or URL
+    source_path TEXT NOT NULL,              -- vault-relative human-readable path
     mime_type   TEXT NOT NULL,
     adapter_id  TEXT NOT NULL,
     raw_hash    TEXT NOT NULL,              -- SHA-256 of original file

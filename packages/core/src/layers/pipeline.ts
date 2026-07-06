@@ -6,11 +6,12 @@
 import type { CASStorage } from '../storage/cas.js';
 import type { Registry } from '../storage/registry.js';
 import type { ContextNodeRepository } from '../storage/context-node-repository.js';
-import type { JobRecord, L2Artifact, GeneratorInfo } from '../domain/types.js';
+import type { JobRecord, GeneratorInfo } from '../domain/types.js';
 import type { LLMProvider, EmbeddingProvider } from '../llm/provider.js';
 import type { L1Generator } from './l1-generator.js';
 import type { L2Generator } from './l2-generator.js';
 import type { L3Generator } from './l3-generator.js';
+import type { RetrievalService } from '../search/retrieval-service.js';
 import { randomUUID } from 'crypto';
 import path from 'path';
 import type { Logger } from '../utils/logger.js';
@@ -32,6 +33,7 @@ export interface CompilationPipelineDeps {
   l3Generator: L3Generator;
   llmProvider: LLMProvider | null;
   embeddingProvider: EmbeddingProvider | null;
+  retrievalService?: RetrievalService;
   dataDir: string;
   logger?: Logger;
 }
@@ -173,12 +175,21 @@ export class DefaultCompilationPipeline implements CompilationPipeline {
     const node = await contextNodeRepository.loadByHash(nodeHash);
     if (!node) throw new Error(`Node ${nodeHash} not found in CAS`);
 
-    // Read L2 from CAS
+    // Read L0 body and L1 chunks from CAS
     const objPath = cas.getObjectPath(nodeHash);
-    const l2Artifact = JSON.parse(await readFile(path.join(objPath, 'L2.json'), 'utf-8')) as L2Artifact;
+    const content = await readFile(path.join(objPath, 'content.md'), 'utf-8');
+    const l1Index = JSON.parse(await readFile(path.join(objPath, 'L1.index.json'), 'utf-8')) as { chunks: import('./l1-generator.js').Chunk[] };
     const indexDir = path.join(dataDir, 'index');
 
-    await l3Generator.generate(l2Artifact, embeddingProvider, nodeHash, indexDir);
+    const l3Result = await l3Generator.generate(
+      { content, chunks: l1Index.chunks ?? [], sourcePath: node.sourcePath, rootHash: nodeHash },
+      embeddingProvider,
+      nodeHash,
+      indexDir
+    );
+
+    // Keep HNSW index in sync with new L3 vectors
+    await this.deps.retrievalService?.addVectors(l3Result.chunks);
 
     // Update build manifest via ContextNodeRepository
     node.build.nodeVersion++;

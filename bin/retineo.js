@@ -179,6 +179,7 @@ async function main() {
   const retrievalService = new DefaultRetrievalService({
     embeddingProvider: embedder || new (await import('../dist/llm/providers/mock.js')).MockLLMProvider({ id: 'mock-embedder', type: 'mock', dimension: 384 }),
     casStorage: cas,
+    registry,
     indexDir: path.join(resolvedDataDir, 'index'),
     config: config.search,
     logger,

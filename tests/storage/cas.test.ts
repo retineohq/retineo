@@ -27,6 +27,7 @@ function makeNode(id: string): ContextNode {
   return {
     id,
     sourceRef: { protocol: 'file', uri: '/dev/null', mimeType: 'text/plain' },
+    sourcePath: '/dev/null',
     childrenIds: [],
     depth: 0,
     build: {

@@ -95,6 +95,19 @@ export async function startDaemonServices(): Promise<DaemonServices> {
   const l3Generator = new DefaultL3Generator();
 
   const contextNodeRepository = new DefaultContextNodeRepository(cas, registry);
+
+  // Search
+  const queryAnalyzer = new DefaultQueryAnalyzer({ searchConfig: config.search });
+  const retrievalService = new DefaultRetrievalService({
+    embeddingProvider: embedder,
+    casStorage: cas,
+    registry,
+    indexDir,
+    config: config.search,
+    logger,
+  });
+  const contextAssembler = new DefaultContextAssembler({ config: config.search });
+
   const pipeline = new DefaultCompilationPipeline({
     cas,
     registry,
@@ -104,20 +117,10 @@ export async function startDaemonServices(): Promise<DaemonServices> {
     l3Generator,
     llmProvider,
     embeddingProvider: embedder,
+    retrievalService,
     dataDir,
     logger,
   });
-
-  // Search
-  const queryAnalyzer = new DefaultQueryAnalyzer({ searchConfig: config.search });
-  const retrievalService = new DefaultRetrievalService({
-    embeddingProvider: embedder,
-    casStorage: cas,
-    indexDir,
-    config: config.search,
-    logger,
-  });
-  const contextAssembler = new DefaultContextAssembler({ config: config.search });
 
   // Ingestion
   const ingestionService = new DefaultIngestionService(

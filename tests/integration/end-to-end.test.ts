@@ -55,6 +55,7 @@ function makeSharedDeps(): BridgeHandlersDeps & MCPHandlersDeps {
           node: {
             id: 'hash123',
             sourceRef: { protocol: 'file' as const, uri: filePath, mimeType: 'text/plain' },
+            sourcePath: filePath,
             childrenIds: [],
             depth: 0,
             artifacts: {},
@@ -66,7 +67,7 @@ function makeSharedDeps(): BridgeHandlersDeps & MCPHandlersDeps {
       },
     },
     registry: {
-      listSources: () => sources.map((s) => ({ id: s.id, protocol: 'file', uri: s.uri, mimeType: 'text/plain', adapterId: 'text', rawHash: 'mock', rootHash: 'mock', lastSeenAt: new Date().toISOString() })),
+      listSources: () => sources.map((s) => ({ id: s.id, protocol: 'file', uri: s.uri, sourcePath: s.uri, mimeType: 'text/plain', adapterId: 'text', rawHash: 'mock', rootHash: 'mock', lastSeenAt: new Date().toISOString() })),
       getPendingJobs: () => [],
     } as any,
     cas: { getObjectPath: () => '', exists: () => false } as any,

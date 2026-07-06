@@ -52,7 +52,7 @@ function makeDeps(opts: { jobsAfterDelay?: FakeJob[] } = {}) {
       version: '0.1.0',
       ingestionService: {
         async ingestFile() {
-          return { node: { id: 'node-1', sourceRef: { uri: '/tmp/test.txt' } } } as any;
+          return { node: { id: 'node-1', sourceRef: { uri: '/tmp/test.txt' }, sourcePath: '/tmp/test.txt' } } as any;
         },
       },
       retrievalService: { async search() { return {} as any; } },

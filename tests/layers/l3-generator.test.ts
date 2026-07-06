@@ -8,7 +8,7 @@ import path from 'path';
 import os from 'os';
 import { DefaultL3Generator, bruteForceSearch } from '../../packages/core/src/layers/l3-generator.js';
 import { MockLLMProvider } from '../../packages/core/src/llm/providers/mock.js';
-import type { L2Artifact } from '../../packages/core/src/domain/types.js';
+import type { L3Input } from '../../packages/core/src/layers/l3-generator.js';
 
 describe('DefaultL3Generator', () => {
   let tmpDir: string;
@@ -25,18 +25,23 @@ describe('DefaultL3Generator', () => {
     rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  const l2: L2Artifact = {
-    summary: 'A document about machine learning.',
-    concepts: ['neural networks', 'deep learning', 'training'],
-    entities: ['OpenAI', 'Google'],
-    claims: ['AI is advancing rapidly.'],
-    relations: [{ source: 'neural networks', target: 'deep learning', type: 'subset_of' }],
+  const input: L3Input = {
+    content: 'A document about machine learning. Neural networks and deep learning are used for training.',
+    chunks: [{
+      id: 'chunk-001',
+      lineStart: 0,
+      lineEnd: 0,
+      charStart: 0,
+      charEnd: 95,
+    }],
+    sourcePath: 'ml.md',
   };
 
   it('generates embedding and writes jsonl + bm25 + manifest', async () => {
-    const result = await gen.generate(l2, provider, 'abc123', indexDir);
+    const result = await gen.generate(input, provider, 'abc123', indexDir);
 
-    expect(result.vector).toHaveLength(384);
+    expect(result.chunks.length).toBe(1);
+    expect(result.chunks[0].vector).toHaveLength(384);
     expect(result.metadata.contentHash).toBe('abc123');
     expect(result.metadata.model).toBe('test');
 
@@ -50,56 +55,44 @@ describe('DefaultL3Generator', () => {
   });
 
   it('increments manifest vectorCount on subsequent calls', async () => {
-    await gen.generate(l2, provider, 'hash1', indexDir);
-    await gen.generate(l2, provider, 'hash2', indexDir);
+    await gen.generate(input, provider, 'hash1', indexDir);
+    await gen.generate(input, provider, 'hash2', indexDir);
 
     const manifestPath = path.join(indexDir, 'hnsw.manifest.json');
     const manifest = JSON.parse(require('fs').readFileSync(manifestPath, 'utf-8'));
     expect(manifest.vectorCount).toBe(2);
   });
 
-  it('bm25 index contains terms from L2', async () => {
-    await gen.generate(l2, provider, 'hash1', indexDir);
+  it('bm25 index contains terms from L0 body', async () => {
+    await gen.generate(input, provider, 'hash1', indexDir);
 
     const bm25Path = path.join(indexDir, 'bm25.json');
     const bm25 = JSON.parse(require('fs').readFileSync(bm25Path, 'utf-8'));
     const invertedIndex = bm25.invertedIndex ?? bm25; // backward compat
     expect(Object.keys(invertedIndex).length).toBeGreaterThan(0);
-    expect(invertedIndex['learning']).toContain('hash1');
-  });
-
-  it('includes conceptsEn in bm25 terms', async () => {
-    const l2WithEn: L2Artifact = {
-      ...l2,
-      language: 'ru',
-      concepts: ['нейросети', 'глубокое обучение'],
-      conceptsEn: ['neural networks', 'deep learning'],
-    };
-    await gen.generate(l2WithEn, provider, 'hash2', indexDir);
-
-    const bm25Path = path.join(indexDir, 'bm25.json');
-    const bm25 = JSON.parse(require('fs').readFileSync(bm25Path, 'utf-8'));
-    const invertedIndex = bm25.invertedIndex ?? bm25;
-    expect(invertedIndex['networks']).toContain('hash2');
-    expect(invertedIndex['learning']).toContain('hash2');
+    expect(invertedIndex['learning']).toBeDefined();
+    expect(invertedIndex['learning'].length).toBeGreaterThan(0);
   });
 
   it('preserves Cyrillic tokens in bm25 index', async () => {
-    const l2Ru: L2Artifact = {
-      summary: 'Документ о кошках.',
-      language: 'ru',
-      concepts: ['кошки', 'фелины'],
-      entities: [],
-      claims: [],
-      relations: [],
+    const ruInput: L3Input = {
+      content: 'Документ о кошках. Кошки — это фелины.',
+      chunks: [{
+        id: 'chunk-001',
+        lineStart: 0,
+        lineEnd: 0,
+        charStart: 0,
+        charEnd: 38,
+      }],
+      sourcePath: 'cats.md',
     };
-    await gen.generate(l2Ru, provider, 'hash3', indexDir);
+    await gen.generate(ruInput, provider, 'hash3', indexDir);
 
     const bm25Path = path.join(indexDir, 'bm25.json');
     const bm25 = JSON.parse(require('fs').readFileSync(bm25Path, 'utf-8'));
     const invertedIndex = bm25.invertedIndex ?? bm25;
-    expect(invertedIndex['кошки']).toContain('hash3');
-    expect(invertedIndex['фелины']).toContain('hash3');
+    expect(invertedIndex['кошках']).toBeDefined();
+    expect(invertedIndex['кошках'].length).toBeGreaterThan(0);
   });
 });
 
@@ -118,25 +111,33 @@ describe('bruteForceSearch', () => {
     rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  const l2a: L2Artifact = {
-    summary: 'Document A about cats.',
-    concepts: ['cats', 'felines'],
-    entities: [],
-    claims: [],
-    relations: [],
+  const inputA: L3Input = {
+    content: 'Document A about cats. Cats are felines.',
+    chunks: [{
+      id: 'chunk-001',
+      lineStart: 0,
+      lineEnd: 0,
+      charStart: 0,
+      charEnd: 40,
+    }],
+    sourcePath: 'a.md',
   };
 
-  const l2b: L2Artifact = {
-    summary: 'Document B about dogs.',
-    concepts: ['dogs', 'canines'],
-    entities: [],
-    claims: [],
-    relations: [],
+  const inputB: L3Input = {
+    content: 'Document B about dogs. Dogs are canines.',
+    chunks: [{
+      id: 'chunk-001',
+      lineStart: 0,
+      lineEnd: 0,
+      charStart: 0,
+      charEnd: 40,
+    }],
+    sourcePath: 'b.md',
   };
 
   it('returns topK results sorted by cosine similarity', async () => {
-    await gen.generate(l2a, provider, 'hash-a', indexDir);
-    await gen.generate(l2b, provider, 'hash-b', indexDir);
+    await gen.generate(inputA, provider, 'hash-a', indexDir);
+    await gen.generate(inputB, provider, 'hash-b', indexDir);
 
     const queryVec = (await provider.embed(['cats and felines']))[0];
     const results = await bruteForceSearch(indexDir, queryVec, 2);

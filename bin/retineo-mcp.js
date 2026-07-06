@@ -81,6 +81,7 @@ async function main() {
   const retrievalService = new DefaultRetrievalService({
     embeddingProvider: embedder,
     casStorage: cas,
+    registry,
     indexDir: path.join(dataDir, 'index'),
     config: config.search,
     logger,

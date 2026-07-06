@@ -35,6 +35,7 @@ describe('DefaultGhostRecoveryService', () => {
     const node: ContextNode = {
       id: hash,
       sourceRef: { protocol: 'file', uri: sourceUri, mimeType: 'text/markdown' },
+      sourcePath: sourceUri,
       childrenIds: [],
       depth: 0,
       artifacts: {},
@@ -59,6 +60,7 @@ describe('DefaultGhostRecoveryService', () => {
       id: `src-${hash.slice(0, 8)}`,
       protocol: 'file',
       uri: sourceUri,
+      sourcePath: sourceUri,
       mimeType: 'text/markdown',
       adapterId: 'markdown',
       rawHash: hash,

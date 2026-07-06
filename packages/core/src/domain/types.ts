@@ -15,6 +15,7 @@ export interface SourceRecord {
   id: string;
   protocol: string;
   uri: string;
+  sourcePath: string; // vault-relative path, human-readable
   mimeType: string;
   adapterId: string;
   rawHash: Hash;      // SHA-256 of original file
@@ -31,10 +32,17 @@ export interface SegmentRecord {
   parentHash: Hash | null;
 }
 
+export interface SemanticLink {
+  targetHash: Hash;
+  targetPath: string;
+  reason: string;
+}
+
 export interface ContextNode {
   id: Hash;           // contentHash
   sourceRef: SourceRef;
-  parentId?: Hash;
+  sourcePath: string; // vault-relative path, human-readable
+  parentId?: string;  // sourcePath of parent (for segments/chunks)
   childrenIds: Hash[];
   depth: number;
   artifacts: {
@@ -42,6 +50,7 @@ export interface ContextNode {
     l1?: L1Artifact;
     l2?: L2Artifact;
   };
+  semanticLinks?: SemanticLink[];
   build: BuildManifest;
   createdAt: string;
   updatedAt: string;

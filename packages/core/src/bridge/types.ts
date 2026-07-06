@@ -79,6 +79,8 @@ export interface CitationDTO {
   content: string;
   span?: { start: number; end: number };
   sourceRef?: { protocol: string; uri: string; mimeType: string };
+  sourcePath?: string;
+  isGhost?: boolean;
 }
 
 export interface BridgeError {

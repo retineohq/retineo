@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.5.0] - 2026-07-06
+
+### Changed
+- **L3 indexes L0 body, not L2 summary:** `DefaultL3Generator` now reads the raw L0 content and L1 chunks for embedding. Search returns citations from original text instead of summary.
+- **HNSW is the real search path:** `DefaultRetrievalService` loads `hnsw.bin` at startup and uses it for semantic/hybrid queries. New vectors are added to the index immediately after each `GENERATE_L3` job.
+- **Data contract:** `ContextNode` carries `sourcePath`, `parentId`, and optional `semanticLinks`. `node.json` persists these fields alongside `BuildManifest`.
+- **Ghost sources in search:** deleted sources are still returned by search with `isGhost = true`; CLI search shows 👻 next to ghost results.
+
+### Added
+- CLI command `retineo rebuild` — deletes the global `index/` directory and cached L1/L2 artifacts, then re-queues compilation for all sources.
+- Type `SemanticLink` (`targetHash`, `targetPath`, `reason`) and optional `semanticLinks?: SemanticLink[]` on `ContextNode` for future Pro/Plugin L4 features.
+
+### Fixed
+- `llm/factory.ts` now actually acquires/releases the `RateLimiter` semaphore inside `wrapWithCircuitBreaker`.
+- `storage/secrets.ts` throws `CONFIG_SECRET_NOT_FOUND` instead of silently returning an empty string for missing secrets.
+- `llm/providers/ollama.ts` no longer hardcodes a 4096 embedding dimension default.
+
+### Documentation
+- Updated `README.md`, `ARCHITECTURE.md`, `CLI.md`, `SEARCH.md`, `PERFORMANCE.md`, `API.md`, `INSTALL.md`, and `structure.md` to match the new L3/HNSW/ghost behavior and version 0.5.0.
+
+### Tests
+- 413 tests passing, 14 skipped.
+
 ## [0.4.5] - 2026-06-27
 
 ### Fixed

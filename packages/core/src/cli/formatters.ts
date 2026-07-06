@@ -12,6 +12,7 @@ interface DocHitPayload {
   score: number;
   l2Summary: string;
   navTree: Section[] | null;
+  isGhost?: boolean;
 }
 
 export function formatSearchResult(res: SearchResponse & { documentHits?: DocHitPayload[] }, options?: { json?: boolean }): string {
@@ -26,7 +27,8 @@ export function formatSearchResult(res: SearchResponse & { documentHits?: DocHit
   if (res.documentHits && res.documentHits.length > 0) {
     for (const doc of res.documentHits) {
       const sourceName = doc.sourcePath.split('/').pop() ?? doc.sourcePath;
-      lines.push(`Document ${sourceName} (score: ${doc.score.toFixed(2)})`);
+      const ghostMarker = doc.isGhost ? '👻 ' : '';
+      lines.push(`Document ${ghostMarker}${sourceName} (score: ${doc.score.toFixed(2)})`);
       if (doc.navTree && doc.navTree.length > 0) {
         renderSections(doc.navTree, lines, '');
       } else {
@@ -38,7 +40,8 @@ export function formatSearchResult(res: SearchResponse & { documentHits?: DocHit
     // Fallback: old citation format
     for (let i = 0; i < res.results.selected.length; i++) {
       const c = res.results.selected[i];
-      lines.push(`[${i + 1}] [[${c.nodeId.slice(0, 8)}]]`);
+      const ghostMarker = c.isGhost ? '👻 ' : '';
+      lines.push(`[${i + 1}] ${ghostMarker}[[${c.nodeId.slice(0, 8)}]]`);
       lines.push(`    L2: ${c.l2Summary ?? c.l1Preview ?? c.l0Preview ?? 'N/A'}`);
       if (c.lineRange) {
         lines.push(`    Citation: lines ${c.lineRange.start}-${c.lineRange.end}`);

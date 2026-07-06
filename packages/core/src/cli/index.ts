@@ -68,6 +68,15 @@ export function createCLI(deps: CLICommandsDeps): Command {
       await commands.compile(filePath, { layer: options?.layer, provider: options?.provider, rebuildL1: options?.rebuildL1, rebuildL2: options?.rebuildL2, rebuildL3: options?.rebuildL3, watch: options?.watch, timeout: options?.timeout });
     });
 
+  program
+    .command('rebuild')
+    .description('Delete the search index and re-compile L1/L2/L3 for all known sources')
+    .option('-w, --watch', 'Block until all queued jobs are COMPLETED')
+    .option('-t, --timeout <seconds>', 'Watch timeout in seconds (default 1800)', parseInt)
+    .action(async (options: { watch?: boolean; timeout?: number }) => {
+      await commands.rebuild({ watch: options.watch, timeout: options.timeout });
+    });
+
   const configCmd = program.command('config').description('Read or write configuration values');
 
   configCmd

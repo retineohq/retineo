@@ -121,9 +121,9 @@ Fast **rule-based** classification runs first (<1ms). If no rule matches and an 
 
 ### L3 Semantic Search
 
-Reads `index/embeddings.jsonl` (produced by `DefaultL3Generator`) and performs **brute-force cosine similarity**.
+Loads the `hnsw.bin` index (built from `index/embeddings.jsonl` by `DefaultL3Generator`) and performs **HNSW approximate nearest neighbor search**. Distance is converted to similarity (`score = 1 - distance`).
 
-> **MVP simplification**: O(N) brute-force is acceptable for <10K documents (<100ms). Replace with HNSW or vector DB for production scale.
+The index is loaded or built automatically when `DefaultRetrievalService` starts. New vectors are added to the index immediately after each successful `GENERATE_L3` job.
 
 ### Hybrid Mode
 

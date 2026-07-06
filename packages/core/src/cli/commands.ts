@@ -185,11 +185,10 @@ export class CLICommands {
       score: number;
       l2Summary: string;
       navTree: L1Index['sections'] | null;
+      isGhost?: boolean;
     }> = [];
     for (const c of results.selected) {
-      const sources = this.deps.registry.listSources();
-      const source = sources.find((s) => s.rootHash === c.nodeId);
-      const sourcePath = source?.uri ?? c.nodeId;
+      const sourcePath = c.sourcePath ?? c.nodeId;
 
       // Load L1 index for navigation tree
       let sections: L1Index['sections'] | null = null;
@@ -212,6 +211,7 @@ export class CLICommands {
         score: c.score,
         l2Summary: c.l2Summary ?? '',
         navTree: sections,
+        isGhost: c.isGhost,
       });
     }
 
@@ -265,6 +265,38 @@ export class CLICommands {
       },
     };
     console.log(formatStatus(status));
+  }
+
+  async rebuild(options?: CompileCLIOptions): Promise<void> {
+    const config = await this.deps.configManager.load();
+    const { rmSync, existsSync } = await import('fs');
+    const pathMod = await import('path');
+
+    const indexDir = pathMod.join(config.dataDir, 'index');
+    if (existsSync(indexDir)) {
+      rmSync(indexDir, { recursive: true, force: true });
+    }
+
+    const sources = this.deps.registry.listSources();
+    let queued = 0;
+    for (const src of sources) {
+      const nodeHash = src.rootHash;
+      if (!nodeHash) continue;
+      const objPath = this.deps.cas.getObjectPath(nodeHash);
+      for (const file of ['L1.md', 'L1.index.json', 'L2.json']) {
+        const p = pathMod.join(objPath, file);
+        if (existsSync(p)) rmSync(p);
+      }
+      this.deps.pipeline.enqueueL1(nodeHash, src.id);
+      queued++;
+    }
+    console.log(`Queued ${queued} source(s) for full rebuild`);
+
+    if (options?.watch) {
+      const allPending = this.deps.registry.getPendingJobs(100);
+      const startIds = new Set(allPending.map((j) => j.id));
+      await this.watchAnyJobCompletion(startIds, { timeoutSec: options.timeout ?? 1800 });
+    }
   }
 
   async compile(filePath?: string, options?: CompileCLIOptions): Promise<void> {

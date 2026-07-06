@@ -55,6 +55,7 @@ export class DefaultIngestionService implements IngestionService {
 
   async ingestFile(filePath: string): Promise<IngestFileResult> {
     const absolutePath = path.resolve(filePath);
+    const sourcePath = filePath;
     this.logger.info('ingest.start', { sourcePath: absolutePath });
     const rawBuffer = await readFile(absolutePath);
     const rawHash = this.computeHash(rawBuffer);
@@ -89,6 +90,7 @@ export class DefaultIngestionService implements IngestionService {
           node: {
             id: rootHash,
             sourceRef: { protocol: 'file', uri: absolutePath, mimeType: existing.mimeType },
+            sourcePath,
             childrenIds: [],
             depth: 0,
             artifacts: {},
@@ -101,7 +103,7 @@ export class DefaultIngestionService implements IngestionService {
       } else {
         // Same content, different path — update sourcePath
         this.logger.info('ingest.update.path', { sourcePath: absolutePath, oldPath: existing.uri, contentHash });
-        this.registry.updateSourcePath(existing.id, absolutePath);
+        this.registry.updateSourcePath(existing.id, absolutePath, sourcePath);
         console.log(`Updated source path: ${existing.uri} → ${absolutePath}`);
         const rootHash = existing.rootHash || contentHash;
         if (this.cas.exists(rootHash)) {
@@ -112,6 +114,7 @@ export class DefaultIngestionService implements IngestionService {
           node: {
             id: rootHash,
             sourceRef: { protocol: 'file', uri: absolutePath, mimeType: existing.mimeType },
+            sourcePath,
             childrenIds: [],
             depth: 0,
             artifacts: {},
@@ -130,6 +133,7 @@ export class DefaultIngestionService implements IngestionService {
       id: sourceId,
       protocol: 'file',
       uri: absolutePath,
+      sourcePath,
       mimeType: mimeType || 'application/octet-stream',
       adapterId,
       rawHash,

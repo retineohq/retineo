@@ -3,11 +3,12 @@
  * Phase 7: L3 semantic search → L2 rerank → L1/L0 cascade with LRU cache.
  */
 
-import { readFile, existsSync } from 'fs';
+import { readFile, readFileSync, existsSync } from 'fs';
 import { promisify } from 'util';
 import path from 'path';
 import type { EmbeddingProvider } from '../llm/provider.js';
 import type { CASStorage } from '../storage/cas.js';
+import type { Registry } from '../storage/registry.js';
 import type { Hash, L2Artifact, SourceRef } from '../domain/types.js';
 import type { Section, Chunk, L1Index } from '../layers/l1-generator.js';
 import type { SearchConfig } from '../storage/config.js';
@@ -18,6 +19,8 @@ import type { LRUCache } from '../utils/cache.js';
 import { SimpleLRUCache } from '../utils/cache.js';
 import { OkapiBM25, tokenize } from './bm25.js';
 import { HeuristicDetector } from '../i18n/detector.js';
+import { loadOrBuildHNSW, type HNSWIndex } from '../embeddings/hnsw-index.js';
+import type { L3Chunk } from '../layers/l3-generator.js';
 
 const readFileAsync = promisify(readFile);
 
@@ -39,6 +42,8 @@ export interface CandidateNode {
   l1Preview?: string;
   l0Preview?: string;
   sourceRef?: SourceRef;
+  sourcePath?: string;
+  isGhost?: boolean;
   l2Artifact?: L2Artifact;
   lineRange?: { start: number; end: number };
 }
@@ -62,6 +67,8 @@ export interface Citation {
   content: string;
   span?: { start: number; end: number };
   sourceRef?: SourceRef;
+  sourcePath?: string;
+  isGhost?: boolean;
 }
 
 // --- Document Hit + L1 Navigation (Section 5) ---
@@ -198,6 +205,7 @@ export function aggregateDocumentHits(
 
 export interface RetrievalService {
   search(query: AnalyzedQuery, options?: SearchOptions): Promise<RetrievalResult>;
+  addVectors(chunks: L3Chunk[]): Promise<void>;
 }
 
 function cosineSimilarity(a: number[], b: number[]): number {
@@ -212,23 +220,34 @@ function cosineSimilarity(a: number[], b: number[]): number {
   return dot / (Math.sqrt(normA) * Math.sqrt(normB) || 1);
 }
 
-/** Load all embeddings from jsonl. */
-async function loadEmbeddings(indexDir: string): Promise<Array<{ hash: string; vector: number[] }>> {
+interface EmbeddingRecord {
+  hash: string;
+  vector: number[];
+  parentId?: string;
+  rootHash?: string;
+}
+
+/** Load embedding metadata (hash → sourcePath/rootHash) from jsonl. */
+function loadEmbeddingRecords(indexDir: string): EmbeddingRecord[] {
   const embeddingsPath = path.join(indexDir, 'embeddings.jsonl');
   if (!existsSync(embeddingsPath)) return [];
-  const raw = await readFileAsync(embeddingsPath, 'utf-8');
-  const lines = raw.trim().split('\n');
-  const out: Array<{ hash: string; vector: number[] }> = [];
-  for (const line of lines) {
-    if (!line.trim()) continue;
-    try {
-      const rec = JSON.parse(line) as { hash: string; vector: number[] };
-      out.push(rec);
-    } catch {
-      // skip malformed
+  try {
+    const raw = readFileSync(embeddingsPath, 'utf-8');
+    const lines = raw.trim().split('\n');
+    const out: EmbeddingRecord[] = [];
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      try {
+        const rec = JSON.parse(line) as EmbeddingRecord;
+        out.push(rec);
+      } catch {
+        // skip malformed
+      }
     }
+    return out;
+  } catch {
+    return [];
   }
-  return out;
 }
 
 /** Load BM25 data and build OkapiBM25 index. */
@@ -271,11 +290,14 @@ export interface RetrievalServiceDeps {
   embeddingCache?: LRUCache<string, number[]>;
   l2Cache?: LRUCache<string, L2Artifact>;
   searchCache?: LRUCache<string, RetrievalResult>;
+  model?: string;
+  registry?: Registry;
 }
 
 export class DefaultRetrievalService implements RetrievalService {
   private embedder: EmbeddingProvider;
   private cas: CASStorage;
+  private registry: Registry | null;
   private indexDir: string;
   private config: SearchConfig;
   private logger: Logger;
@@ -283,11 +305,17 @@ export class DefaultRetrievalService implements RetrievalService {
   private l2Cache: LRUCache<string, L2Artifact>;
   private searchCache: LRUCache<string, RetrievalResult>;
   private languageDetector: HeuristicDetector;
+  private hnswIndex: HNSWIndex | null = null;
+  private hnswInit: Promise<void> | null = null;
+  private model: string;
+  private chunkToSource: Map<Hash, { sourcePath: string; rootHash: Hash }> = new Map();
 
   constructor(deps: RetrievalServiceDeps) {
     this.embedder = deps.embeddingProvider;
     this.cas = deps.casStorage;
+    this.registry = deps.registry ?? null;
     this.indexDir = deps.indexDir;
+    this.model = deps.model ?? deps.embeddingProvider.config.model;
     this.logger = deps.logger ?? getGlobalLogger().child({ layer: 'search' });
     this.embeddingCache = deps.embeddingCache ?? new SimpleLRUCache(1000);
     this.l2Cache = deps.l2Cache ?? new SimpleLRUCache(500);
@@ -303,6 +331,44 @@ export class DefaultRetrievalService implements RetrievalService {
       crossLingual: { enabled: true, translateQuery: 'llm', targetLanguages: ['en'] },
     };
     this.languageDetector = new HeuristicDetector();
+  }
+
+  private async ensureHNSW(): Promise<void> {
+    if (this.hnswIndex) return;
+    if (this.hnswInit) return this.hnswInit;
+    this.hnswInit = (async () => {
+      const dim = this.embedder.dimension();
+      const { index } = await loadOrBuildHNSW(this.indexDir, dim, this.model);
+      this.hnswIndex = index;
+      this.loadChunkToSource();
+    })();
+    return this.hnswInit;
+  }
+
+  private loadChunkToSource(): void {
+    this.chunkToSource.clear();
+    for (const rec of loadEmbeddingRecords(this.indexDir)) {
+      if (rec.parentId) {
+        this.chunkToSource.set(rec.hash, {
+          sourcePath: rec.parentId,
+          rootHash: rec.rootHash ?? rec.hash,
+        });
+      }
+    }
+  }
+
+  async addVectors(chunks: L3Chunk[]): Promise<void> {
+    await this.ensureHNSW();
+    if (!this.hnswIndex) return;
+    for (const c of chunks) {
+      this.hnswIndex.add(c.chunkHash, c.vector);
+      this.chunkToSource.set(c.chunkHash, {
+        sourcePath: c.parentId,
+        rootHash: c.rootHash,
+      });
+    }
+    const hnswPath = path.join(this.indexDir, 'hnsw.bin');
+    await this.hnswIndex.save(hnswPath);
   }
 
   async search(query: AnalyzedQuery, options: SearchOptions = {}): Promise<RetrievalResult> {
@@ -326,16 +392,19 @@ export class DefaultRetrievalService implements RetrievalService {
 
     // L3 Semantic Search
     trace.steps.push('L3: load embeddings');
-    const embeddings = await loadEmbeddings(this.indexDir);
     const queryVector = await this.getQueryVector(query.enrichedQuery);
 
     let l3Scores: Array<{ hash: string; score: number }> = [];
 
     if (mode === 'semantic' || mode === 'hybrid') {
-      for (const rec of embeddings) {
-        const score = cosineSimilarity(queryVector, rec.vector);
-        if (score >= threshold) {
-          l3Scores.push({ hash: rec.hash, score });
+      await this.ensureHNSW();
+      if (this.hnswIndex) {
+        const hnswResults = this.hnswIndex.search(queryVector, topK);
+        for (const r of hnswResults) {
+          const score = 1 - r.distance;
+          if (score >= threshold) {
+            l3Scores.push({ hash: r.hash, score });
+          }
         }
       }
       l3Scores.sort((a, b) => b.score - a.score);
@@ -386,7 +455,10 @@ export class DefaultRetrievalService implements RetrievalService {
     trace.steps.push('L2: rerank start');
     const candidates: CandidateNode[] = [];
     for (const s of l3Scores) {
-      const l2 = await this.loadL2(s.hash);
+      const sourceInfo = this.chunkToSource.get(s.hash);
+      const rootHash = sourceInfo?.rootHash ?? s.hash;
+      const sourcePath = sourceInfo?.sourcePath;
+      const l2 = await this.loadL2(rootHash);
       if (!l2) continue;
       const rerankScore = await this.scoreL2(l2, query, queryLang);
       candidates.push({
@@ -394,6 +466,7 @@ export class DefaultRetrievalService implements RetrievalService {
         score: rerankScore,
         l2Summary: l2.summary,
         l2Artifact: l2,
+        sourcePath,
       });
     }
     candidates.sort((a, b) => b.score - a.score);
@@ -418,6 +491,8 @@ export class DefaultRetrievalService implements RetrievalService {
         content: c.l2Summary ?? c.l1Preview ?? c.l0Preview ?? '',
         span: c.lineRange,
         sourceRef: c.sourceRef,
+        sourcePath: c.sourcePath,
+        isGhost: c.isGhost,
       });
     }
 
@@ -514,7 +589,16 @@ export class DefaultRetrievalService implements RetrievalService {
 
   private async cascade(candidate: CandidateNode, intent: QueryIntent): Promise<CandidateNode> {
     const hash = candidate.nodeId;
-    const objPath = this.cas.getObjectPath(hash);
+    const sourceInfo = this.chunkToSource.get(hash);
+    const rootHash = sourceInfo?.rootHash ?? hash;
+
+    if (this.registry && this.registry.isOrphan(rootHash)) {
+      candidate.isGhost = true;
+      candidate.sourcePath = sourceInfo?.sourcePath ?? candidate.sourcePath;
+      return candidate;
+    }
+
+    const objPath = this.cas.getObjectPath(rootHash);
 
     if (intent === 'section' || intent === 'precision') {
       try {

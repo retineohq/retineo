@@ -149,6 +149,7 @@ export class DefaultLLMProviderFactory implements LLMProviderFactory {
       get config() { return original.config; },
 
       generate: async (prompt: string, options?) => {
+        await this.rateLimiter.acquire(original.id);
         try {
           return await breaker.call(() => original.generate(prompt, options));
         } catch (err) {
@@ -160,6 +161,8 @@ export class DefaultLLMProviderFactory implements LLMProviderFactory {
             throw LLMCircuitOpen(original.id, err instanceof Error ? err : undefined);
           }
           throw err;
+        } finally {
+          this.rateLimiter.release(original.id);
         }
       },
 
@@ -168,11 +171,14 @@ export class DefaultLLMProviderFactory implements LLMProviderFactory {
         return original.stream(prompt, options);
       },
 
-      async validate() {
+      validate: async () => {
+        await this.rateLimiter.acquire(original.id);
         try {
           return await breaker.call(() => original.validate());
         } catch {
           return false;
+        } finally {
+          this.rateLimiter.release(original.id);
         }
       },
 
@@ -269,6 +275,7 @@ export class DefaultEmbeddingProviderFactory implements EmbeddingProviderFactory
       get config() { return original.config; },
 
       embed: async (texts: string[]) => {
+        await this.rateLimiter.acquire(original.id);
         try {
           return await breaker.call(() => original.embed(texts));
         } catch (err) {
@@ -283,14 +290,19 @@ export class DefaultEmbeddingProviderFactory implements EmbeddingProviderFactory
             throw new LLMError('LLM_CIRCUIT_OPEN', message, 503, { providerId: original.id }, err instanceof Error ? err : undefined);
           }
           throw err;
+        } finally {
+          this.rateLimiter.release(original.id);
         }
       },
 
-      async validate() {
+      validate: async () => {
+        await this.rateLimiter.acquire(original.id);
         try {
           return await breaker.call(() => original.validate());
         } catch {
           return false;
+        } finally {
+          this.rateLimiter.release(original.id);
         }
       },
 
