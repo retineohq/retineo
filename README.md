@@ -4,7 +4,7 @@
 [![CI](https://github.com/retineohq/retineo/actions/workflows/ci.yml/badge.svg)](https://github.com/retineohq/retineo/actions)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-**Version:** 0.5.0  
+**Version:** 0.5.1  
 **License:** Apache 2.0  
 **Status:** Production-ready — 413 tests passing
 

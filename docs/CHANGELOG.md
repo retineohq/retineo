@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.5.1] - 2026-07-06
+
+### Fixed
+- **L1/L3 chunk hash alignment:** `DefaultL1Generator` now computes `contentHash` for every chunk. `DefaultL3Generator` reuses that hash instead of recomputing it, so L1 and L3 chunk IDs match.
+- **Exact L0 citations in precision mode:** `DefaultRetrievalService.cascade()` now uses chunk geometry (`charStart`, `charEnd`, `lineStart`, `lineEnd`) from L3 embeddings to return the exact source slice. Falls back to heuristic paragraph search when geometry is absent.
+- **Chunk geometry persistence:** `embeddings.jsonl` stores `chunkId`, `lineStart`, `lineEnd`, `charStart`, and `charEnd` for each vector.
+
+### Tests
+- Added `retrieval-service.test.ts` coverage for exact L0 slice retrieval when chunk geometry is present.
+- 414 tests passing, 14 skipped.
+
 ## [0.5.0] - 2026-07-06
 
 ### Changed
