@@ -6,7 +6,7 @@
 import type { CASStorage } from '../storage/cas.js';
 import type { IngestionService } from '../adapters/ingestion.js';
 import type { RetrievalService } from '../search/retrieval-service.js';
-import type { QueryAnalyzer } from '../search/query-analyzer.js';
+import type { QueryAnalyzer, QueryIntent } from '../search/query-analyzer.js';
 import type { ContextAssembler } from '../search/context-assembler.js';
 import type { Registry } from '../storage/registry.js';
 import type { ConfigManager, RetineoConfig, ProviderConfigEntry } from '../storage/config.js';
@@ -58,6 +58,7 @@ export interface SearchCLIOptions {
   mode?: 'semantic' | 'keyword' | 'hybrid';
   topK?: number;
   json?: boolean;
+  intent?: QueryIntent;
 }
 
 export interface InitCLIOptions {
@@ -162,7 +163,7 @@ export class CLICommands {
   }
 
   async search(query: string, options?: SearchCLIOptions): Promise<void> {
-    const analyzed = await this.deps.queryAnalyzer.analyze(query);
+    const analyzed = await this.deps.queryAnalyzer.analyze(query, undefined, { intent: options?.intent });
     const results = await this.deps.retrievalService.search(analyzed, {
       language: options?.language,
       mode: options?.mode,

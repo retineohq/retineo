@@ -36,11 +36,16 @@ export interface AnalyzedQuery {
   signals: QuerySignal[];
 }
 
-export interface QueryAnalyzer {
-  analyze(query: string, sessionContext?: SessionContext): Promise<AnalyzedQuery>;
+export interface AnalyzeOptions {
+  /** Force a specific intent, bypassing classification */
+  intent?: QueryIntent;
 }
 
-// Rule-based intent signals
+export interface QueryAnalyzer {
+  analyze(query: string, sessionContext?: SessionContext, options?: AnalyzeOptions): Promise<AnalyzedQuery>;
+}
+
+// Fallback English rule-based intent signals for unknown languages
 const VAGUE_PATTERNS = [
   /^tell me about/i,
   /^what is/i,
@@ -77,6 +82,20 @@ function ruleBasedIntent(query: string): QueryIntent | null {
   if (PRECISION_PATTERNS.some((re) => re.test(q))) return 'precision';
   if (SECTION_PATTERNS.some((re) => re.test(q))) return 'section';
   if (VAGUE_PATTERNS.some((re) => re.test(q))) return 'vague';
+  return null;
+}
+
+function detectIntentWithPack(
+  query: string,
+  language: string,
+  registry: LanguagePackRegistry
+): QueryIntent | null {
+  const pack = registry.get(language);
+  if (!pack?.intentPatterns) return null;
+  const q = query.toLowerCase();
+  if (pack.intentPatterns.precision?.some((re) => re.test(q))) return 'precision';
+  if (pack.intentPatterns.section?.some((re) => re.test(q))) return 'section';
+  if (pack.intentPatterns.vague?.some((re) => re.test(q))) return 'vague';
   return null;
 }
 
@@ -169,7 +188,7 @@ export class DefaultQueryAnalyzer implements QueryAnalyzer {
     return new NoOpQueryTranslator();
   }
 
-  async analyze(query: string, sessionContext?: SessionContext): Promise<AnalyzedQuery> {
+  async analyze(query: string, sessionContext?: SessionContext, options?: AnalyzeOptions): Promise<AnalyzedQuery> {
     // 1. Language detection
     const detected = await this.detector.detect(query);
     let language = detected.code;
@@ -182,24 +201,31 @@ export class DefaultQueryAnalyzer implements QueryAnalyzer {
       confidence = 0.5;
     }
 
-    // 2. Intent classification (rule-based fast path)
-    let intent: QueryIntent = ruleBasedIntent(query) ?? 'vague';
+    // 2. Intent classification (explicit override > language pack > fallback English rules > LLM)
+    let intent: QueryIntent;
+    if (options?.intent) {
+      intent = options.intent;
+    } else {
+      const packIntent = detectIntentWithPack(query, language, this.registry);
+      const fallbackIntent = packIntent ?? ruleBasedIntent(query);
+      intent = fallbackIntent ?? 'vague';
 
-    // 3. LLM fallback for ambiguous queries
-    if (!ruleBasedIntent(query) && this.llmProvider) {
-      const promptTemplate =
-        this.config.prompts.intentClassification ??
-        this.registry.resolvePrompt(language, 'intentClassification') ??
-        this.registry.resolvePrompt('en', 'intentClassification')!;
-      try {
-        const prompt = buildPrompt(promptTemplate, { query, language });
-        const raw = await this.llmProvider.generate(prompt, { jsonMode: true, temperature: 0.1, maxTokens: 256 });
-        const parsed = JSON.parse(raw.trim().replace(/^```json\s*|\s*```$/g, ''));
-        if (parsed.intent === 'vague' || parsed.intent === 'section' || parsed.intent === 'precision') {
-          intent = parsed.intent;
+      // 3. LLM fallback for ambiguous queries
+      if (!fallbackIntent && this.llmProvider) {
+        const promptTemplate =
+          this.config.prompts.intentClassification ??
+          this.registry.resolvePrompt(language, 'intentClassification') ??
+          this.registry.resolvePrompt('en', 'intentClassification')!;
+        try {
+          const prompt = buildPrompt(promptTemplate, { query, language });
+          const raw = await this.llmProvider.generate(prompt, { jsonMode: true, temperature: 0.1, maxTokens: 256 });
+          const parsed = JSON.parse(raw.trim().replace(/^```json\s*|\s*```$/g, ''));
+          if (parsed.intent === 'vague' || parsed.intent === 'section' || parsed.intent === 'precision') {
+            intent = parsed.intent;
+          }
+        } catch {
+          // keep rule-based intent
         }
-      } catch {
-        // keep rule-based intent
       }
     }
 

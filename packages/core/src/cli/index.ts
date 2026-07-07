@@ -4,7 +4,7 @@
  * Phase 8: Worker/bridge/daemon lifecycle, --watch flag, interactive init wizard.
  */
 
-import { Command } from 'commander';
+import { Command, Option } from 'commander';
 import { CLICommands } from './commands.js';
 import type { CLICommandsDeps } from './commands.js';
 
@@ -42,8 +42,9 @@ export function createCLI(deps: CLICommandsDeps): Command {
     .option('-l, --language <code>', 'Override language detection')
     .option('-m, --mode <mode>', 'Search mode: semantic, keyword, hybrid')
     .option('-k, --top-k <n>', 'Number of results', parseInt)
+    .addOption(new Option('-i, --intent <intent>', 'Override query intent: vague, section, precision').choices(['vague', 'section', 'precision']))
     .option('--json', 'Output raw JSON')
-    .action(async (query: string, options: { language?: string; mode?: 'semantic' | 'keyword' | 'hybrid'; topK?: number; json?: boolean }) => {
+    .action(async (query: string, options: { language?: string; mode?: 'semantic' | 'keyword' | 'hybrid'; topK?: number; intent?: 'vague' | 'section' | 'precision'; json?: boolean }) => {
       await commands.search(query, options);
     });
 

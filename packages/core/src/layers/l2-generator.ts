@@ -49,6 +49,7 @@ Rules:
 - The 'concepts' array MUST be written in the document's primary language.
 - The 'conceptsEn' array must have the same length and order as 'concepts' and contain English translations.
 - If the document is already in English, 'conceptsEn' may be identical to 'concepts'.
+- Include domain-specific and technical terms that appear in the summary or claims (e.g. neural networks, embeddings, RAG) in both 'concepts' and 'conceptsEn'.
 - Use lowercase for concept strings.
 
 Example for a Russian document:

@@ -80,8 +80,12 @@ class BruteForceHNSW implements HNSWIndex {
 let nativeHNSW: { HierarchicalNSW: new (metric: string, dimension: number) => unknown } | null = null;
 
 try {
-  const mod = await import('hnswlib-node' as string) as { HierarchicalNSW: new (metric: string, dimension: number) => unknown };
-  nativeHNSW = mod;
+  const mod = (await import('hnswlib-node' as string)) as {
+    default?: { HierarchicalNSW: new (metric: string, dimension: number) => unknown };
+    HierarchicalNSW?: new (metric: string, dimension: number) => unknown;
+  };
+  // hnswlib-node may be exported as CJS default or as a named ESM export
+  nativeHNSW = mod.HierarchicalNSW ? (mod as { HierarchicalNSW: new (metric: string, dimension: number) => unknown }) : mod.default ?? null;
 } catch {
   nativeHNSW = null;
 }
@@ -248,6 +252,11 @@ export async function loadOrBuildHNSW(
     }
     index.build(vectors);
     manifest.count = vectors.length;
+    try {
+      await index.save(hnswPath);
+    } catch (error) {
+      getGlobalLogger().warn('Failed to persist HNSW index', { error: String(error) });
+    }
   }
 
   return { index, manifest };

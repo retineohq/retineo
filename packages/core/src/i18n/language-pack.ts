@@ -22,6 +22,13 @@ export interface LanguagePack {
     semanticBoost: number;
   };
 
+  /** Optional per-language rule-based intent patterns */
+  intentPatterns?: {
+    vague?: RegExp[];
+    section?: RegExp[];
+    precision?: RegExp[];
+  };
+
   /** Script detection regex for heuristic fallback */
   scriptRegex?: RegExp;
 }

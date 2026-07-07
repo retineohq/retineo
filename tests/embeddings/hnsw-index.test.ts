@@ -5,7 +5,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createHNSWIndex, loadOrBuildHNSW } from '../../packages/core/src/embeddings/hnsw-index.js';
-import { mkdtempSync, rmSync } from 'fs';
+import { mkdtempSync, rmSync, existsSync } from 'fs';
 import { tmpdir } from 'os';
 import path from 'path';
 import { writeFile } from 'fs/promises';
@@ -70,6 +70,16 @@ describe('loadOrBuildHNSW', () => {
     expect(index.size()).toBe(2);
     expect(manifest.model).toBe('test-model');
     expect(manifest.dimension).toBe(2);
+  });
+
+  it('persists built index to hnsw.bin', async () => {
+    await writeFile(
+      path.join(tmpDir, 'embeddings.jsonl'),
+      JSON.stringify({ hash: 'x', vector: [1, 0] }) + '\n' + JSON.stringify({ hash: 'y', vector: [0, 1] }) + '\n',
+      'utf-8'
+    );
+    await loadOrBuildHNSW(tmpDir, 2, 'test-model');
+    expect(existsSync(path.join(tmpDir, 'hnsw.bin'))).toBe(true);
   });
 
   it('returns empty index when no embeddings exist', async () => {

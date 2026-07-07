@@ -73,6 +73,26 @@ describe('DefaultQueryAnalyzer — heuristic detection', () => {
     expect(result.intent).toBe('section');
   });
 
+  it('classifies Russian vague intent', async () => {
+    const result = await analyzer.analyze('Как ECHO использует нейросети?');
+    expect(result.intent).toBe('vague');
+  });
+
+  it('classifies Russian precision intent', async () => {
+    const result = await analyzer.analyze('Дословная цитата на строке 10');
+    expect(result.intent).toBe('precision');
+  });
+
+  it('classifies Chinese section intent', async () => {
+    const result = await analyzer.analyze('在会议中讨论的价格部分');
+    expect(result.intent).toBe('section');
+  });
+
+  it('allows explicit intent override', async () => {
+    const result = await analyzer.analyze('any query', undefined, { intent: 'precision' });
+    expect(result.intent).toBe('precision');
+  });
+
   it('extracts entities from capitalized words', async () => {
     const result = await analyzer.analyze('Tell me about OpenAI and Google DeepMind');
     expect(result.entities).toContain('openai');
