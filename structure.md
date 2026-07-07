@@ -131,7 +131,7 @@ retineo/
 
 | File               | Exports                                                                                   | Description                                                                             |
 | ------------------ | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| `hnsw-index.ts`    | `HNSWIndex`, `HNSWManifest`, `createHNSWIndex`, `loadOrBuildHNSW`, `BruteForceHNSW`       | Approximate nearest neighbor index via native `hnswlib-node`; pure-JS `BruteForceHNSW` for tests/fallback. |
+| `hnsw-index.ts`    | `HNSWIndex`, `HNSWManifest`, `createHNSWIndex`, `loadOrBuildHNSW`, `BruteForceHNSW`       | Approximate nearest neighbor index via native `hnswlib-node`; pure-JS `BruteForceHNSW` for tests/fallback. `loadOrBuildHNSW` persists a freshly built index to `hnsw.bin`. |
 | `parquet-store.ts` | `ParquetEmbeddingStore`, `EmbeddingRecord`, `createEmbeddingStore`, `JSONLEmbeddingStore` | Embedding persistence interface with JSONL fallback; Parquet migration stubbed.         |
 | `index.ts`         | Barrel export of `hnsw-index.js`, `parquet-store.js`                                      | Public embeddings API entrypoint.                                                       |
 
@@ -139,7 +139,7 @@ retineo/
 
 | File                   | Exports                                                                                                        | Description                                                                       |
 | ---------------------- | -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| `query-analyzer.ts`    | `QueryAnalyzer`, `DefaultQueryAnalyzer`, `AnalyzedQuery`, `QueryIntent`, `QuerySignal`, `SessionContext`       | Language detection, intent classification, entity extraction, pronoun resolution, cross-lingual entity translation. |
+| `query-analyzer.ts`    | `QueryAnalyzer`, `DefaultQueryAnalyzer`, `AnalyzedQuery`, `QueryIntent`, `QuerySignal`, `SessionContext`, `AnalyzeOptions` | Language detection, intent classification (explicit override → language-pack regex → fallback English → LLM), entity extraction, pronoun resolution, cross-lingual entity translation. |
 | `query-translator.ts`  | `QueryTranslator`, `TranslatedTerms`, `LLMQueryTranslator`, `NoOpQueryTranslator`                              | Translates non-English query entities into English for cross-lingual BM25 matching. |
 | `bm25.ts`              | `OkapiBM25`, `tokenize`                                                                          | Okapi BM25 with IDF, document length normalization, k1/b parameters.             |
 | `retrieval-service.ts` | `RetrievalService`, `DefaultRetrievalService`, `CandidateNode`, `RetrievalResult`, `Citation`, `SearchOptions`, `DocumentHit`, `ChunkHit`, `NavigationNode`, `calculateDocumentScore`, `buildNavigationTree`, `aggregateDocumentHits` | Loads HNSW index at startup; semantic/BM25/hybrid search, language-aware L2 rerank, L1/L0 cascade, DocumentHit aggregation, ghost-source flagging. |
@@ -164,7 +164,7 @@ retineo/
 | File              | Exports                                                                                                   | Description                                                    |
 | ----------------- | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
 | `l1-generator.ts` | `L1Generator`, `DefaultL1Generator`, `L1Result`, `L1Index`, `L1SourceContext`, `Section`, `Chunk`         | Rule-based markdown structural parser. Derives title from first heading, first line, or source filename; splits heading-less log/text files by markers. |
-| `l2-generator.ts` | `L2Generator`, `DefaultL2Generator`                                                                       | LLM-powered semantic extraction with Zod validation and retry. Detects document language and emits English concepts (`conceptsEn`). |
+| `l2-generator.ts` | `L2Generator`, `DefaultL2Generator`                                                                       | LLM-powered semantic extraction with Zod validation and retry. Detects document language and prompts the LLM to include domain/technical terms in both `concepts` and `conceptsEn`. |
 | `l3-generator.ts` | `L3Generator`, `DefaultL3Generator`, `L3Result`, `L3Metadata`, `bruteForceSearch`, `BatchEmbeddingConfig` | Embedding indexer: reads L0 body and L1 chunks, batch-embeds them, writes `embeddings.jsonl`/`bm25.json`/`hnsw.manifest.json`, and adds vectors to the HNSW index. Preserves Cyrillic/CJK tokens. |
 | `pipeline.ts`     | `CompilationPipeline`, `DefaultCompilationPipeline`, `CompilationPipelineDeps`                            | Orchestrates L1→L2→L3 via job queue. `llmProvider` and `embeddingProvider` are nullable; pipeline throws clear error if null when L2/L3 job processed. |
 | `worker.ts`       | `QueueWorker`, `DefaultQueueWorker`, `QueueWorkerOptions`                                                 | Lease-based job processor with heartbeat.                      |
@@ -202,7 +202,7 @@ retineo/
 
 | File            | Exports                                                                                                         | Description                                                                           |
 | --------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `commands.ts`   | `CLICommands`, `CLICommandsDeps`, `IngestCLIOptions`, `SearchCLIOptions`, `CompileCLIOptions`, `InitCLIOptions` | CLI command implementations: `init` (interactive wizard + non-interactive with required `--llm-model` / `--embed-model`), `ingest` (with `--watch` / `--timeout`, idempotent skip, recursive directory traversal), `search` (with ghost badges in output), `status`, `compile` (with `--watch` / `--timeout` / `--provider` / `--rebuild-l1` / `--rebuild-l2` / `--rebuild-l3` + dead L3 recovery), `rebuild` (delete index + reset L1/L2 + recompile all sources), `config`, `jobs`, `recover` (restores from CAS by rootHash or rawHash), `doctor`, `key set/get/delete/list`, `worker start/stop/status/logs`, `bridge start/stop/status/logs`, `daemon start/stop/status/logs`. |
+| `commands.ts`   | `CLICommands`, `CLICommandsDeps`, `IngestCLIOptions`, `SearchCLIOptions`, `CompileCLIOptions`, `InitCLIOptions` | CLI command implementations: `init` (interactive wizard + non-interactive with required `--llm-model` / `--embed-model`), `ingest` (with `--watch` / `--timeout`, idempotent skip, recursive directory traversal), `search` (with `--intent <vague|section|precision>` override, ghost badges in output), `status`, `compile` (with `--watch` / `--timeout` / `--provider` / `--rebuild-l1` / `--rebuild-l2` / `--rebuild-l3` + dead L3 recovery), `rebuild` (delete index + reset L1/L2 + recompile all sources), `config`, `jobs`, `recover` (restores from CAS by rootHash or rawHash), `doctor`, `key set/get/delete/list`, `worker start/stop/status/logs`, `bridge start/stop/status/logs`, `daemon start/stop/status/logs`. |
 | `doctor.ts`     | `runDoctor`, `formatDoctor`, `DoctorResult`, `DependencyCheck`                                                  | External dependency checker (ffmpeg, tesseract, whisper.cpp, whisper model, whisper key, ollama). |
 | `formatters.ts` | `formatSearchResult`, `formatStatus`, `formatJobs`, `formatIngestResult`, `formatConfig`, `formatRecoverResult` | Output formatters for CLI commands.                                                   |
 | `prompt.ts`     | `ask`, `choose`, `confirm`, `PromptOptions`, `ChoiceOptions`                                                    | Readline-based single-question prompts. No external deps. Used by the `init` wizard. `ask` closes the readline interface before resolving. |
@@ -225,12 +225,12 @@ retineo/
 
 | File               | Exports                                                                                    | Description                                                     |
 | ------------------ | ------------------------------------------------------------------------------------------ | --------------------------------------------------------------- |
-| `language-pack.ts` | `LanguagePack`                                                                             | Interface for per-language prompts and search tuning.           |
+| `language-pack.ts` | `LanguagePack`, `IntentPatterns`                                                             | Interface for per-language prompts, search tuning, and regex-based intent patterns. |
 | `detector.ts`      | `LanguageDetector`, `HeuristicDetector`, `FrancDetector`, `CLD3Detector`, `createDetector` | Language detection with franc/cld3/heuristic providers.         |
 | `registry.ts`      | `LanguagePackRegistry`, `DefaultLanguagePackRegistry`                                      | Built-in pack registry (en, ru, zh) + custom pack registration. |
-| `packs/en.ts`      | `enPack`                                                                                   | English language pack with default prompts.                     |
-| `packs/ru.ts`      | `ruPack`                                                                                   | Russian language pack with Cyrillic script regex.               |
-| `packs/zh.ts`      | `zhPack`                                                                                   | Chinese language pack with CJK script regex.                    |
+| `packs/en.ts`      | `enPack`                                                                                   | English language pack with default prompts and `intentPatterns` for `vague`/`section`/`precision`. |
+| `packs/ru.ts`      | `ruPack`                                                                                   | Russian language pack with Cyrillic script regex and `intentPatterns` for `vague`/`section`/`precision`. |
+| `packs/zh.ts`      | `zhPack`                                                                                   | Chinese language pack with CJK script regex and `intentPatterns` for `vague`/`section`/`precision`. |
 | `index.ts`         | Barrel export of `language-pack.js`, `detector.js`, `registry.js`, `packs/*.js`            | Public i18n API entrypoint.                                     |
 
 ### `src/utils/` — Shared Utilities
@@ -293,7 +293,7 @@ retineo/
 
 | File                        | Tests                                                                                                                            | Description                          |
 | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
-| `query-analyzer.test.ts`    | Language detection (heuristic/franc), intent classification (rule/LLM), entity extraction, pronoun resolution, signal generation, cross-lingual translation injection | DefaultQueryAnalyzer correctness.    |
+| `query-analyzer.test.ts`    | Language detection (heuristic/franc), intent classification (explicit override / language-pack regex / fallback English / LLM), entity extraction, pronoun resolution, signal generation, cross-lingual translation injection | DefaultQueryAnalyzer correctness.    |
 | `query-translator.test.ts`  | LLM translation, invalid JSON fallback, length mismatch fallback, no-op translator                                                                              | QueryTranslator correctness.         |
 | `retrieval-service.test.ts` | HNSW semantic search, keyword search, Cyrillic keyword search, hybrid mode, threshold filtering, language-aware L2 rerank, L1/L0 cascade, ghost flagging, trace                    | DefaultRetrievalService correctness. |
 | `context-assembler.test.ts` | Token budgets per intent, cascade modes, citation generation, drill-down children, language propagation                          | DefaultContextAssembler correctness. |
@@ -371,7 +371,7 @@ retineo/
 | File               | Tests                                                                                         | Description                              |
 | ------------------ | --------------------------------------------------------------------------------------------- | ---------------------------------------- |
 | `detector.test.ts` | Heuristic script detection, franc fallback, cld3 fallback, createDetector factory             | LanguageDetector implementations.        |
-| `packs.test.ts`    | Pack loading, prompt resolution, search tuning values, script regex, custom pack registration | DefaultLanguagePackRegistry correctness. |
+| `packs.test.ts`    | Pack loading, prompt resolution, search tuning values, script regex, `intentPatterns`, custom pack registration | DefaultLanguagePackRegistry correctness. |
 
 ---
 
@@ -419,6 +419,8 @@ retineo/
 | **Load LLM providers from config**                      | `DefaultLLMProviderFactory`                    | `src/llm/factory.ts`                                | `ProviderConfig`, `OllamaProvider`, `OpenAICompatibleProvider`   |
 | **Write a third-party LLM provider**                    | `LLM_PROVIDERS.md`                             | `docs/LLM_PROVIDERS.md`                             | `LLMProvider`, `EmbeddingProvider`                               |
 | **Analyze a query (language, intent, entities)**        | `DefaultQueryAnalyzer`                         | `src/search/query-analyzer.ts`                      | `LanguageDetector`, `LanguagePackRegistry`                       |
+| **Override query intent from the CLI**                  | `createCLI` with `-i/--intent`                 | `src/cli/index.ts`, `src/cli/commands.ts`           | `AnalyzeOptions`, `QueryIntent`                                  |
+| **Add language-specific intent detection rules**        | `LanguagePack.intentPatterns`                  | `src/i18n/language-pack.ts`, `src/i18n/packs/*.ts`  | `DefaultQueryAnalyzer.detectIntentWithPack`                      |
 | **Search the index (semantic/keyword/hybrid)**          | `DefaultRetrievalService`                      | `src/search/retrieval-service.ts`                   | Loads `hnsw.bin` at startup; uses `EmbeddingProvider`, `CASStorage`, `loadOrBuildHNSW`. Marks orphan results as ghosts. |
 | **Assemble context for LLM consumption**                | `DefaultContextAssembler`                      | `src/search/context-assembler.ts`                   | `CandidateNode`, `SearchConfig`                                  |
 | **Detect language of a query**                          | `createDetector`                               | `src/i18n/detector.ts`                              | `FrancDetector`, `HeuristicDetector`, `CLD3Detector`             |

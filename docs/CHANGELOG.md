@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.5.2] - 2026-07-07
+
+### Added
+- **CLI intent override:** `retineo search` now accepts `-i, --intent <vague|section|precision>` to force the query intent instead of relying on automatic detection.
+- **Multilingual intent rules:** `LanguagePack` now supports optional `intentPatterns` for rule-based intent classification. Built-in packs for English, Russian, and Chinese include regex patterns for `vague`, `section`, and `precision` intents.
+- **Cross-lingual concept extraction:** `DefaultL2Generator` prompt now explicitly asks the LLM to include domain/technical terms in both the document language (`concepts`) and English (`conceptsEn`).
+- **HNSW index persistence:** `loadOrBuildHNSW` now saves a newly built native `hnsw.bin` index alongside `hnsw.manifest.json`, so the index is reused on subsequent startups instead of being rebuilt from `embeddings.jsonl` each time.
+
+### Changed
+- **Intent detection priority:** `DefaultQueryAnalyzer` resolves intent in the order: explicit override → language-pack regex patterns → fallback English rules → LLM-based classification.
+
+### Fixed
+- **HNSW native import shape:** `hnswlib-node` is now imported defensively, handling both CJS default and named ESM exports, which fixes `HierarchicalNSW is not a constructor` errors in some environments.
+
+### Tests
+- Added `query-analyzer.test.ts` coverage for Russian `vague`/`precision`, Chinese `section`, and explicit intent override.
+- Added `packs.test.ts` coverage verifying `intentPatterns` presence in built-in packs.
+- Updated `hnsw-index.test.ts` to assert persisted `hnsw.bin` after `loadOrBuildHNSW`.
+- 420 tests passing, 14 skipped.
+
 ## [0.5.1] - 2026-07-06
 
 ### Fixed
