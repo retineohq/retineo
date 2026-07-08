@@ -9,7 +9,8 @@ import os from 'os';
 import { DefaultGhostRecoveryService } from '../../packages/core/src/ghost/recovery-service.js';
 import { LocalCASStorage, computeHash } from '../../packages/core/src/storage/cas.js';
 import { SQLiteRegistry } from '../../packages/core/src/storage/registry.js';
-import type { ContextNode, SourceRecord } from '../../packages/core/src/domain/types.js';
+import type { ContextNode } from '../../packages/core/src/domain/types.js';
+import type { RegistryEntry } from '../../packages/core/src/storage/types.js';
 
 describe('DefaultGhostRecoveryService', () => {
   let tmpDir: string;
@@ -35,12 +36,11 @@ describe('DefaultGhostRecoveryService', () => {
     const node: ContextNode = {
       id: hash,
       sourceRef: { protocol: 'file', uri: sourceUri, mimeType: 'text/markdown' },
-      sourcePath: sourceUri,
       childrenIds: [],
       depth: 0,
       artifacts: {},
       build: {
-        schemaVersion: 1,
+        schemaVersion: 2,
         nodeVersion: 1,
         rawHash: hash,
         contentHash: hash,
@@ -56,18 +56,16 @@ describe('DefaultGhostRecoveryService', () => {
     };
     await cas.writeObject(node, { content, meta: { blocks: [] } });
 
-    const source: SourceRecord = {
-      id: `src-${hash.slice(0, 8)}`,
-      protocol: 'file',
-      uri: sourceUri,
-      sourcePath: sourceUri,
-      mimeType: 'text/markdown',
-      adapterId: 'markdown',
-      rawHash: hash,
-      rootHash: hash,
-      lastSeenAt: now,
+    const source: RegistryEntry = {
+      sourceId: 'filesystem',
+      externalId: sourceUri,
+      contentHash: hash,
+      etag: 'etag',
+      status: 'active',
+      deletedAt: null,
+      lastSeenAt: Date.now(),
     };
-    registry.insertSource(source);
+    registry.set(source);
     return hash;
   }
 
@@ -85,31 +83,23 @@ describe('DefaultGhostRecoveryService', () => {
     expect(ghosts[0].hash).toBe(hash);
   });
 
-  it('recover — restores content from CAS', async () => {
+  it('recover — marks orphan active without filesystem write', async () => {
     const hash = await seedNode('# Recover Me', '/recover.md');
     registry.insertOrphan(hash, `src-${hash.slice(0, 8)}`, '/recover.md');
 
-    const targetPath = path.join(tmpDir, 'recovered.md');
-    await service.recover(hash, targetPath);
+    await service.recover(hash);
 
-    const content = readFileSync(targetPath, 'utf-8');
-    expect(content).toBe('# Recover Me');
+    const source = registry.get('filesystem', '/recover.md');
+    expect(source?.status).toBe('active');
+    expect(source?.deletedAt).toBeNull();
 
-    // Orphan should be marked as recovered
     const orphan = registry.getOrphan(hash);
     expect(orphan).not.toBeNull();
-    // recoverOrphan sets recovered_at
+    expect(orphan?.recoveredAt).not.toBeNull();
   });
 
   it('recover — throws for non-existent orphan', async () => {
     await expect(service.recover('deadbeef')).rejects.toThrow('No orphan found');
-  });
-
-  it('recover — throws when CAS object missing', async () => {
-    const hash = computeHash('missing');
-    registry.insertOrphan(hash, 'src-missing', '/missing.md');
-
-    await expect(service.recover(hash)).rejects.toThrow('CAS object');
   });
 
   it('purge — removes old orphans', async () => {

@@ -10,18 +10,21 @@ Every artifact is stored by the SHA-256 hash of its content. Once written, an ob
 ### Fractal ContextNode
 A `ContextNode` is the atomic unit of context. It contains:
 - `id` — content hash (SHA-256)
-- `sourceRef` — where the data came from
-- `sourcePath` — human-readable vault-relative path
-- `parentId` / `childrenIds` — tree linkage
+- `sourceRef` — where the data came from (`sourceId`, `externalId`)
+- `parentId` / `childrenIds` — tree linkage by content hash
 - `depth` — level in the tree (0 = root)
 - `artifacts` — L0 (raw text), L1 (structured), L2 (semantic)
 - `semanticLinks` — optional `SemanticLink[]` placeholder for future Pro/Plugin L4 features
 - `build` — manifest of generators and versions
 
+`sourcePath` is not stored inside the node; it is resolved post-search from the Registry (`externalId`) for UI display.
+
 Nodes are fractal: a 10-minute video becomes a root node with child segments, each its own node. A 500-page PDF becomes a root with chapter children. Any node can stand alone or participate in a tree.
 
-### Adapter IPC
-Adapters are external child processes that speak JSON-RPC 2.0 over stdin/stdout. They convert any file format into normalized text + metadata blocks. RETINEO Core does not parse PDFs, transcribe audio, or OCR images itself — it delegates to adapters. This keeps the core small and makes format support pluggable.
+### Adapter IPC + SourceAdapter
+Document adapters are external child processes that speak JSON-RPC 2.0 over stdin/stdout. They convert any file format into normalized text + metadata blocks. RETINEO Core does not parse PDFs, transcribe audio, or OCR images itself — it delegates to adapters.
+
+`SourceAdapter` is a separate abstraction for *sources* of documents (filesystem, S3, API, etc.). A `SourceAdapter` exposes `sync()` and `fetch(externalId)`; Core only sees `(sourceId, externalId, body, etag)`. The CLI `retineo ingest` uses `FileSystemSourceAdapter`, one of many possible implementations.
 
 ## L0–L3 Pipeline
 
@@ -259,7 +262,7 @@ data/
 │       └── cdef.../
 │           ├── content.md          # L0 normalized text
 │           ├── content.meta.json   # L0 metadata blocks
-│           ├── node.json           # BuildManifest + sourceRef/sourcePath/parentId/semanticLinks
+│           ├── node.json           # BuildManifest + sourceRef/parentId/semanticLinks (no sourcePath)
 │           ├── L1.md               # L1 structured markdown
 │           ├── L1.index.json       # L1 heading index
 │           └── L2.json             # L2 semantic artifact
@@ -277,8 +280,9 @@ data/
 | Module | Responsibility |
 |--------|---------------|
 | `domain/` | Types, Zod schemas, shared language |
-| `adapters/` | JSON-RPC protocol, transport, runner, manager, ingestion service |
-| `storage/` | CAS (filesystem), Registry (SQLite), NodeBuilder, Config, SecretsManager, ContextNodeRepository |
+| `adapters/` | JSON-RPC protocol, transport, runner, manager, `SourceAdapter` interface, `FileSystemSourceAdapter` |
+| `services/` | `IngestionService` — source-agnostic ingestion orchestrator |
+| `storage/` | CAS (filesystem), Registry (SQLite), AuditLog, NodeBuilder, Config, SecretsManager, ContextNodeRepository |
 | `embeddings/` | HNSW index, Parquet/JSONL embedding store, vector I/O |
 | `search/` | Query analysis, Okapi BM25, semantic/keyword/hybrid retrieval, L2 rerank, L1/L0 cascade, DocumentHit aggregation, context assembly |
 | `llm/` | Provider abstraction, rate limiting, circuit breaker, factory (Ollama, OpenAI-compatible, Mock) |
@@ -319,17 +323,17 @@ IngestionService / RetrievalService / CompilationPipeline
 ### CLI Commands (Phase 7)
 
 ```
-retineo ingest <file>          # Ingest a file
+retineo ingest <file>          # Ingest a file via FileSystemSourceAdapter
 retineo search <query>         # Search with --language, --mode, --top-k, --json
 retineo status                 # Engine status
 retineo compile [file]         # Compile pending jobs or specific file
-retineo rebuild                # Full rebuild: delete index + reset L1/L2 + recompile all sources
+retineo rebuild [--force]      # Full rebuild: delete index + reset L1/L2 + re-sync adapters; --force wipes data dir
 retineo config [key] [value]   # Read/write config
 retineo jobs                   # List recent jobs
-retineo recover <hash>         # Recover orphaned node
-retineo ghost list             # List orphaned objects
-retineo ghost recover <hash>   # Recover orphan from CAS
-retineo ghost purge <days>     # Remove old orphans
+retineo recover <hash>         # Recover ghost node
+retineo ghost list             # List ghost objects
+retineo ghost recover <hash>   # Recover ghost from CAS
+retineo ghost purge <days>     # Remove old ghosts
 retineo key set <p> <key>      # Store encrypted API key
 retineo key get <p>            # Show masked key
 retineo key delete <p>         # Remove key

@@ -16,10 +16,11 @@ import type {
 import type { QueryAnalyzer } from '../search/query-analyzer.js';
 import type { RetrievalService } from '../search/retrieval-service.js';
 import type { ContextAssembler } from '../search/context-assembler.js';
-import type { IngestionService } from '../adapters/ingestion.js';
+import type { IngestionService } from '../services/ingestion-service.js';
 import type { Registry } from '../storage/registry.js';
 import type { CASStorage } from '../storage/cas.js';
 import type { ConfigManager } from '../storage/config.js';
+import type { AuditService } from '../storage/audit.js';
 import type { JobRecord } from '../domain/types.js';
 import { BaseRetineoError } from '../utils/errors.js';
 import { createSSEStream } from './sse.js';
@@ -37,6 +38,7 @@ export interface BridgeHandlersDeps {
   registry: Registry;
   cas: CASStorage;
   configManager: ConfigManager;
+  auditService: AuditService;
   version: string;
   indexDir: string;
 }
@@ -77,6 +79,11 @@ export function createHandlers(deps: BridgeHandlersDeps) {
           maxTokens: options?.maxTokens,
         });
         const durationMs = Date.now() - start;
+        await deps.auditService.log('search', undefined, undefined, {
+          query,
+          mode: options?.mode ?? 'semantic',
+          resultCount: results.selected.length,
+        });
         return reply.send({
           query,
           language: analyzed.language,
@@ -134,14 +141,13 @@ export function createHandlers(deps: BridgeHandlersDeps) {
       }
       try {
         const result = await deps.ingestionService.ingestFile(sourcePath);
-        const sourceId = result.node.sourceRef.uri; // simplistic mapping
-        const jobs: string[] = [];
-        // Jobs were queued inside ingestion service; we don't have IDs here in MVP
+        await deps.auditService.log('ingest', result.contentHash, undefined, { externalId: sourcePath });
+        const sourceId = 'filesystem';
         return reply.send({
           sourceId,
-          rootHash: result.node.id,
-          status: result.skipped ? 'skipped' : 'queued',
-          jobs,
+          contentHash: result.contentHash,
+          action: result.action,
+          status: result.action === 'unchanged' ? 'skipped' : 'queued',
         });
       } catch (err) {
         if (err instanceof BaseRetineoError) {
@@ -220,15 +226,15 @@ export function createHandlers(deps: BridgeHandlersDeps) {
     async listNodes(_request: FastifyRequest, reply: FastifyReply) {
       try {
         const sources = deps.registry.listSources();
-        const nodes: Array<{ hash: string; uri: string; lastSeenAt: string }> = [];
+        const nodes: Array<{ sourceId: string; externalId: string; contentHash: string; status: string; lastSeenAt: string }> = [];
         for (const src of sources) {
-          if (src.rootHash) {
-            nodes.push({
-              hash: src.rootHash,
-              uri: src.uri,
-              lastSeenAt: src.lastSeenAt,
-            });
-          }
+          nodes.push({
+            sourceId: src.sourceId,
+            externalId: src.externalId,
+            contentHash: src.contentHash,
+            status: src.status,
+            lastSeenAt: new Date(src.lastSeenAt).toISOString(),
+          });
         }
         return reply.send({ nodes, total: nodes.length });
       } catch (err) {
@@ -238,18 +244,19 @@ export function createHandlers(deps: BridgeHandlersDeps) {
 
     async getSource(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
       const { id } = request.params;
-      const source = deps.registry.getSource(id);
+      // PR1: filesystem-only mapping; PR3 will introduce composite source keys
+      const source = deps.registry.get('filesystem', id);
       if (!source) {
         return errorReply(reply, 404, 'NOT_FOUND', `Source not found: ${id}`);
       }
       const body: SourceResponse = {
-        id: source.id,
-        protocol: source.protocol,
-        uri: source.uri,
-        mimeType: source.mimeType,
-        adapterId: source.adapterId,
-        rootHash: source.rootHash,
-        lastSeenAt: source.lastSeenAt,
+        sourceId: source.sourceId,
+        externalId: source.externalId,
+        contentHash: source.contentHash,
+        etag: source.etag,
+        status: source.status,
+        deletedAt: source.deletedAt,
+        lastSeenAt: new Date(source.lastSeenAt).toISOString(),
       };
       return reply.send(body);
     },

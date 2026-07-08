@@ -9,12 +9,11 @@
  */
 
 import { FileConfigManager } from '../storage/config.js';
-import { LocalCASStorage, computeHash } from '../storage/cas.js';
+import { LocalCASStorage } from '../storage/cas.js';
 import { SQLiteRegistry } from '../storage/registry.js';
 import { DefaultNodeBuilder } from '../storage/node-builder.js';
 import { DefaultAdapterManager } from '../adapters/manager.js';
 import { DefaultAdapterProcessRunner } from '../adapters/runner.js';
-import { DefaultIngestionService } from '../adapters/ingestion.js';
 import { DefaultLLMProviderFactory, DefaultEmbeddingProviderFactory } from '../llm/factory.js';
 import { FileSecretsManager } from '../storage/secrets.js';
 import { DefaultCompilationPipeline } from '../layers/pipeline.js';
@@ -185,8 +184,9 @@ async function main(): Promise<void> {
 }
 
 const isForked =
-  typeof process.send === 'function' ||
-  process.env.RETINEO_WORKER_SCRIPT === '1';
+  !process.env.VITEST &&
+  (typeof process.send === 'function' ||
+    process.env.RETINEO_WORKER_SCRIPT === '1');
 
 if (isForked) {
   main().catch((err) => {

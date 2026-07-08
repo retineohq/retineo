@@ -281,16 +281,14 @@ describe('DefaultRetrievalService', () => {
   it('marks deleted sources as ghosts and skips L0 read', async () => {
     const dbPath = path.join(tmpDir, 'retineo.sqlite');
     const registry = new SQLiteRegistry(dbPath);
-    registry.insertSource({
-      id: 'src-a',
-      protocol: 'file',
-      uri: '/docs/cats.md',
-      sourcePath: '/docs/cats.md',
-      mimeType: 'text/markdown',
-      adapterId: 'text',
-      rawHash: 'hash-a',
-      rootHash: 'hash-a',
-      lastSeenAt: new Date().toISOString(),
+    registry.set({
+      sourceId: 'filesystem',
+      externalId: '/docs/cats.md',
+      contentHash: 'hash-a',
+      etag: 'etag',
+      status: 'ghost',
+      deletedAt: Date.now(),
+      lastSeenAt: Date.now(),
     });
     registry.insertOrphan('hash-a', 'src-a', '/docs/cats.md');
 
@@ -326,6 +324,7 @@ describe('DefaultRetrievalService exact cascade', () => {
   let indexDir: string;
   let cas: LocalCASStorage;
   let provider: MockLLMProvider;
+  let registry: SQLiteRegistry;
 
   beforeEach(async () => {
     tmpDir = mkdtempSync(path.join(os.tmpdir(), 'retineo-cascade-'));
@@ -336,6 +335,7 @@ describe('DefaultRetrievalService exact cascade', () => {
   });
 
   afterEach(() => {
+    registry?.close();
     rmSync(tmpDir, { recursive: true, force: true });
   });
 
@@ -347,6 +347,12 @@ describe('DefaultRetrievalService exact cascade', () => {
       { text: 'Gamma birds elsewhere.', charStart: 36, charEnd: 57, lineStart: 4, lineEnd: 4, concept: 'birds' },
     ];
 
+    const docHash = computeHash(content);
+    const docDir = cas.getObjectPath(docHash);
+    mkdirSync(docDir, { recursive: true });
+    writeFileSync(path.join(docDir, 'content.md'), content, 'utf-8');
+    writeFileSync(path.join(docDir, 'L2.json'), JSON.stringify(createL2('Animals document', ['cats', 'dogs', 'birds'])), 'utf-8');
+
     const records: string[] = [];
     for (const chunk of chunks) {
       const hash = computeHash(chunk.text);
@@ -355,8 +361,8 @@ describe('DefaultRetrievalService exact cascade', () => {
         JSON.stringify({
           hash,
           vector,
-          parentId: '/docs/animals.md',
-          rootHash: hash,
+          parentId: docHash,
+          rootHash: docHash,
           chunkId: `chunk-${chunk.concept}`,
           lineStart: chunk.lineStart,
           lineEnd: chunk.lineEnd,
@@ -367,14 +373,25 @@ describe('DefaultRetrievalService exact cascade', () => {
 
       const objDir = cas.getObjectPath(hash);
       mkdirSync(objDir, { recursive: true });
-      writeFileSync(path.join(objDir, 'content.md'), content, 'utf-8');
-      writeFileSync(path.join(objDir, 'L2.json'), JSON.stringify(createL2(chunk.text, [chunk.concept])), 'utf-8');
     }
     writeFileSync(path.join(indexDir, 'embeddings.jsonl'), records.join('\n') + '\n', 'utf-8');
+
+    const dbPath = path.join(tmpDir, 'retineo.sqlite');
+    registry = new SQLiteRegistry(dbPath);
+    registry.set({
+      sourceId: 'filesystem',
+      externalId: '/docs/animals.md',
+      contentHash: docHash,
+      etag: 'etag',
+      status: 'active',
+      deletedAt: null,
+      lastSeenAt: Date.now(),
+    });
 
     const service = new DefaultRetrievalService({
       embeddingProvider: provider,
       casStorage: cas,
+      registry,
       indexDir,
       config: mockConfig,
     });

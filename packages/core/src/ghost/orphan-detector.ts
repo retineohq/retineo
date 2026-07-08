@@ -1,6 +1,6 @@
 /**
  * RETINEO Core — Orphan Detector
- * Detects deleted or modified source files and registers them as orphans.
+ * Detects deleted source files and registers them as orphans.
  */
 
 import { existsSync } from 'fs';
@@ -17,8 +17,8 @@ export interface OrphanDetector {
 
 export interface OrphanRecord {
   hash: Hash;
-  originalSourceId: string;
-  sourcePath: string;
+  sourceId: string;
+  externalId: string;
   reason: 'deleted' | 'modified';
   detectedAt: string;
 }
@@ -39,25 +39,28 @@ export class DefaultOrphanDetector implements OrphanDetector {
     const orphans: OrphanRecord[] = [];
 
     for (const source of sources) {
-      if (source.protocol !== 'file') continue;
+      if (source.sourceId !== 'filesystem') continue;
 
-      const filePath = source.uri;
+      const filePath = source.externalId;
       if (!existsSync(filePath)) {
         const record: OrphanRecord = {
-          hash: source.rootHash,
-          originalSourceId: source.id,
-          sourcePath: filePath,
+          hash: source.contentHash,
+          sourceId: source.sourceId,
+          externalId: source.externalId,
           reason: 'deleted',
           detectedAt: new Date().toISOString(),
         };
         orphans.push(record);
 
-        // Register in orphan registry
         try {
-          this.registry.insertOrphan(source.rootHash, source.id, filePath);
-          this.logger.info('ghost.orphan.detected', { hash: source.rootHash, path: filePath, reason: 'deleted' });
+          this.registry.insertOrphan(source.contentHash, source.sourceId, source.externalId);
+          this.registry.updateSource(source.sourceId, source.externalId, {
+            status: 'ghost',
+            deletedAt: Date.now(),
+          });
+          this.logger.info('ghost.orphan.detected', { hash: source.contentHash, externalId: filePath, reason: 'deleted' });
         } catch (err) {
-          this.logger.warn('ghost.orphan.register.failed', { hash: source.rootHash, error: String(err) });
+          this.logger.warn('ghost.orphan.register.failed', { hash: source.contentHash, error: String(err) });
         }
       }
     }

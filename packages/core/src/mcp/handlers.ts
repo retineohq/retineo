@@ -6,7 +6,7 @@
 import type { QueryAnalyzer } from '../search/query-analyzer.js';
 import type { RetrievalService } from '../search/retrieval-service.js';
 import type { ContextAssembler } from '../search/context-assembler.js';
-import type { IngestionService } from '../adapters/ingestion.js';
+import type { IngestionService } from '../services/ingestion-service.js';
 import type { Registry } from '../storage/registry.js';
 import type { CASStorage } from '../storage/cas.js';
 import { readFile, existsSync } from 'fs';
@@ -52,7 +52,7 @@ export function createHandlers(deps: MCPHandlersDeps) {
         content: [
           {
             type: 'text',
-            text: JSON.stringify({ sourceId: result.node.sourceRef.uri, rootHash: result.node.id, jobs: [], skipped: result.skipped ?? false }, null, 2),
+            text: JSON.stringify({ sourceId: 'filesystem', contentHash: result.contentHash, action: result.action }, null, 2),
           },
         ],
       };

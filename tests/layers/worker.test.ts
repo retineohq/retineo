@@ -68,7 +68,7 @@ describe('DefaultQueueWorker', () => {
     writeFileSync(path.join(objPath, 'content.md'), content);
     writeFileSync(path.join(objPath, 'content.meta.json'), JSON.stringify({ blocks: [] }));
     const manifest: BuildManifest = {
-      schemaVersion: 1, nodeVersion: 1, rawHash: hash, contentHash: hash,
+      schemaVersion: 2, nodeVersion: 1, rawHash: hash, contentHash: hash,
       generators: {
         l1: { id: 'placeholder', version: '0.0.0' },
         l2: { id: 'placeholder', version: '0.0.0' },

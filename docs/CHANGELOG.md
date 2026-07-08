@@ -1,5 +1,71 @@
 # Changelog
 
+## [0.5.5] - 2026-07-08
+
+### Changed
+- **Event-driven ingestion (PR3):** replaced monolithic `retineo ingest <path>` with a `SourceAdapter` abstraction.
+  - `adapters/source-adapter.ts` defines `SourceAdapter`, `AdapterRegistry`, `SourceDocument`, and `SourceFetchResult`.
+  - `adapters/filesystem-adapter.ts` implements `FileSystemSourceAdapter` (`sourceId = filesystem` or `filesystem:<dir>`). Syncs directories recursively, fetches bodies, normalizes non-plain-text files through `AdapterManager`, and falls back to raw read.
+  - `services/ingestion-service.ts` defines `IngestionService` and `DefaultIngestionService`. Single entry point `ingest(sourceId, externalId, body, etag, metadata?)` for every source. Computes `contentHash`, skips unchanged etags, runs the full pipeline on change, and writes to `audit_log`.
+  - `retineo ingest <path>` now delegates to `FileSystemSourceAdapter` + `IngestionService`.
+  - `retineo rebuild` clears Registry + CAS + HNSW and re-syncs registered adapters (filesystem). Supports `--force` to wipe the data directory before rebuilding.
+- **Corrupted SQLite handling:** startup detects schema errors in `~/.retineo/retineo.sqlite` and prints a clear message (`retineo rebuild --force` or remove the directory manually) instead of crashing.
+- **AdapterManager fallback:** `FileSystemSourceAdapter.fetch()` normalizes PDF/image/audio/video via document adapters; raw read if normalization fails.
+
+### Fixed
+- Re-ingesting an unchanged file now returns `action: 'unchanged'` with no duplicate pipeline run and no duplicate embeddings.
+- Deleted files in a watched directory are marked `RegistryEntry.status = 'ghost'` on the next `syncSource()`.
+
+### Tests
+- Updated `tests/adapters/ingestion.test.ts`, `tests/adapters/multimodal-pipeline.test.ts`, `tests/integration/image-pipeline.test.ts`, `tests/integration/pdf-pipeline.test.ts`, and `tests/cli/ingest-watch.test.ts` for `IngestionService` + `FileSystemSourceAdapter`.
+- 419 tests passing, 14 skipped.
+
+## [0.5.4] - 2026-07-08
+
+### Changed
+- **Retrieval Cleanup (PR2):** search results are now addressed strictly by `contentHash` and `chunkHash`. `sourcePath` is resolved post-search via the Registry.
+  - `search/retrieval-service.ts` returns `CandidateNode` with `contentHash`, `chunkHash`, `score`, `similarity`. `sourcePath` removed from the embedding/index level.
+  - `search/context-assembler.ts` injects `sourcePath` during final assembly through `RegistryStore.listByContentHash`. Ghost segments include `isGhost: true` and L2 essence, skipping L0 load.
+  - `cli/commands.ts` search/recover updated to use Registry-resolved paths; `recover` only updates `RegistryEntry.status = 'active'`, no filesystem write.
+  - `cli/formatters.ts` formats `contentHash` + `sourcePath` pairs and renders ghost badges 👻.
+  - `bridge/handlers.ts` responses include `contentHash`, `chunkHash`, `isGhost`, and Registry-resolved `sourcePath`.
+- **Audit foundation:** `SQLiteRegistry` implements `AuditService` and writes to the new `audit_log` table.
+  - `ingest`, `search`, `recover`, and `rebuild` actions are logged with timestamp, actor, action, optional `resourceHash`, and metadata.
+- **Registry compliance fields:** `sources` table extended with `created_at`, `retention_policy`, `sensitivity_level`, and `encryption_key_id` (defaults applied via `ALTER TABLE`).
+- **Ghost logic migration:** `ghost/orphan-detector.ts` marks ghosts via `RegistryEntry.status = 'ghost'` and `deletedAt`; `ghost/recovery-service.ts` restores via `status = 'active'`. File-existence checks are no longer the source of truth.
+
+### Fixed
+- Ghost results no longer attempt to load missing L0 content; they return L2 summary only.
+- `recover` no longer fails when the original filesystem path is absent.
+
+### Tests
+- Updated retrieval, bridge, CLI, ghost, and integration tests for the new `contentHash`-first model and audit expectations.
+- 419 tests passing, 14 skipped.
+
+## [0.5.3] - 2026-07-08
+
+### Changed
+- **Registry/CAS separation (PR1):** L0–L3 are now strictly content-addressable. `contentHash` is the only key inside the content pipeline.
+  - `storage/types.ts` introduces `ContentStore`, `RegistryEntry`, and `RegistryStore` interfaces.
+  - `storage/cas.ts` persists only `BuildManifest` in `node.json`; `sourcePath`, `sourceRef`, and `parentId` are no longer written to CAS.
+  - `storage/registry.ts` now stores `source_id`, `external_id`, `content_hash`, `etag`, `status`, `deleted_at`, and `last_seen_at`. Primary key is `(source_id, external_id)`.
+  - `storage/node-builder.ts` builds `ContextNode` from `RegistryEntry + SourceRef + NormalizedContent`; `ContextNode.id` = `contentHash`, segment parent linkage uses `parentHash`.
+  - `storage/context-node-repository.ts` resolves sources via `RegistryStore.get(sourceId, externalId)`. It rethrows incompatible-format errors from CAS instead of swallowing them, so v1 objects surface the rebuild instruction.
+  - `layers/l1-l3-generator.ts` and `embeddings/hnsw-index.ts` operate only with `contentHash`. `embeddings.jsonl` records use `parentId`/`rootHash` = `contentHash`.
+  - `cli/commands.ts` `rebuild`/`recover` operate on `contentHash` via `registry.listByContentHash`.
+  - `bridge/types.ts` and `bridge/handlers.ts` expose `SourceResponse` as a `RegistryEntry` view.
+- **Data format version:** `BuildManifest.schemaVersion` and `HNSWManifest.schemaVersion` are now `2`. Old v1 `node.json`/`embeddings.jsonl` files are detected on read and throw `Data format v1 is incompatible. Run: retineo rebuild`.
+- **SQLite schema guard:** `SQLiteRegistry` detects pre-v2 `sources` tables missing `content_hash` on open and throws the same rebuild instruction before any query runs.
+- **`retineo rebuild` v1 fallback:** the CLI entry point now catches the v1 format error for the `rebuild` command, wipes the old SQLite/CAS/index state, and creates a fresh v2 data directory.
+
+### Fixed
+- `search/retrieval-service.ts` resolves `sourcePath` for UI citations from the Registry (`externalId`) instead of assuming `parentId` is a filesystem path.
+- `cli/worker-script.ts` avoids auto-starting the worker when imported under Vitest, preventing spurious `process.exit(1)` during tests.
+
+### Tests
+- Updated all tests to the new `RegistryEntry`/`contentHash` data model.
+- 420 tests passing, 14 skipped.
+
 ## [0.5.2] - 2026-07-07
 
 ### Added

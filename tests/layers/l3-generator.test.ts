@@ -34,11 +34,11 @@ describe('DefaultL3Generator', () => {
       charStart: 0,
       charEnd: 95,
     }],
-    sourcePath: 'ml.md',
+    contentHash: 'abc123',
   };
 
   it('generates embedding and writes jsonl + bm25 + manifest', async () => {
-    const result = await gen.generate(input, provider, 'abc123', indexDir);
+    const result = await gen.generate(input, provider, indexDir);
 
     expect(result.chunks.length).toBe(1);
     expect(result.chunks[0].vector).toHaveLength(384);
@@ -55,8 +55,8 @@ describe('DefaultL3Generator', () => {
   });
 
   it('increments manifest vectorCount on subsequent calls', async () => {
-    await gen.generate(input, provider, 'hash1', indexDir);
-    await gen.generate(input, provider, 'hash2', indexDir);
+    await gen.generate({ ...input, contentHash: 'hash1' }, provider, indexDir);
+    await gen.generate({ ...input, contentHash: 'hash2' }, provider, indexDir);
 
     const manifestPath = path.join(indexDir, 'hnsw.manifest.json');
     const manifest = JSON.parse(require('fs').readFileSync(manifestPath, 'utf-8'));
@@ -64,7 +64,7 @@ describe('DefaultL3Generator', () => {
   });
 
   it('bm25 index contains terms from L0 body', async () => {
-    await gen.generate(input, provider, 'hash1', indexDir);
+    await gen.generate({ ...input, contentHash: 'hash1' }, provider, indexDir);
 
     const bm25Path = path.join(indexDir, 'bm25.json');
     const bm25 = JSON.parse(require('fs').readFileSync(bm25Path, 'utf-8'));
@@ -84,9 +84,9 @@ describe('DefaultL3Generator', () => {
         charStart: 0,
         charEnd: 38,
       }],
-      sourcePath: 'cats.md',
+      contentHash: 'hash3',
     };
-    await gen.generate(ruInput, provider, 'hash3', indexDir);
+    await gen.generate(ruInput, provider, indexDir);
 
     const bm25Path = path.join(indexDir, 'bm25.json');
     const bm25 = JSON.parse(require('fs').readFileSync(bm25Path, 'utf-8'));
@@ -120,7 +120,7 @@ describe('bruteForceSearch', () => {
       charStart: 0,
       charEnd: 40,
     }],
-    sourcePath: 'a.md',
+    contentHash: 'hash-a',
   };
 
   const inputB: L3Input = {
@@ -132,12 +132,12 @@ describe('bruteForceSearch', () => {
       charStart: 0,
       charEnd: 40,
     }],
-    sourcePath: 'b.md',
+    contentHash: 'hash-b',
   };
 
   it('returns topK results sorted by cosine similarity', async () => {
-    await gen.generate(inputA, provider, 'hash-a', indexDir);
-    await gen.generate(inputB, provider, 'hash-b', indexDir);
+    await gen.generate(inputA, provider, indexDir);
+    await gen.generate(inputB, provider, indexDir);
 
     const queryVec = (await provider.embed(['cats and felines']))[0];
     const results = await bruteForceSearch(indexDir, queryVec, 2);

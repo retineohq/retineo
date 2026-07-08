@@ -6,8 +6,11 @@
 import { writeFile, readFile, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
+import type { HNSWManifest } from '../domain/types.js';
 import type { Logger } from '../utils/logger.js';
 import { getGlobalLogger } from '../utils/logger.js';
+
+const CURRENT_SCHEMA_VERSION = 2;
 
 export interface HNSWIndex {
   build(vectors: Array<{ hash: string; vector: number[] }>): void;
@@ -16,14 +19,6 @@ export interface HNSWIndex {
   save(path: string): Promise<void>;
   load(path: string): Promise<void>;
   size(): number;
-}
-
-export interface HNSWManifest {
-  dimension: number;
-  metric: 'cosine' | 'euclidean' | 'ip';
-  model: string;
-  count: number;
-  version: number;
 }
 
 function cosineDistance(a: number[], b: number[]): number {
@@ -93,7 +88,7 @@ try {
 /** Try native hnswlib-node, fallback to brute-force with warning */
 export async function createHNSWIndex(
   dimension: number,
-  metric: 'cosine' | 'euclidean' | 'ip' = 'cosine',
+  metric: 'cosine' | 'l2' | 'ip' = 'cosine',
   logger?: Logger
 ): Promise<HNSWIndex> {
   if (nativeHNSW) {
@@ -202,22 +197,31 @@ export async function loadOrBuildHNSW(
   const hnswPath = path.join(indexDir, 'hnsw.bin');
 
   let manifest: HNSWManifest = {
+    schemaVersion: CURRENT_SCHEMA_VERSION,
+    indexVersion: 1,
+    embeddingModel: model,
+    embeddingProvider: '',
     dimension,
     metric: 'cosine',
-    model,
-    count: 0,
-    version: 1,
+    vectorCount: 0,
+    createdAt: new Date().toISOString(),
   };
 
   if (existsSync(manifestPath)) {
     try {
-      const existing = JSON.parse(await readFile(manifestPath, 'utf-8')) as HNSWManifest & { embeddingModel?: string };
+      const existing = JSON.parse(await readFile(manifestPath, 'utf-8')) as HNSWManifest;
+      if (existing.schemaVersion < CURRENT_SCHEMA_VERSION) {
+        throw new Error(`Data format v${existing.schemaVersion} is incompatible. Run: retineo rebuild`);
+      }
       manifest = {
+        schemaVersion: existing.schemaVersion,
+        indexVersion: existing.indexVersion + 1,
+        embeddingModel: existing.embeddingModel ?? model,
+        embeddingProvider: existing.embeddingProvider ?? '',
         dimension: existing.dimension ?? dimension,
         metric: existing.metric ?? 'cosine',
-        model: existing.model ?? existing.embeddingModel ?? model,
-        count: existing.count ?? 0,
-        version: (existing.version ?? 0) + 1,
+        vectorCount: existing.vectorCount ?? 0,
+        createdAt: existing.createdAt ?? new Date().toISOString(),
       };
     } catch {
       // use default
@@ -226,7 +230,7 @@ export async function loadOrBuildHNSW(
 
   const index = await createHNSWIndex(dimension, manifest.metric);
 
-  if (existsSync(hnswPath) && manifest.model === model && manifest.dimension === dimension) {
+  if (existsSync(hnswPath) && manifest.embeddingModel === model && manifest.dimension === dimension) {
     try {
       await index.load(hnswPath);
       return { index, manifest };
@@ -251,7 +255,7 @@ export async function loadOrBuildHNSW(
       }
     }
     index.build(vectors);
-    manifest.count = vectors.length;
+    manifest.vectorCount = vectors.length;
     try {
       await index.save(hnswPath);
     } catch (error) {

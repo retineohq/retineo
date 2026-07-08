@@ -9,7 +9,7 @@ import os from 'os';
 import { DefaultOrphanDetector } from '../../packages/core/src/ghost/orphan-detector.js';
 import { LocalCASStorage, computeHash } from '../../packages/core/src/storage/cas.js';
 import { SQLiteRegistry } from '../../packages/core/src/storage/registry.js';
-import type { SourceRecord } from '../../packages/core/src/domain/types.js';
+import type { RegistryEntry } from '../../packages/core/src/storage/types.js';
 
 describe('DefaultOrphanDetector', () => {
   let tmpDir: string;
@@ -29,19 +29,17 @@ describe('DefaultOrphanDetector', () => {
     rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  function registerSource(uri: string, rootHash: string): SourceRecord {
-    const source: SourceRecord = {
-      id: `src-${rootHash.slice(0, 8)}`,
-      protocol: 'file',
-      uri,
-      sourcePath: uri,
-      mimeType: 'text/markdown',
-      adapterId: 'markdown',
-      rawHash: rootHash,
-      rootHash,
-      lastSeenAt: new Date().toISOString(),
+  function registerSource(uri: string, contentHash: string): RegistryEntry {
+    const source: RegistryEntry = {
+      sourceId: 'filesystem',
+      externalId: uri,
+      contentHash,
+      etag: 'etag',
+      status: 'active',
+      deletedAt: null,
+      lastSeenAt: Date.now(),
     };
-    registry.insertSource(source);
+    registry.set(source);
     return source;
   }
 
@@ -58,7 +56,7 @@ describe('DefaultOrphanDetector', () => {
     expect(orphans.length).toBe(1);
     expect(orphans[0].hash).toBe(hash);
     expect(orphans[0].reason).toBe('deleted');
-    expect(orphans[0].sourcePath).toBe(filePath);
+    expect(orphans[0].externalId).toBe(filePath);
   });
 
   it('detectDeletedSources — no orphans when files exist', async () => {
@@ -101,7 +99,8 @@ describe('DefaultOrphanDetector', () => {
 
     const orphan = registry.getOrphan(hash);
     expect(orphan).not.toBeNull();
-    expect(orphan!.originalSourceId).toBe(source.id);
+    expect(orphan!.sourceId).toBe(source.sourceId);
+    expect(orphan!.externalId).toBe(source.externalId);
   });
 
   it('detectModifiedSources — returns empty (placeholder)', async () => {

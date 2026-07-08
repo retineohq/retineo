@@ -112,18 +112,18 @@ export class DefaultCompilationPipeline implements CompilationPipeline {
 
     // Skip empty sources: no point generating essence or vectors.
     if (content.trim().length === 0) {
-      const l1 = await l1Generator.generate(content, node.sourceRef);
+      const l1 = await l1Generator.generate(content);
       await writeFile(path.join(objPath, 'L1.md'), l1.markdown);
       await writeFile(path.join(objPath, 'L1.index.json'), JSON.stringify(l1.index, null, 2));
       node.build.nodeVersion++;
       node.build.generators.l1 = makeGeneratorInfo('outline-parser', '1.0.0');
       await writeFile(path.join(objPath, 'node.json'), JSON.stringify(node.build, null, 2));
-      this.logger.info('pipeline.l1.empty', { nodeHash, source: node.sourceRef.uri });
+      this.logger.info('pipeline.l1.empty', { nodeHash });
       return;
     }
 
     // Generate L1
-    const l1 = await l1Generator.generate(content, node.sourceRef);
+    const l1 = await l1Generator.generate(content);
 
     // Write L1 artifacts to CAS
     await writeFile(path.join(objPath, 'L1.md'), l1.markdown);
@@ -182,9 +182,8 @@ export class DefaultCompilationPipeline implements CompilationPipeline {
     const indexDir = path.join(dataDir, 'index');
 
     const l3Result = await l3Generator.generate(
-      { content, chunks: l1Index.chunks ?? [], sourcePath: node.sourcePath, rootHash: nodeHash },
+      { content, chunks: l1Index.chunks ?? [], contentHash: nodeHash },
       embeddingProvider,
-      nodeHash,
       indexDir
     );
 

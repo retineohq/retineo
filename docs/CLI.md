@@ -43,18 +43,19 @@ retineo init --non-interactive --llm-model gemma4:31b-cloud --embed-model nomic-
 
 ### `retineo ingest <filePath> [--watch] [--timeout <sec>]`
 
-Ingest a file into the knowledge base. With `--watch`, block until all queued jobs are `COMPLETED` (or any fails).
+Ingest a file or directory into the knowledge base via `FileSystemSourceAdapter`. Files are normalized through the document `AdapterManager` by extension (PDF, image, audio, video) or read as raw text. With `--watch`, block until all queued jobs are `COMPLETED` (or any fails).
 
 ```bash
 retineo ingest ./notes.md
-retineo ingest ./doc.pdf --adapter pdf
+retineo ingest ./doc.pdf
 retineo ingest ~/test.md --watch --timeout 600
+retineo ingest ./docs            # sync whole directory
 ```
 
 **Idempotency:** `ingest` is idempotent.
-- Same content hash + same path → prints `Skipped: already ingested (hash: ...)` and does **not** queue any jobs.
-- Same content hash + different path → updates the source path in the registry, prints `Updated source path`, and does **not** queue any jobs.
-- New content hash → full ingest + `GENERATE_L1` jobs queued as usual.
+- Same content hash + same `externalId` → `action: unchanged`, no pipeline run.
+- New content hash → `action: updated`, full ingest + `GENERATE_L1` jobs queued.
+- Same content at a different path → new `RegistryEntry` for that path; the original path becomes a ghost on the next source sync.
 
 When `watch` is enabled, `ingest` checks if a background worker is running; if not, it starts an inline worker in the same process. It polls the jobs table every 5 seconds and exits with code `1` if any job fails or the timeout (default 1800s) elapses.
 
@@ -100,20 +101,22 @@ Rebuild flags affect the whole collection and cannot be combined with a `filePat
 - `--rebuild-l2` deletes cached `L2.json` and re-queues L2→L3 for every source.
 - `--rebuild-l3` deletes the global `index/` directory and re-queues L3 for every node that already has L2.
 
-### `retineo rebuild`
+### `retineo rebuild [--force]`
 
-Full collection rebuild. Use after schema changes (for example, when L3 indexing target changed) or when you want a clean recompile.
+Full collection rebuild. Use after schema changes (for example, when `schemaVersion` changes), to recover from a corrupted SQLite database, or when you want a clean recompile.
 
 ```bash
 retineo rebuild
+retineo rebuild --force            # wipe data dir before rebuilding
 ```
 
 What it does:
-1. Deletes the global `index/` directory (`embeddings.jsonl`, `hnsw.bin`, `hnsw.manifest.json`, `bm25.json`).
-2. Deletes cached `L1.md` / `L1.index.json` and `L2.json` for every registered source.
-3. Queues `GENERATE_L1` jobs for all sources. The pipeline naturally chains `L1` → `L2` → `L3`.
+1. With `--force`, wipes the entire data directory first.
+2. Clears Registry, CAS, and the global `index/` directory (`embeddings.jsonl`, `hnsw.bin`, `hnsw.manifest.json`, `bm25.json`).
+3. Re-syncs every registered filesystem source; new/changed files are ingested, deleted files become ghosts.
+4. The pipeline naturally chains `L1` → `L2` → `L3`.
 
-> **Note:** This is a destructive local operation. It only affects compiled artifacts in the data directory; original source files are untouched.
+> **Note:** This is a destructive local operation. It only affects compiled artifacts and the registry in the data directory; original source files are untouched.
 
 ### `retineo config set|get|list`
 

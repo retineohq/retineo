@@ -6,12 +6,15 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'fs';
 import path from 'path';
 import os from 'os';
+import { randomUUID } from 'crypto';
 import { LocalCASStorage, computeHash } from '../../packages/core/src/storage/cas.js';
 import { SQLiteRegistry } from '../../packages/core/src/storage/registry.js';
 import { DefaultNodeBuilder } from '../../packages/core/src/storage/node-builder.js';
 import { DefaultAdapterManager } from '../../packages/core/src/adapters/manager.js';
 import { DefaultAdapterProcessRunner } from '../../packages/core/src/adapters/runner.js';
-import { DefaultIngestionService } from '../../packages/core/src/adapters/ingestion.js';
+import { DefaultIngestionService } from '../../packages/core/src/services/ingestion-service.js';
+import type { CompilationPipeline } from '../../packages/core/src/layers/pipeline.js';
+import type { JobRecord } from '../../packages/core/src/domain/types.js';
 
 let tmpDir: string;
 let dataDir: string;
@@ -38,7 +41,8 @@ beforeEach(async () => {
 
   const runner = new DefaultAdapterProcessRunner(tmpDir);
   const manager = new DefaultAdapterManager(adaptersDir, runner);
-  service = new DefaultIngestionService(cas, registry, builder, manager, computeHash);
+  const pipeline = makeRecordingPipeline(registry);
+  service = new DefaultIngestionService(cas, registry, builder, manager, pipeline, computeHash);
 
   // Must load adapters before use
   await manager.loadBuiltIn();
@@ -48,6 +52,37 @@ afterEach(() => {
   registry.close();
   rmSync(tmpDir, { recursive: true, force: true });
 });
+
+function makeRecordingPipeline(registry: SQLiteRegistry): CompilationPipeline {
+  const makeJob = (nodeHash: string, type: 'GENERATE_L1' | 'GENERATE_L2' | 'GENERATE_L3'): JobRecord => ({
+    id: randomUUID(),
+    type,
+    payload: JSON.stringify({ nodeId: nodeHash }),
+    priority: 0,
+    attempts: 0,
+    maxAttempts: 3,
+    status: 'PENDING',
+    leaseUntil: null,
+    workerId: null,
+    heartbeatAt: null,
+    createdAt: new Date().toISOString(),
+    startedAt: null,
+    completedAt: null,
+  });
+
+  return {
+    enqueueL1(nodeHash: string) {
+      registry.insertJob(makeJob(nodeHash, 'GENERATE_L1'));
+    },
+    enqueueL2(nodeHash: string) {
+      registry.insertJob(makeJob(nodeHash, 'GENERATE_L2'));
+    },
+    enqueueL3(nodeHash: string) {
+      registry.insertJob(makeJob(nodeHash, 'GENERATE_L3'));
+    },
+    processJob: async () => {},
+  } as unknown as CompilationPipeline;
+}
 
 function setupAdapters(): void {
   // Text adapter
@@ -129,27 +164,25 @@ describe('DefaultIngestionService', () => {
     writeFileSync(filePath, 'Hello RETINEO');
 
     const result = await service.ingestFile(filePath);
-    const node = result.node;
+    const contentHash = result.contentHash;
 
-    expect(node.id).toMatch(/^[a-f0-9]{64}$/);
-    expect(node.depth).toBe(0);
-    expect(node.artifacts.l0).toBeDefined();
-    expect(node.artifacts.l0!.wordCount).toBe(2);
-    expect(result.skipped).toBeUndefined();
+    expect(contentHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(result.action).toBe('created');
 
     // CAS has object (readObject verifies content.md + node.json)
-    const obj = await cas.readObject(node.id);
+    const obj = await cas.readObject(contentHash);
     expect(obj.artifacts.content).toBe('Hello RETINEO');
 
     // Registry has source
-    const rawHash = computeHash(Buffer.from('Hello RETINEO'));
-    const source = registry.getSourceByRawHash(rawHash);
+    const sourceId = `filesystem:${path.dirname(filePath)}`;
+    const source = registry.get(sourceId, filePath);
     expect(source).not.toBeNull();
-    expect(source!.uri).toBe(filePath);
+    expect(source!.externalId).toBe(filePath);
+    expect(source!.contentHash).toBe(contentHash);
 
     // Job queued
     const jobs = registry.getPendingJobs(10);
-    const job = jobs.find((j) => j.payload.includes(node.id));
+    const job = jobs.find((j) => j.payload.includes(contentHash));
     expect(job).toBeDefined();
     expect(job!.type).toBe('GENERATE_L1');
   });
@@ -159,25 +192,26 @@ describe('DefaultIngestionService', () => {
     writeFileSync(filePath, '# Title\n\nBody text here.\n');
 
     const result = await service.ingestFile(filePath);
-    expect(result.node.id).toMatch(/^[a-f0-9]{64}$/);
-    const obj = await cas.readObject(result.node.id);
+    expect(result.contentHash).toMatch(/^[a-f0-9]{64}$/);
+    const obj = await cas.readObject(result.contentHash);
     expect(obj.artifacts.content).toContain('# Title');
   });
 
-  it('is idempotent — same file twice returns existing node', async () => {
+  it('is idempotent — same file twice returns same hash', async () => {
     const filePath = path.join(tmpDir, 'dup.txt');
     writeFileSync(filePath, 'Same content');
 
     const result1 = await service.ingestFile(filePath);
     const result2 = await service.ingestFile(filePath);
 
-    expect(result1.node.id).toBe(result2.node.id);
-    expect(result2.skipped).toBe(true);
+    expect(result1.contentHash).toBe(result2.contentHash);
+    expect(result2.action).toBe('unchanged');
 
     // Only one source record
-    const rawHash = computeHash(Buffer.from('Same content'));
-    const source = registry.getSourceByRawHash(rawHash);
+    const sourceId = `filesystem:${path.dirname(filePath)}`;
+    const source = registry.get(sourceId, filePath);
     expect(source).not.toBeNull();
+    expect(source!.contentHash).toBe(result1.contentHash);
   });
 
   it('ingests batch of files', async () => {
@@ -188,7 +222,7 @@ describe('DefaultIngestionService', () => {
 
     const results = await service.ingestBatch([f1, f2]);
     expect(results.length).toBe(2);
-    expect(results[0].node.id).not.toBe(results[1].node.id);
+    expect(results[0].contentHash).not.toBe(results[1].contentHash);
   });
 
   it('queues GENERATE_L1 job for each ingested file', async () => {
@@ -197,7 +231,7 @@ describe('DefaultIngestionService', () => {
 
     const result = await service.ingestFile(filePath);
     const jobs = registry.getPendingJobs(10);
-    const matching = jobs.filter((j) => j.payload.includes(result.node.id));
+    const matching = jobs.filter((j) => j.payload.includes(result.contentHash));
     expect(matching.length).toBe(1);
     expect(matching[0].type).toBe('GENERATE_L1');
   });

@@ -13,8 +13,8 @@ import type { Chunk } from './l1-generator.js';
 
 export interface L3Chunk {
   chunkHash: string;
-  parentId: string; // sourcePath of originating L0
-  rootHash: string; // contentHash/rootHash of originating L0
+  parentId: string; // contentHash of originating L0
+  rootHash: string; // contentHash of originating L0
   text: string;
   vector: number[];
   chunkId?: string;
@@ -38,12 +38,11 @@ export interface L3Metadata {
 export interface L3Input {
   content: string;
   chunks: Chunk[];
-  sourcePath: string;
-  rootHash?: string;
+  contentHash: string;
 }
 
 export interface L3Generator {
-  generate(input: L3Input, provider: EmbeddingProvider, contentHash: string, indexDir: string): Promise<L3Result>;
+  generate(input: L3Input, provider: EmbeddingProvider, indexDir: string): Promise<L3Result>;
 }
 
 export interface L3GeneratorOptions {
@@ -104,11 +103,11 @@ export class DefaultL3Generator implements L3Generator {
   async generate(
     input: L3Input,
     provider: EmbeddingProvider,
-    contentHash: string,
     indexDir: string
   ): Promise<L3Result> {
     const dim = provider.dimension();
     const model = provider.config.model;
+    const contentHash = input.contentHash;
 
     const chunks = input.chunks.length > 0 ? input.chunks : [{
       id: 'chunk-001',
@@ -128,13 +127,12 @@ export class DefaultL3Generator implements L3Generator {
 
     const embedded = await this.batchEmbed(toEmbed, provider);
 
-    const rootHash = input.rootHash ?? contentHash;
     const l3Chunks: L3Chunk[] = embedded.map((item, idx) => {
       const chunk = chunks[idx];
       return {
         chunkHash: item.hash,
-        parentId: input.sourcePath,
-        rootHash,
+        parentId: contentHash,
+        rootHash: contentHash,
         text: toEmbed[idx].text,
         vector: item.vector,
         chunkId: chunk.id,
@@ -204,8 +202,9 @@ export class DefaultL3Generator implements L3Generator {
 
     // Update HNSW manifest
     const manifestPath = path.join(indexDir, 'hnsw.manifest.json');
+    const CURRENT_SCHEMA_VERSION = 2;
     let manifest: HNSWManifest = {
-      schemaVersion: 1,
+      schemaVersion: CURRENT_SCHEMA_VERSION,
       indexVersion: 1,
       embeddingModel: model,
       embeddingProvider: provider.id,
@@ -218,6 +217,9 @@ export class DefaultL3Generator implements L3Generator {
     if (existsSync(manifestPath)) {
       try {
         const existing = JSON.parse(await readFile(manifestPath, 'utf-8')) as HNSWManifest;
+        if (existing.schemaVersion < CURRENT_SCHEMA_VERSION) {
+          throw new Error(`Data format v${existing.schemaVersion} is incompatible. Run: retineo rebuild`);
+        }
         manifest = {
           ...existing,
           indexVersion: existing.indexVersion + 1,

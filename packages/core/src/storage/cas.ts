@@ -15,7 +15,6 @@ import type {
   L2Artifact,
   BuildManifest,
 } from '../domain/types.js';
-
 export type NodeArtifacts = {
   content: string;
   meta: ContentMeta;
@@ -85,15 +84,8 @@ export class LocalCASStorage implements CASStorage {
       await mkdir(dir, { recursive: true });
     }
 
-    // Persist parentId, sourcePath, sourceRef and semanticLinks alongside BuildManifest for ContextNode reconstruction
-    const nodePayload = {
-      ...node.build,
-      parentId: node.parentId ?? null,
-      sourcePath: node.sourcePath,
-      sourceRef: node.sourceRef,
-      semanticLinks: node.semanticLinks ?? [],
-    };
-    await writeFile(path.join(dir, 'node.json'), JSON.stringify(nodePayload, null, 2));
+    // Persist only BuildManifest in node.json. No sourcePath, sourceRef, or paths.
+    await writeFile(path.join(dir, 'node.json'), JSON.stringify(node.build, null, 2));
     await writeFile(path.join(dir, 'content.md'), artifacts.content);
     await writeFile(path.join(dir, 'content.meta.json'), JSON.stringify(artifacts.meta, null, 2));
 
@@ -109,7 +101,9 @@ export class LocalCASStorage implements CASStorage {
     const dir = this.resolvePath(hash);
 
     const rawManifest = JSON.parse(await readFile(path.join(dir, 'node.json'), 'utf-8'));
-    // Backward compat: node.json may be raw BuildManifest or extended with parentId/sourceRef
+    if (rawManifest.schemaVersion < 2) {
+      throw new Error(`Data format v${rawManifest.schemaVersion} is incompatible. Run: retineo rebuild`);
+    }
     const buildManifest: BuildManifest = {
       schemaVersion: rawManifest.schemaVersion,
       nodeVersion: rawManifest.nodeVersion,
@@ -133,18 +127,14 @@ export class LocalCASStorage implements CASStorage {
       artifacts.l2 = JSON.parse(await readFile(l2Path, 'utf-8')) as L2Artifact;
     }
 
-    const sourceRef = rawManifest.sourceRef as SourceRef | undefined ?? { protocol: 'file', uri: '', mimeType: '' };
-    const sourcePath = (rawManifest.sourcePath as string | undefined) ?? sourceRef.uri ?? '';
-    const semanticLinks = (rawManifest.semanticLinks as ContextNode['semanticLinks']) ?? undefined;
+    // node.json is BuildManifest only. sourceRef is runtime-only and reconstructed from Registry.
+    const sourceRef: SourceRef = { protocol: 'file', uri: '', mimeType: '' };
     const node: ContextNode = {
       id: hash,
       sourceRef,
-      sourcePath,
-      parentId: (rawManifest.parentId as string | undefined) ?? undefined,
       childrenIds: [],
       depth: 0,
       artifacts: {},
-      semanticLinks,
       build: buildManifest,
       createdAt: buildManifest.buildTimestamp,
       updatedAt: buildManifest.buildTimestamp,

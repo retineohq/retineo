@@ -36,13 +36,16 @@ export interface SearchOptions {
 }
 
 export interface CandidateNode {
-  nodeId: Hash;
-  score: number;
+  nodeId: Hash;            // chunkHash (kept for compatibility)
+  contentHash: Hash;       // root content hash (CAS key)
+  chunkHash: Hash;         // chunk-level hash
+  score: number;           // rerank score
+  similarity?: number;     // original L3/BM25 score
   l2Summary?: string;
   l1Preview?: string;
   l0Preview?: string;
   sourceRef?: SourceRef;
-  sourcePath?: string;
+  sourcePath?: string;     // resolved post-search from Registry
   isGhost?: boolean;
   l2Artifact?: L2Artifact;
   lineRange?: { start: number; end: number };
@@ -62,12 +65,15 @@ export interface RetrievalResult {
 }
 
 export interface Citation {
-  nodeId: Hash;
+  nodeId: Hash;            // chunkHash
+  contentHash: Hash;       // root content hash
+  chunkHash: Hash;         // chunk-level hash
   level: 'L2' | 'L1' | 'L0';
   content: string;
+  score?: number;
   span?: { start: number; end: number };
   sourceRef?: SourceRef;
-  sourcePath?: string;
+  sourcePath?: string;     // resolved from Registry
   isGhost?: boolean;
 }
 
@@ -165,10 +171,10 @@ export function buildNavigationTree(
 
 /** Group chunk hits by source document. */
 export function aggregateDocumentHits(
-  chunkHits: Array<ChunkHit & { sourceHash: Hash; sourcePath: string }>,
+  chunkHits: Array<ChunkHit & { sourceHash: Hash; sourcePath?: string }>,
   l1Indices: Map<Hash, L1Index>
 ): DocumentHit[] {
-  const byDoc = new Map<Hash, Array<ChunkHit & { sourceHash: Hash; sourcePath: string }>>();
+  const byDoc = new Map<Hash, Array<ChunkHit & { sourceHash: Hash; sourcePath?: string }>>();
   for (const ch of chunkHits) {
     const existing = byDoc.get(ch.sourceHash) ?? [];
     existing.push(ch);
@@ -177,23 +183,23 @@ export function aggregateDocumentHits(
 
   const hits: DocumentHit[] = [];
   for (const [hash, chunks] of byDoc) {
-    const chunkHits: ChunkHit[] = chunks.map((c) => ({
+    const docChunkHits: ChunkHit[] = chunks.map((c) => ({
       chunkId: c.chunkId,
       score: c.score,
       sectionId: c.sectionId,
       lineRange: c.lineRange,
     }));
-    const score = calculateDocumentScore(chunkHits);
+    const score = calculateDocumentScore(docChunkHits);
     const l1 = l1Indices.get(hash) ?? null;
     hits.push({
       sourceHash: hash,
-      sourcePath: chunks[0].sourcePath,
+      sourcePath: chunks[0].sourcePath ?? hash,
       documentScore: score.documentScore,
       maxChunkScore: score.maxChunkScore,
       coverageBonus: score.coverageBonus,
       densityBonus: score.densityBonus,
-      chunks: chunkHits,
-      navigationTree: l1 ? buildNavigationTree(chunkHits, l1) : null,
+      chunks: docChunkHits,
+      navigationTree: l1 ? buildNavigationTree(docChunkHits, l1) : null,
     });
   }
 
@@ -316,7 +322,6 @@ export class DefaultRetrievalService implements RetrievalService {
   private chunkToSource: Map<
     Hash,
     {
-      sourcePath: string;
       rootHash: Hash;
       chunkId?: string;
       lineStart?: number;
@@ -365,9 +370,9 @@ export class DefaultRetrievalService implements RetrievalService {
     this.chunkToSource.clear();
     for (const rec of loadEmbeddingRecords(this.indexDir)) {
       if (rec.parentId) {
+        const rootHash = rec.rootHash ?? rec.hash;
         this.chunkToSource.set(rec.hash, {
-          sourcePath: rec.parentId,
-          rootHash: rec.rootHash ?? rec.hash,
+          rootHash,
           chunkId: rec.chunkId,
           lineStart: rec.lineStart,
           lineEnd: rec.lineEnd,
@@ -378,13 +383,40 @@ export class DefaultRetrievalService implements RetrievalService {
     }
   }
 
+  private resolveSource(contentHash: Hash): {
+    sourcePath: string;
+    sourceRef?: SourceRef;
+    isGhost: boolean;
+  } {
+    if (!this.registry) {
+      return { sourcePath: contentHash, isGhost: false };
+    }
+    const entries = this.registry.listByContentHash(contentHash);
+    const active = entries.find((e) => e.status === 'active');
+    if (active) {
+      return {
+        sourcePath: active.externalId,
+        sourceRef: { protocol: 'file', uri: active.externalId, mimeType: 'text/markdown' },
+        isGhost: false,
+      };
+    }
+    const anyEntry = entries[0];
+    if (anyEntry) {
+      return {
+        sourcePath: anyEntry.externalId,
+        sourceRef: { protocol: 'file', uri: anyEntry.externalId, mimeType: 'text/markdown' },
+        isGhost: true,
+      };
+    }
+    return { sourcePath: contentHash, isGhost: true };
+  }
+
   async addVectors(chunks: L3Chunk[]): Promise<void> {
     await this.ensureHNSW();
     if (!this.hnswIndex) return;
     for (const c of chunks) {
       this.hnswIndex.add(c.chunkHash, c.vector);
       this.chunkToSource.set(c.chunkHash, {
-        sourcePath: c.parentId,
         rootHash: c.rootHash,
         chunkId: c.chunkId,
         lineStart: c.lineStart,
@@ -483,17 +515,23 @@ export class DefaultRetrievalService implements RetrievalService {
     for (const s of l3Scores) {
       const sourceInfo = this.chunkToSource.get(s.hash);
       const rootHash = sourceInfo?.rootHash ?? s.hash;
-      const sourcePath = sourceInfo?.sourcePath;
       const l2 = await this.loadL2(rootHash);
       if (!l2) continue;
+      const source = this.resolveSource(rootHash);
       const rerankScore = await this.scoreL2(l2, query, queryLang);
-      candidates.push({
+      const candidate: CandidateNode = {
         nodeId: s.hash,
+        contentHash: rootHash,
+        chunkHash: s.hash,
         score: rerankScore,
+        similarity: s.score,
         l2Summary: l2.summary,
         l2Artifact: l2,
-        sourcePath,
-      });
+        sourcePath: source.sourcePath,
+        sourceRef: source.sourceRef,
+        isGhost: source.isGhost,
+      };
+      candidates.push(candidate);
     }
     candidates.sort((a, b) => b.score - a.score);
     const reranked = candidates.slice(0, rerankTopK);
@@ -513,8 +551,11 @@ export class DefaultRetrievalService implements RetrievalService {
     for (const c of selected) {
       citations.push({
         nodeId: c.nodeId,
+        contentHash: c.contentHash,
+        chunkHash: c.chunkHash,
         level: query.intent === 'precision' ? 'L0' : query.intent === 'section' ? 'L1' : 'L2',
         content: c.l2Summary ?? c.l1Preview ?? c.l0Preview ?? '',
+        score: c.score,
         span: c.lineRange,
         sourceRef: c.sourceRef,
         sourcePath: c.sourcePath,
@@ -614,13 +655,12 @@ export class DefaultRetrievalService implements RetrievalService {
   }
 
   private async cascade(candidate: CandidateNode, intent: QueryIntent): Promise<CandidateNode> {
-    const hash = candidate.nodeId;
-    const sourceInfo = this.chunkToSource.get(hash);
-    const rootHash = sourceInfo?.rootHash ?? hash;
+    const chunkHash = candidate.nodeId;
+    const sourceInfo = this.chunkToSource.get(chunkHash);
+    const rootHash = sourceInfo?.rootHash ?? candidate.contentHash ?? chunkHash;
 
-    if (this.registry && this.registry.isOrphan(rootHash)) {
-      candidate.isGhost = true;
-      candidate.sourcePath = sourceInfo?.sourcePath ?? candidate.sourcePath;
+    if (candidate.isGhost) {
+      // Ghost documents provide L2 essence only; do not load L0.
       return candidate;
     }
 
@@ -667,7 +707,8 @@ export class DefaultRetrievalService implements RetrievalService {
               }
             }
             candidate.l0Preview = bestChunk.slice(0, 512);
-            const linesBefore = l0Raw.slice(0, l0Raw.indexOf(bestChunk)).split('\n').length - 1;
+            const idx = l0Raw.indexOf(bestChunk);
+            const linesBefore = idx >= 0 ? l0Raw.slice(0, idx).split('\n').length - 1 : 0;
             const lineCount = bestChunk.split('\n').length;
             candidate.lineRange = { start: linesBefore, end: linesBefore + lineCount };
           }

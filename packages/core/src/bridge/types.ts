@@ -52,12 +52,12 @@ export interface NodeResponse {
 }
 
 export interface SourceResponse {
-  id: string;
-  protocol: string;
-  uri: string;
-  mimeType: string;
-  adapterId: string;
-  rootHash: string;
+  sourceId: string;
+  externalId: string;
+  contentHash: string;
+  etag: string;
+  status: string;
+  deletedAt: number | null;
   lastSeenAt: string;
 }
 
@@ -75,8 +75,11 @@ export interface JobResponse {
 
 export interface CitationDTO {
   nodeId: string;
+  contentHash?: string;
+  chunkHash?: string;
   level: 'L2' | 'L1' | 'L0';
   content: string;
+  score?: number;
   span?: { start: number; end: number };
   sourceRef?: { protocol: string; uri: string; mimeType: string };
   sourcePath?: string;

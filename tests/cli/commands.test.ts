@@ -11,19 +11,13 @@ function makeDeps(): CLICommandsDeps {
     version: '0.1.0',
     ingestionService: {
       async ingestFile(filePath: string) {
-        return {
-          node: {
-            id: 'hash123',
-            sourceRef: { protocol: 'file' as const, uri: filePath, mimeType: 'text/plain' },
-            sourcePath: filePath,
-            childrenIds: [],
-            depth: 0,
-            artifacts: {},
-            build: { schemaVersion: 1, nodeVersion: 1, rawHash: 'mock', contentHash: 'mock', generators: { l1: { id: '', version: '' }, l2: { id: '', version: '' }, embedding: { id: '', version: '' } }, buildTimestamp: new Date().toISOString() },
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          },
-        };
+        return { contentHash: 'hash123', action: 'created' as const };
+      },
+      async syncSource(sourceId: string) {
+        return { processed: 0, ghosts: 0, sourceId };
+      },
+      async syncDirectory(dirPath: string) {
+        return { processed: 0, ghosts: 0, sourceId: `filesystem:${dirPath}` };
       },
     },
     retrievalService: {
@@ -63,6 +57,8 @@ function makeDeps(): CLICommandsDeps {
     },
     registry: {
       listSources: () => [],
+      listByContentHash: () => [],
+      get: () => null,
       getPendingJobs: () => [],
       getJobsBySource: () => [],
       getJob: () => null,
@@ -70,10 +66,8 @@ function makeDeps(): CLICommandsDeps {
       getLastHeartbeat: () => null,
       getRunningWorkerIds: () => [],
       recoverOrphan: vi.fn(),
+      updateSource: vi.fn(),
       getOrphan: () => null,
-      getSourceByRootHash: () => null,
-      getSourceByRawHash: () => null,
-      getSourcesByRootHash: () => [],
     } as any,
     configManager: {
       load: async () => ({
@@ -92,6 +86,7 @@ function makeDeps(): CLICommandsDeps {
       enqueueL2: () => {},
       enqueueL3: () => {},
     },
+    auditService: { log: vi.fn() },
     cas: { getObjectPath: () => '/tmp/retineo/objects/ab/cdef', read: async () => Buffer.from(''), exists: () => false, write: async () => '', delete: async () => {}, writeObject: async () => {}, readObject: async () => ({ node: {} as any, artifacts: { content: '', meta: {} as any } }) },
   };
 }
@@ -134,7 +129,7 @@ describe('CLICommands', () => {
     log.mockRestore();
   });
 
-  it('rebuild queues L1 jobs for all sources and deletes index', async () => {
+  it('rebuild syncs filesystem sources and deletes index', async () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     const deps = makeDeps();
     deps.configManager.load = async () => ({
@@ -145,56 +140,52 @@ describe('CLICommands', () => {
       search: {} as any,
       i18n: {} as any,
     });
+    const syncSource = vi.fn(async () => ({ processed: 1, ghosts: 0 }));
+    deps.ingestionService.syncSource = syncSource;
     deps.registry.listSources = () => [
       {
-        id: 'src1',
-        protocol: 'file',
-        uri: '/tmp/a.md',
-        mimeType: 'text/markdown',
-        adapterId: 'markdown',
-        rawHash: 'hash1',
-        rootHash: 'hash1',
-        lastSeenAt: new Date().toISOString(),
+        sourceId: 'filesystem:/tmp',
+        externalId: '/tmp/a.md',
+        contentHash: 'hash1',
+        etag: 'etag',
+        status: 'active',
+        deletedAt: null,
+        lastSeenAt: Date.now(),
       },
     ];
-    const enqueueL1 = vi.fn();
-    deps.pipeline.enqueueL1 = enqueueL1;
 
     const cmds = new CLICommands(deps);
     await cmds.rebuild({});
-    expect(enqueueL1).toHaveBeenCalledWith('hash1', 'src1');
-    const output = log.mock.calls.find((c) => typeof c[0] === 'string' && c[0].includes('Queued'))?.[0] as string;
-    expect(output).toContain('Queued 1 source(s)');
+    expect(syncSource).toHaveBeenCalledWith('filesystem:/tmp');
+    const output = log.mock.calls.find((c) => typeof c[0] === 'string' && c[0].includes('Rebuilt'))?.[0] as string;
+    expect(output).toContain('Rebuilt 1 source(s)');
     log.mockRestore();
   });
 
-  it('recover prints already valid when file exists and hash matches', async () => {
+  it('recover marks source active and logs audit', async () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
-    const fs = await import('fs');
     const crypto = await import('crypto');
+    const hash = crypto.createHash('sha256').update('hello world').digest('hex');
     const tmpFile = '/tmp/retineo-recover-test-' + Date.now() + '.md';
-    const content = 'hello world';
-    fs.writeFileSync(tmpFile, content);
-    const hash = crypto.createHash('sha256').update(content).digest('hex');
 
     const deps = makeDeps();
-    deps.registry.getSourcesByRootHash = () => [{
-      id: 'src1',
-      protocol: 'file',
-      uri: tmpFile,
-      mimeType: 'text/markdown',
-      adapterId: 'markdown',
-      rawHash: hash,
-      rootHash: hash,
-      lastSeenAt: new Date().toISOString(),
+    deps.registry.listByContentHash = () => [{
+      sourceId: 'src1',
+      externalId: tmpFile,
+      contentHash: hash,
+      etag: 'etag',
+      status: 'ghost',
+      deletedAt: Date.now(),
+      lastSeenAt: Date.now(),
     }];
-    deps.cas.getObjectPath = () => '/tmp/retineo/objects/ab/cdef';
+    deps.registry.recoverOrphan = vi.fn();
+    deps.registry.updateSource = vi.fn();
 
     const cmds = new CLICommands(deps);
     await cmds.recover(hash);
-    expect(log).toHaveBeenCalledWith(`Already valid: ${hash} → ${tmpFile}`);
+    expect(deps.registry.updateSource).toHaveBeenCalledWith('src1', tmpFile, { status: 'active', deletedAt: null });
+    expect(log).toHaveBeenCalledWith(`Recovered: ${hash} → src1:${tmpFile}`);
 
     log.mockRestore();
-    fs.unlinkSync(tmpFile);
   });
 });

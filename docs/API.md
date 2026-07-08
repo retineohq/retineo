@@ -75,7 +75,7 @@ Engine status.
 **Response:**
 ```json
 {
-  "version": "0.5.2",
+  "version": "0.5.5",
   "nodeCount": 1234,
   "sourceCount": 567,
   "jobCount": { "pending": 12, "running": 0, "completed": 0, "failed": 0 },

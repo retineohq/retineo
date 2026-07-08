@@ -15,7 +15,7 @@ import { SQLiteRegistry } from '../storage/registry.js';
 import { DefaultNodeBuilder } from '../storage/node-builder.js';
 import { DefaultAdapterManager } from '../adapters/manager.js';
 import { DefaultAdapterProcessRunner } from '../adapters/runner.js';
-import { DefaultIngestionService } from '../adapters/ingestion.js';
+import { DefaultIngestionService } from '../services/ingestion-service.js';
 import { DefaultQueryAnalyzer } from '../search/query-analyzer.js';
 import { DefaultRetrievalService } from '../search/retrieval-service.js';
 import { DefaultContextAssembler } from '../search/context-assembler.js';
@@ -128,8 +128,10 @@ export async function startDaemonServices(): Promise<DaemonServices> {
     registry,
     nodeBuilder,
     adapterManager,
+    pipeline,
     computeHash,
     logger,
+    registry,
   );
 
   // Worker
@@ -154,6 +156,7 @@ export async function startDaemonServices(): Promise<DaemonServices> {
       registry,
       cas,
       configManager,
+      auditService: registry,
       version: VERSION,
       indexDir,
     },

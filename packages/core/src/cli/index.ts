@@ -72,10 +72,11 @@ export function createCLI(deps: CLICommandsDeps): Command {
   program
     .command('rebuild')
     .description('Delete the search index and re-compile L1/L2/L3 for all known sources')
+    .option('-f, --force', 'Wipe all data and rebuild from registered sources')
     .option('-w, --watch', 'Block until all queued jobs are COMPLETED')
     .option('-t, --timeout <seconds>', 'Watch timeout in seconds (default 1800)', parseInt)
-    .action(async (options: { watch?: boolean; timeout?: number }) => {
-      await commands.rebuild({ watch: options.watch, timeout: options.timeout });
+    .action(async (options: { force?: boolean; watch?: boolean; timeout?: number }) => {
+      await commands.rebuild({ force: options.force, watch: options.watch, timeout: options.timeout });
     });
 
   const configCmd = program.command('config').description('Read or write configuration values');

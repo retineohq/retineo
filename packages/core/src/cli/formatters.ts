@@ -5,6 +5,7 @@
 
 import type { SearchResponse, StatusResponse, JobResponse } from '../bridge/types.js';
 import type { Section } from '../layers/l1-generator.js';
+import type { IngestResult } from '../services/ingestion-service.js';
 
 interface DocHitPayload {
   sourceHash: string;
@@ -27,8 +28,9 @@ export function formatSearchResult(res: SearchResponse & { documentHits?: DocHit
   if (res.documentHits && res.documentHits.length > 0) {
     for (const doc of res.documentHits) {
       const sourceName = doc.sourcePath.split('/').pop() ?? doc.sourcePath;
+      const hashShort = doc.sourceHash.slice(0, 8);
       const ghostMarker = doc.isGhost ? '👻 ' : '';
-      lines.push(`Document ${ghostMarker}${sourceName} (score: ${doc.score.toFixed(2)})`);
+      lines.push(`Document ${ghostMarker}${sourceName} [${hashShort}] (score: ${doc.score.toFixed(2)})`);
       if (doc.navTree && doc.navTree.length > 0) {
         renderSections(doc.navTree, lines, '');
       } else {
@@ -37,11 +39,12 @@ export function formatSearchResult(res: SearchResponse & { documentHits?: DocHit
       lines.push('');
     }
   } else {
-    // Fallback: old citation format
+    // Fallback: citation format
     for (let i = 0; i < res.results.selected.length; i++) {
       const c = res.results.selected[i];
       const ghostMarker = c.isGhost ? '👻 ' : '';
-      lines.push(`[${i + 1}] ${ghostMarker}[[${c.nodeId.slice(0, 8)}]]`);
+      const hash = c.contentHash ?? c.nodeId;
+      lines.push(`[${i + 1}] ${ghostMarker}[[${hash.slice(0, 8)}]] ${c.sourcePath ?? ''}`);
       lines.push(`    L2: ${c.l2Summary ?? c.l1Preview ?? c.l0Preview ?? 'N/A'}`);
       if (c.lineRange) {
         lines.push(`    Citation: lines ${c.lineRange.start}-${c.lineRange.end}`);
@@ -86,12 +89,10 @@ export function formatJobs(jobs: JobResponse[]): string {
   return lines.join('\n');
 }
 
-export function formatIngestResult(sourceId: string, rootHash: string, jobs: string[]): string {
+export function formatIngestResult(sourceId: string, result: IngestResult): string {
   const lines: string[] = [];
-  lines.push(`Source registered: ${sourceId} → ${rootHash}`);
-  for (const jobId of jobs) {
-    lines.push(`Job ${jobId} queued for L1 generation`);
-  }
+  const actionLabel = result.action === 'unchanged' ? 'unchanged' : result.action;
+  lines.push(`Source registered: ${sourceId} → ${result.contentHash} (${actionLabel})`);
   return lines.join('\n');
 }
 

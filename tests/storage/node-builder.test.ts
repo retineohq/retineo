@@ -4,23 +4,28 @@
 
 import { describe, it, expect } from 'vitest';
 import { DefaultNodeBuilder } from '../../packages/core/src/storage/node-builder.js';
-import type { SourceRecord, NormalizedContent, SegmentRef } from '../../packages/core/src/domain/types.js';
+import type { NormalizedContent, SegmentRef, SourceRef } from '../../packages/core/src/domain/types.js';
+import type { RegistryEntry } from '../../packages/core/src/storage/types.js';
 
 const builder = new DefaultNodeBuilder();
 
-function makeSource(): SourceRecord {
+function makeSource(contentHash?: string): RegistryEntry {
   return {
-    id: 'test.md',
-    protocol: 'file',
-    uri: '/tmp/test.md',
-    sourcePath: 'test.md',
-    mimeType: 'text/markdown',
-    adapterId: 'file',
-    rawHash: 'r'.repeat(64),
-    rootHash: '',
-    lastSeenAt: new Date().toISOString(),
+    sourceId: 'filesystem',
+    externalId: '/tmp/test.md',
+    contentHash: contentHash ?? 'c'.repeat(64),
+    etag: 'etag',
+    status: 'active',
+    deletedAt: null,
+    lastSeenAt: Date.now(),
   };
 }
+
+const sourceRef: SourceRef = {
+  protocol: 'file',
+  uri: '/tmp/test.md',
+  mimeType: 'text/markdown',
+};
 
 function makeNormalized(content: string, segments?: SegmentRef[]): NormalizedContent {
   return {
@@ -34,14 +39,14 @@ describe('buildRoot', () => {
   it('creates root node with correct hashes', async () => {
     const src = makeSource();
     const norm = makeNormalized('Hello world');
-    const node = await builder.buildRoot(src, norm, 'r'.repeat(64));
+    const node = await builder.buildRoot(src, sourceRef, norm, 'r'.repeat(64));
 
     expect(node.id).toMatch(/^[a-f0-9]{64}$/);
     expect(node.depth).toBe(0);
     expect(node.childrenIds).toEqual([]);
     expect(node.build.rawHash).toBe('r'.repeat(64));
     expect(node.build.contentHash).toBe(node.id);
-    expect(node.build.schemaVersion).toBe(1);
+    expect(node.build.schemaVersion).toBe(2);
     expect(node.artifacts.l0).toBeDefined();
     expect(node.artifacts.l0!.wordCount).toBe(2);
     expect(node.artifacts.l0!.charCount).toBe(11);
@@ -50,7 +55,7 @@ describe('buildRoot', () => {
   it('generators are placeholders', async () => {
     const src = makeSource();
     const norm = makeNormalized('x');
-    const node = await builder.buildRoot(src, norm, 'r'.repeat(64));
+    const node = await builder.buildRoot(src, sourceRef, norm, 'r'.repeat(64));
     expect(node.build.generators.l1.id).toBe('placeholder');
     expect(node.build.generators.l2.version).toBe('0.0.0');
   });
@@ -63,13 +68,13 @@ describe('buildSegments', () => {
       { spanStart: 0, spanEnd: 3, content: 'one', metadata: { blocks: [] } },
       { spanStart: 3, spanEnd: 6, content: 'two', metadata: { blocks: [] } },
     ]);
-    const root = await builder.buildRoot(src, norm, 'r'.repeat(64));
-    const children = await builder.buildSegments(root, norm.segments!, src);
+    const root = await builder.buildRoot(src, sourceRef, norm, 'r'.repeat(64));
+    const children = await builder.buildSegments(root, norm.segments!, src, sourceRef);
 
     expect(children.length).toBe(2);
     expect(children[0].depth).toBe(1);
-    expect(children[0].parentId).toBe(root.sourcePath);
-    expect(children[1].parentId).toBe(root.sourcePath);
+    expect(children[0].parentHash).toBe(root.id);
+    expect(children[1].parentHash).toBe(root.id);
     expect(children[0].id).not.toBe(children[1].id);
   });
 
@@ -79,8 +84,8 @@ describe('buildSegments', () => {
       { spanStart: 0, spanEnd: 2, content: 'a', metadata: { blocks: [] } },
       { spanStart: 2, spanEnd: 4, content: 'b', metadata: { blocks: [] } },
     ];
-    const root = await builder.buildRoot(src, makeNormalized('ab'), 'r'.repeat(64));
-    const children = await builder.buildSegments(root, segs, src);
+    const root = await builder.buildRoot(src, sourceRef, makeNormalized('ab'), 'r'.repeat(64));
+    const children = await builder.buildSegments(root, segs, src, sourceRef);
     expect(children[0].id).not.toBe(children[1].id);
   });
 });

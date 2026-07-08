@@ -27,11 +27,10 @@ function makeNode(id: string): ContextNode {
   return {
     id,
     sourceRef: { protocol: 'file', uri: '/dev/null', mimeType: 'text/plain' },
-    sourcePath: '/dev/null',
     childrenIds: [],
     depth: 0,
     build: {
-      schemaVersion: 1,
+      schemaVersion: 2,
       nodeVersion: 1,
       rawHash: id,
       contentHash: id,
