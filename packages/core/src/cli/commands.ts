@@ -14,6 +14,7 @@ import type { ConfigManager, RetineoConfig, ProviderConfigEntry } from '../stora
 import type { CompilationPipeline } from '../layers/pipeline.js';
 import type { SecretsManager } from '../storage/secrets.js';
 import { formatSearchResult, formatStatus, formatJobs, formatIngestResult, formatConfig, formatRecoverResult } from './formatters.js';
+import { FileSystemSourceAdapter } from '../adapters/filesystem-adapter.js';
 import { DefaultGhostRecoveryService } from '../ghost/recovery-service.js';
 import type { L1Index } from '../layers/l1-generator.js';
 import { runDoctor, formatDoctor } from './doctor.js';
@@ -296,6 +297,8 @@ export class CLICommands {
         const p = pathMod.join(config.dataDir, name);
         if (existsSync(p)) rmSync(p, { recursive: true, force: true });
       }
+      this.deps.registry.clearJobs();
+      this.deps.registry.clearOrphans();
     }
 
     const indexDir = pathMod.join(config.dataDir, 'index');
@@ -313,6 +316,15 @@ export class CLICommands {
     let processed = 0;
     let ghosts = 0;
     for (const sourceId of sourceIds) {
+      // Lazily register a filesystem adapter for every known filesystem source.
+      if (sourceId.startsWith('filesystem:')) {
+        const root = sourceId.slice('filesystem:'.length);
+        if (root) {
+          this.deps.ingestionService.registerAdapter(
+            new FileSystemSourceAdapter(root, undefined, sourceId)
+          );
+        }
+      }
       try {
         const res = await this.deps.ingestionService.syncSource(sourceId);
         processed += res.processed;

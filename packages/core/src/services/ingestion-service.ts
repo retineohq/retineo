@@ -211,8 +211,8 @@ export class DefaultIngestionService implements IngestionService {
     for (const doc of docs) {
       seen.add(doc.externalId);
       const entry = existingById.get(doc.externalId);
-      if (entry && entry.etag === doc.etag && entry.status === 'active') {
-        // Fast path: unchanged by etag
+      if (entry && entry.etag === doc.etag && entry.status === 'active' && this.cas.exists(entry.contentHash)) {
+        // Fast path: unchanged by etag and CAS object still present
         this.registry.set({ ...entry, lastSeenAt: Date.now() });
         continue;
       }

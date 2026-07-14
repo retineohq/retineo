@@ -414,8 +414,11 @@ export class DefaultRetrievalService implements RetrievalService {
   async addVectors(chunks: L3Chunk[]): Promise<void> {
     await this.ensureHNSW();
     if (!this.hnswIndex) return;
+    let added = 0;
     for (const c of chunks) {
+      if (this.hnswIndex.has(c.chunkHash)) continue;
       this.hnswIndex.add(c.chunkHash, c.vector);
+      added++;
       this.chunkToSource.set(c.chunkHash, {
         rootHash: c.rootHash,
         chunkId: c.chunkId,
@@ -425,8 +428,10 @@ export class DefaultRetrievalService implements RetrievalService {
         charEnd: c.charEnd,
       });
     }
-    const hnswPath = path.join(this.indexDir, 'hnsw.bin');
-    await this.hnswIndex.save(hnswPath);
+    if (added > 0) {
+      const hnswPath = path.join(this.indexDir, 'hnsw.bin');
+      await this.hnswIndex.save(hnswPath);
+    }
   }
 
   async search(query: AnalyzedQuery, options: SearchOptions = {}): Promise<RetrievalResult> {

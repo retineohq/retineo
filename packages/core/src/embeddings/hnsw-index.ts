@@ -16,6 +16,7 @@ export interface HNSWIndex {
   build(vectors: Array<{ hash: string; vector: number[] }>): void;
   search(query: number[], k: number): Array<{ hash: string; distance: number }>;
   add(hash: string, vector: number[]): void;
+  has(hash: string): boolean;
   save(path: string): Promise<void>;
   load(path: string): Promise<void>;
   size(): number;
@@ -37,13 +38,21 @@ function cosineDistance(a: number[], b: number[]): number {
 /** Brute-force fallback when native HNSW is unavailable */
 class BruteForceHNSW implements HNSWIndex {
   private vectors: Array<{ hash: string; vector: number[] }> = [];
+  private hashes: Set<string> = new Set();
 
   build(vectors: Array<{ hash: string; vector: number[] }>): void {
     this.vectors = vectors.map((v) => ({ hash: v.hash, vector: [...v.vector] }));
+    this.hashes = new Set(this.vectors.map((v) => v.hash));
   }
 
   add(hash: string, vector: number[]): void {
+    if (this.hashes.has(hash)) return;
     this.vectors.push({ hash, vector: [...vector] });
+    this.hashes.add(hash);
+  }
+
+  has(hash: string): boolean {
+    return this.hashes.has(hash);
   }
 
   search(query: number[], k: number): Array<{ hash: string; distance: number }> {
@@ -65,6 +74,7 @@ class BruteForceHNSW implements HNSWIndex {
     const raw = await readFile(filePath, 'utf-8');
     const parsed = JSON.parse(raw) as { type: string; vectors: Array<{ hash: string; vector: number[] }> };
     this.vectors = parsed.vectors ?? [];
+    this.hashes = new Set(this.vectors.map((v) => v.hash));
   }
 
   size(): number {
@@ -110,6 +120,7 @@ class NativeHNSWWrapper implements HNSWIndex {
   private maxElements = 100000;
   private curCount = 0;
   private labelToHash: Map<number, string> = new Map();
+  private hashes: Set<string> = new Set();
 
   constructor(index: unknown, metric: string, dimension: number) {
     this.index = index;
@@ -129,13 +140,16 @@ class NativeHNSWWrapper implements HNSWIndex {
       idx.resizeIndex(this.maxElements);
     }
     for (const v of vectors) {
+      if (this.hashes.has(v.hash)) continue;
       const label = this.curCount++;
       this.labelToHash.set(label, v.hash);
+      this.hashes.add(v.hash);
       idx.addPoint(v.vector, label);
     }
   }
 
   add(hash: string, vector: number[]): void {
+    if (this.hashes.has(hash)) return;
     const idx = this.index as {
       resizeIndex: (n: number) => void;
       addPoint: (vec: number[], label: number) => void;
@@ -146,7 +160,12 @@ class NativeHNSWWrapper implements HNSWIndex {
     }
     const label = this.curCount++;
     this.labelToHash.set(label, hash);
+    this.hashes.add(hash);
     idx.addPoint(vector, label);
+  }
+
+  has(hash: string): boolean {
+    return this.hashes.has(hash);
   }
 
   search(query: number[], k: number): Array<{ hash: string; distance: number }> {
@@ -176,6 +195,7 @@ class NativeHNSWWrapper implements HNSWIndex {
       const raw = await readFile(mappingPath, 'utf-8');
       const mapping = JSON.parse(raw) as Record<number, string>;
       this.labelToHash = new Map(Object.entries(mapping).map(([k, v]) => [Number(k), v]));
+      this.hashes = new Set(this.labelToHash.values());
       this.curCount = this.labelToHash.size;
     } catch {
       // no mapping saved (legacy or brute-force), use numeric labels

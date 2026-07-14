@@ -19,6 +19,7 @@ function makeDeps(): CLICommandsDeps {
       async syncDirectory(dirPath: string) {
         return { processed: 0, ghosts: 0, sourceId: `filesystem:${dirPath}` };
       },
+      registerAdapter: vi.fn(),
     },
     retrievalService: {
       async search() {

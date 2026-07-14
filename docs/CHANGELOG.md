@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.5.6] - 2026-07-14
+
+### Fixed
+- **HNSW duplicate prevention:** `embeddings/hnsw-index.ts` now tracks inserted hashes and skips duplicates in `add()`/`build()`. `search/retrieval-service.ts` checks `hnswIndex.has(chunkHash)` before adding vectors, avoiding duplicate HNSW entries when the same chunk is re-ingested or reloaded.
+- **`rebuild --force` adapter registration:** `cli/commands.ts` lazily registers `FileSystemSourceAdapter` for every `filesystem:*` source before `syncSource()`, fixing `Source adapter not found` errors during `retineo rebuild --force`.
+- **`rebuild --force` re-ingest after wipe:** `services/ingestion-service.ts` now verifies `contentHash` exists in CAS before skipping by etag. If CAS was wiped (e.g. `--force`), changed content is re-ingested even when Registry still references the old etag.
+- **Registry cleanup helpers:** `storage/registry.ts` adds `clearSources()`, `clearJobs()`, and `clearOrphans()`. `rebuild --force` clears jobs/orphans but preserves source records so adapters can re-sync.
+
+### Tests
+- Updated `tests/cli/commands.test.ts` mock `ingestionService` with `registerAdapter`.
+- 419 tests passing, 14 skipped.
+
 ## [0.5.5] - 2026-07-08
 
 ### Changed

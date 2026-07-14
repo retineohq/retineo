@@ -58,6 +58,10 @@ export interface Registry extends RegistryStore {
   listOrphans(): OrphanRecord[];
   purgeOrphansOlderThan(days: number): number;
   isOrphan(hash: Hash): boolean;
+
+  clearSources(): void;
+  clearJobs(): void;
+  clearOrphans(): void;
 }
 
 function parseTimestamp(value: unknown): number {
@@ -307,6 +311,18 @@ export class SQLiteRegistry implements Registry, AuditService {
 
   deleteSource(sourceId: string, externalId: string): void {
     this.db.prepare('DELETE FROM sources WHERE source_id = ? AND external_id = ?').run(sourceId, externalId);
+  }
+
+  clearSources(): void {
+    this.db.prepare('DELETE FROM sources').run();
+  }
+
+  clearJobs(): void {
+    this.db.prepare('DELETE FROM jobs').run();
+  }
+
+  clearOrphans(): void {
+    this.db.prepare('DELETE FROM orphaned_objects').run();
   }
 
   listSources(): RegistryEntry[] {
