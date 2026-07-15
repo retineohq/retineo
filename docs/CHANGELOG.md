@@ -1,17 +1,24 @@
 # Changelog
 
-## [0.5.7] - 2026-07-15
+## [0.5.8] - 2026-07-15
 
 ### Fixed
-- **`cas.exists()` recognizes both object layouts:** `storage/cas.ts` now returns `true` when either `artifact.bin` (legacy `write()`) or `node.json` (pipeline `writeObject()`) exists. Prevents `ingest.skip.duplicate` during `rebuild --force` after the CAS `objects/` directory is wiped.
-- **`rebuild --force` fully resets Registry:** `cli/commands.ts` captures filesystem source IDs, then calls `registry.clearSources()`/`clearJobs()`/`clearOrphans()` before re-syncing. All files are re-ingested, including duplicate-content files under different paths.
-- **`RETINEO_DATA_DIR` honoured on first run:** `storage/config.ts` saves `dataDir: $RETINEO_DATA_DIR` into the default `config.yaml`; `bin/retineo.js` uses the same default when no config exists. CLI no longer silently falls back to `~/.retineo` in fresh data directories.
 - **Search deduplication by `contentHash`:** `search/retrieval-service.ts` filters duplicate `contentHash` values after L2 rerank. One document no longer occupies multiple result slots.
 - **Full titles in search output:** `layers/l1-generator.ts` no longer truncates titles to 80 characters; `cli/formatters.ts` no longer truncates L2 summaries. Search results show complete content.
 
 ### Tests
 - Fixed flaky `transport.test.ts` exit-code timing.
 - 433 tests passing, 0 skipped.
+
+## [0.5.7] - 2026-07-15
+
+### Fixed
+- **`cas.exists()` recognizes both object layouts:** `storage/cas.ts` now returns `true` when either `artifact.bin` (legacy `write()`) or `node.json` (pipeline `writeObject()`) exists. Prevents `ingest.skip.duplicate` during `rebuild --force` after the CAS `objects/` directory is wiped.
+- **`rebuild --force` fully resets Registry:** `cli/commands.ts` captures filesystem source IDs, then calls `registry.clearSources()`/`clearJobs()`/`clearOrphans()` before re-syncing. All files are re-ingested, including duplicate-content files under different paths.
+- **`RETINEO_DATA_DIR` honoured on first run:** `storage/config.ts` saves `dataDir: $RETINEO_DATA_DIR` into the default `config.yaml`; `bin/retineo.js` uses the same default when no config exists. CLI no longer silently falls back to `~/.retineo` in fresh data directories.
+
+### Tests
+- 419 tests passing, 14 skipped.
 
 ## [0.5.6] - 2026-07-14
 
