@@ -542,10 +542,20 @@ export class DefaultRetrievalService implements RetrievalService {
     const reranked = candidates.slice(0, rerankTopK);
     trace.steps.push(`L2: ${reranked.length} reranked`);
 
+    // Deduplicate by contentHash so one document does not occupy multiple result slots.
+    const seenHashes = new Set<Hash>();
+    const uniqueReranked: CandidateNode[] = [];
+    for (const c of reranked) {
+      if (!seenHashes.has(c.contentHash)) {
+        seenHashes.add(c.contentHash);
+        uniqueReranked.push(c);
+      }
+    }
+
     // L1/L0 Cascade
     trace.steps.push('L1/L0: cascade start');
     const selected: CandidateNode[] = [];
-    for (const c of reranked.slice(0, finalTopK)) {
+    for (const c of uniqueReranked.slice(0, finalTopK)) {
       const enriched = await this.cascade(c, query.intent);
       selected.push(enriched);
     }
@@ -573,7 +583,7 @@ export class DefaultRetrievalService implements RetrievalService {
 
     const result: RetrievalResult = {
       query: query.originalQuery,
-      candidates: reranked,
+      candidates: uniqueReranked,
       selected,
       citations,
       trace,

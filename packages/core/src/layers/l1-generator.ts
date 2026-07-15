@@ -83,8 +83,7 @@ function extractTitle(lines: string[], context?: L1SourceContext): string {
   }
   const firstNonEmpty = lines.find((l) => l.trim().length > 0);
   if (firstNonEmpty) {
-    const trimmed = firstNonEmpty.trim();
-    return trimmed.length > 80 ? trimmed.slice(0, 80) + '…' : trimmed;
+    return firstNonEmpty.trim();
   }
   if (context?.uri) {
     const name = basenameFromUri(context.uri);
@@ -186,11 +185,7 @@ function segmentPlainText(
     const doubleBlank = blank && prevBlank;
 
     if (boundary || doubleBlank) {
-      const title = boundary
-        ? trimmed.length > 80
-          ? trimmed.slice(0, 80) + '…'
-          : trimmed
-        : `Segment ${headings.length + 1}`;
+      const title = boundary ? trimmed : `Segment ${headings.length + 1}`;
       headings.push({ level: 2, title, lineIndex: i });
     }
 

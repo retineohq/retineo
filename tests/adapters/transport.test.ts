@@ -138,7 +138,10 @@ rl.on('line', () => process.exit(2));
     transport.onExit((code) => { exitCode = code; });
 
     transport.send({ jsonrpc: '2.0', id: 5, method: 'x' }).catch(() => {});
-    await new Promise((r) => setTimeout(r, 150));
+    const start = Date.now();
+    while (exitCode === -999 && Date.now() - start < 2000) {
+      await new Promise((r) => setTimeout(r, 50));
+    }
 
     expect(exitCode).toBe(2);
     await transport.close().catch(() => {});

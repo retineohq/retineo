@@ -34,7 +34,7 @@ export function formatSearchResult(res: SearchResponse & { documentHits?: DocHit
       if (doc.navTree && doc.navTree.length > 0) {
         renderSections(doc.navTree, lines, '');
       } else {
-        lines.push(`  └── L2: ${doc.l2Summary.slice(0, 120)}${doc.l2Summary.length > 120 ? '...' : ''}`);
+        lines.push(`  └── L2: ${doc.l2Summary}`);
       }
       lines.push('');
     }
