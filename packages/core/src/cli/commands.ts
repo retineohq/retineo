@@ -292,11 +292,15 @@ export class CLICommands {
     const { rmSync, existsSync } = await import('fs');
     const pathMod = await import('path');
 
+    // Capture source IDs before clearing the registry.
+    const sources = this.deps.registry.listSources();
+
     if (options?.force) {
       for (const name of ['index', 'objects']) {
         const p = pathMod.join(config.dataDir, name);
         if (existsSync(p)) rmSync(p, { recursive: true, force: true });
       }
+      this.deps.registry.clearSources();
       this.deps.registry.clearJobs();
       this.deps.registry.clearOrphans();
     }
@@ -307,7 +311,6 @@ export class CLICommands {
     }
 
     // Sync every filesystem source so deleted files become ghosts and changed/new files are ingested.
-    const sources = this.deps.registry.listSources();
     const sourceIds = new Set<string>();
     for (const src of sources) {
       if (src.sourceId.startsWith('filesystem')) sourceIds.add(src.sourceId);

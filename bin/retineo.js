@@ -61,7 +61,7 @@ async function main() {
     config = await configManager.load();
   } catch {
     // Not initialized yet — use defaults
-    const dataDir = path.join(os.homedir(), '.retineo');
+    const dataDir = process.env.RETINEO_DATA_DIR || path.join(os.homedir(), '.retineo');
     config = {
       dataDir,
       defaultAdapter: 'file',

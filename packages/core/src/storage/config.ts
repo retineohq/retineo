@@ -348,13 +348,14 @@ export class FileConfigManager implements ConfigManager {
 
   async load(): Promise<RetineoConfig> {
     if (!existsSync(this.configPath)) {
-      await this.save(DEFAULT_CONFIG);
-      return structuredClone(DEFAULT_CONFIG);
+      const defaultConfig = { ...DEFAULT_CONFIG, dataDir: this.dataDir };
+      await this.save(defaultConfig);
+      return structuredClone(defaultConfig);
     }
     const raw = await readFile(this.configPath, 'utf-8');
     const parsed = yaml.load(raw) as Partial<RetineoConfig> & Record<string, unknown>;
     return {
-      dataDir: parsed.dataDir ?? DEFAULT_CONFIG.dataDir,
+      dataDir: parsed.dataDir ?? this.dataDir,
       defaultAdapter: parsed.defaultAdapter ?? DEFAULT_CONFIG.defaultAdapter,
       llmProvider: parsed.llmProvider ?? DEFAULT_CONFIG.llmProvider,
       embeddingModel: parsed.embeddingModel ?? DEFAULT_CONFIG.embeddingModel,

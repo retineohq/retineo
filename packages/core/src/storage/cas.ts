@@ -66,7 +66,8 @@ export class LocalCASStorage implements CASStorage {
   }
 
   exists(hash: Hash): boolean {
-    return existsSync(path.join(this.resolvePath(hash), 'artifact.bin'));
+    const dir = this.resolvePath(hash);
+    return existsSync(path.join(dir, 'artifact.bin')) || existsSync(path.join(dir, 'node.json'));
   }
 
   async delete(hash: Hash): Promise<void> {

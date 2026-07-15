@@ -124,7 +124,7 @@ export class DefaultIngestionService implements IngestionService {
     const contentHash = this.computeHash(body);
     const existing = this.registry.get(sourceId, externalId);
 
-    if (existing && existing.etag === etag && existing.contentHash === contentHash) {
+    if (existing && existing.etag === etag && existing.contentHash === contentHash && this.cas.exists(contentHash)) {
       // Re-activate a ghosted source if it reappears.
       if (existing.status !== 'active') {
         this.registry.set({
