@@ -26,6 +26,7 @@ import { DefaultL3Generator } from '../layers/l3-generator.js';
 import { FastifyBridgeServer } from '../bridge/server.js';
 import { DefaultHealthService } from '../bridge/health.js';
 import { DefaultMetricsService } from '../bridge/metrics.js';
+import { DefaultHealthAnalyzer } from '../health/health-analyzer.js';
 import { createLogger } from '../utils/logger.js';
 import { DefaultShutdownManager } from '../utils/shutdown.js';
 import path from 'path';
@@ -113,6 +114,8 @@ export async function startBridgeServices(): Promise<RunningBridgeServices> {
     registry,
   );
 
+  const healthAnalyzer = new DefaultHealthAnalyzer({ cas, registry, indexDir });
+
   const shutdownManager = new DefaultShutdownManager({ logger, timeoutMs: 10000 });
   const bridge = new FastifyBridgeServer({
     host: config.bridge.host,
@@ -128,6 +131,7 @@ export async function startBridgeServices(): Promise<RunningBridgeServices> {
       auditService: registry,
       version: '0.1.0',
       indexDir,
+      healthAnalyzer,
     },
     healthDeps: {
       healthService: new DefaultHealthService({ registry, cas, llmProvider, indexDir, shutdownManager }),

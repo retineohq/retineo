@@ -18,6 +18,7 @@ import { DefaultRetrievalService } from '../dist/search/retrieval-service.js';
 import { DefaultContextAssembler } from '../dist/search/context-assembler.js';
 import { DefaultLLMProviderFactory, DefaultEmbeddingProviderFactory } from '../dist/llm/factory.js';
 import { DefaultCompilationPipeline } from '../dist/layers/pipeline.js';
+import { DefaultHealthAnalyzer } from '../dist/health/health-analyzer.js';
 import { createLogger } from '../dist/utils/logger.js';
 import path from 'path';
 import os from 'os';
@@ -234,6 +235,13 @@ async function main() {
     registry,
   );
 
+  // --- Health analyzer ---
+  const healthAnalyzer = new DefaultHealthAnalyzer({
+    cas,
+    registry,
+    indexDir: path.join(resolvedDataDir, 'index'),
+  });
+
   // --- Wire CLI ---
   const deps = {
     version: VERSION,
@@ -247,6 +255,7 @@ async function main() {
     secretsManager,
     cas,
     auditService: registry,
+    healthAnalyzer,
   };
 
   const program = createCLI(deps);

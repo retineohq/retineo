@@ -13,6 +13,7 @@ import type { Registry } from '../storage/registry.js';
 import type { ConfigManager, RetineoConfig, ProviderConfigEntry } from '../storage/config.js';
 import type { CompilationPipeline } from '../layers/pipeline.js';
 import type { SecretsManager } from '../storage/secrets.js';
+import type { HealthAnalyzer } from '../health/health-analyzer.js';
 import { formatSearchResult, formatStatus, formatJobs, formatIngestResult, formatConfig, formatRecoverResult } from './formatters.js';
 import { FileSystemSourceAdapter } from '../adapters/filesystem-adapter.js';
 import { DefaultGhostRecoveryService } from '../ghost/recovery-service.js';
@@ -80,6 +81,7 @@ export interface CLICommandsDeps {
   secretsManager: SecretsManager;
   cas: CASStorage;
   auditService: AuditService;
+  healthAnalyzer?: HealthAnalyzer;
   version: string;
 }
 
@@ -169,6 +171,37 @@ export class CLICommands {
         await this.watchAnyJobCompletion(startIds, { timeoutSec: options.timeout ?? 1800 });
       }
     }
+  }
+
+  async health(filePath: string): Promise<void> {
+    const absolutePath = path.resolve(filePath);
+    if (!existsSync(absolutePath)) {
+      console.error(`  Not found: ${filePath}`);
+      process.exitCode = 1;
+      return;
+    }
+
+    const { processed, ghosts, sourceId } = await this.deps.ingestionService.syncDirectory(absolutePath);
+    console.log(`  synced ${processed} changed, ${ghosts} ghosts (${sourceId})`);
+
+    if (!this.deps.healthAnalyzer) {
+      console.error('Health analyzer is not configured.');
+      process.exitCode = 1;
+      return;
+    }
+
+    const counts = this.deps.registry.getJobCounts();
+    if (counts.pending > 0 || counts.running > 0) {
+      const workerRunning = isWorkerProcessRunning();
+      if (!workerRunning) {
+        await this.startInlineWorker();
+      }
+      await this.waitForJobDrain({ timeoutSec: 1800 });
+    }
+
+    const report = await this.deps.healthAnalyzer.analyze(sourceId);
+    console.log(JSON.stringify(report, null, 2));
+    process.exitCode = report.score < 50 ? 1 : 0;
   }
 
   async search(query: string, options?: SearchCLIOptions): Promise<void> {
@@ -1148,6 +1181,18 @@ export class CLICommands {
     // registry while the worker drains the queue. This is identical to
     // running `retineo worker start` programmatically.
     await this.startService('worker');
+  }
+
+  private async waitForJobDrain(options: { timeoutSec: number }): Promise<void> {
+    const start = Date.now();
+    const timeoutMs = options.timeoutSec * 1000;
+    const pollMs = 1000;
+    while (Date.now() - start < timeoutMs) {
+      const counts = this.deps.registry.getJobCounts();
+      if (counts.pending === 0 && counts.running === 0) return;
+      await new Promise((r) => setTimeout(r, pollMs));
+    }
+    console.log(`⏱️  Timeout after ${options.timeoutSec}s waiting for jobs`);
   }
 
   // --- Ghost System ---

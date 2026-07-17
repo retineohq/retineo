@@ -4,9 +4,9 @@
 [![CI](https://github.com/retineohq/retineo/actions/workflows/ci.yml/badge.svg)](https://github.com/retineohq/retineo/actions)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-**Version:** 0.5.4  
+**Version:** 0.6.0  
 **License:** Apache 2.0  
-**Status:** Production-ready — 420 tests passing
+**Status:** Production-ready — 444 tests passing
 
 ## What is Retineo Core?
 
@@ -42,7 +42,10 @@ retineo init      # create ~/.retineo/ config
 retineo status    # check engine status
 retineo ingest ./my-document.pdf
 retineo search "semantic search query"
+retineo health ./my-notes       # diagnostic memory health report
 ```
+
+The `retineo health` command syncs a directory, analyzes coverage, duplicates, orphans, ghosts, and knowledge age, then prints a JSON report with a 0–100 score and concrete findings referencing specific content hashes.
 
 ## Architecture Principles
 

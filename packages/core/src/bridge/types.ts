@@ -101,3 +101,17 @@ export interface BridgeConfig {
     maxConnections: number;
   };
 }
+
+export interface HealthRequest {
+  sourceId?: string;
+  path?: string;
+}
+
+export interface HealthJobResponse {
+  jobId: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+}
+
+export interface ReportResponse {
+  report: unknown;
+}

@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.6.0] - 2026-07-17
+
+### Added
+- **Memory Health Check Core MVP:** `src/health/` analyzes an ingested collection and produces a diagnostic JSON report.
+  - `HealthAnalyzer` orchestrates coverage, knowledge density, duplicate concepts, orphans, ghosts, knowledge age, and memory score metrics.
+  - `findings-engine.ts` turns metric results into concrete findings referencing specific `contentHash` values.
+  - `report-builder.ts` emits `HealthReport` with `score`, `strong`, `attention`, `recommendations`, and `advancedMetrics`.
+  - New metrics live under `src/health/metrics/`: `coverage-score`, `knowledge-density`, `duplicate-concepts` (cosine threshold 0.94), `orphans`, `ghosts`, `knowledge-age`, `memory-score`.
+- **CLI command:** `retineo health <path>` syncs a directory and prints a pretty-printed JSON report. Exit code is `1` when `score < 50`.
+- **HTTP API:**
+  - `POST /v1/health` — starts an async health analysis job, returns `{ jobId }`.
+  - `GET /v1/health/:jobId` — returns job status (`pending`, `running`, `completed`, `failed`).
+  - `GET /v1/report/:jobId` — returns the completed `HealthReport` JSON.
+- **Advanced metrics placeholder:** `fragmentation`, `contradictions`, and `topicDistribution` are listed as Pro/Enterprise features in the report; Core does not implement L4/L5/L9 pipelines.
+
+### Tests
+- Added `tests/health/health-analyzer.test.ts`, `duplicate-concepts.test.ts`, `knowledge-age.test.ts`, `findings-engine.test.ts`, `report-builder.test.ts`.
+- Added `tests/cli/health-cli.test.ts` and `tests/bridge/health-api.test.ts`.
+- 444 tests passing, 0 skipped.
+
 ## [0.5.8] - 2026-07-15
 
 ### Fixed

@@ -22,11 +22,14 @@ import type { CASStorage } from '../storage/cas.js';
 import type { ConfigManager } from '../storage/config.js';
 import type { AuditService } from '../storage/audit.js';
 import type { JobRecord } from '../domain/types.js';
+import type { HealthAnalyzer } from '../health/health-analyzer.js';
+import type { HealthReport } from '../health/types.js';
 import { BaseRetineoError } from '../utils/errors.js';
 import { createSSEStream } from './sse.js';
 import { readFile, existsSync } from 'fs';
 import { promisify } from 'util';
 import path from 'path';
+import crypto from 'crypto';
 
 const readFileAsync = promisify(readFile);
 
@@ -39,6 +42,7 @@ export interface BridgeHandlersDeps {
   cas: CASStorage;
   configManager: ConfigManager;
   auditService: AuditService;
+  healthAnalyzer?: HealthAnalyzer;
   version: string;
   indexDir: string;
 }
@@ -65,6 +69,31 @@ function handleKnownError(reply: FastifyReply, err: unknown) {
 }
 
 export function createHandlers(deps: BridgeHandlersDeps) {
+  type HealthJob = {
+    status: 'pending' | 'running' | 'completed' | 'failed';
+    report?: HealthReport;
+    error?: string;
+  };
+  const healthJobs = new Map<string, HealthJob>();
+
+  async function runHealthJob(jobId: string, sourceId: string) {
+    const job = healthJobs.get(jobId);
+    if (!job) return;
+    job.status = 'running';
+    try {
+      await deps.ingestionService.syncSource(sourceId);
+      if (!deps.healthAnalyzer) {
+        throw new Error('Health analyzer is not configured');
+      }
+      const report = await deps.healthAnalyzer.analyze(sourceId);
+      job.report = report;
+      job.status = 'completed';
+    } catch (err) {
+      job.error = err instanceof Error ? err.message : String(err);
+      job.status = 'failed';
+    }
+  }
+
   return {
     async search(request: FastifyRequest<{ Body: SearchRequest }>, reply: FastifyReply) {
       const start = Date.now();
@@ -277,6 +306,61 @@ export function createHandlers(deps: BridgeHandlersDeps) {
         completedAt: job.completedAt ?? undefined,
       };
       return reply.send(body);
+    },
+
+    async health(request: FastifyRequest<{ Body: { sourceId?: string; path?: string } }>, reply: FastifyReply) {
+      const { sourceId, path: sourcePath } = request.body ?? {};
+      if (!sourceId && !sourcePath) {
+        return errorReply(reply, 400, 'INVALID_REQUEST', 'sourceId or path is required');
+      }
+      if (!deps.healthAnalyzer) {
+        return errorReply(reply, 503, 'NOT_CONFIGURED', 'Health analyzer is not configured');
+      }
+
+      try {
+        const jobId = crypto.randomUUID();
+        healthJobs.set(jobId, { status: 'pending' });
+
+        let resolvedSourceId = sourceId;
+        if (!resolvedSourceId && sourcePath) {
+          const syncResult = await deps.ingestionService.syncDirectory(sourcePath);
+          resolvedSourceId = syncResult.sourceId;
+        }
+
+        if (!resolvedSourceId) {
+          healthJobs.delete(jobId);
+          return errorReply(reply, 400, 'INVALID_REQUEST', 'Could not resolve source id');
+        }
+
+        void runHealthJob(jobId, resolvedSourceId);
+        return reply.send({ jobId, status: 'pending' });
+      } catch (err) {
+        return handleKnownError(reply, err);
+      }
+    },
+
+    async getHealthJob(request: FastifyRequest<{ Params: { jobId: string } }>, reply: FastifyReply) {
+      const { jobId } = request.params;
+      const job = healthJobs.get(jobId);
+      if (!job) {
+        return errorReply(reply, 404, 'NOT_FOUND', `Health job not found: ${jobId}`);
+      }
+      return reply.send({ jobId, status: job.status });
+    },
+
+    async getReport(request: FastifyRequest<{ Params: { jobId: string } }>, reply: FastifyReply) {
+      const { jobId } = request.params;
+      const job = healthJobs.get(jobId);
+      if (!job) {
+        return errorReply(reply, 404, 'NOT_FOUND', `Health job not found: ${jobId}`);
+      }
+      if (job.status === 'pending' || job.status === 'running') {
+        return reply.status(202).send({ jobId, status: job.status });
+      }
+      if (job.status === 'failed') {
+        return errorReply(reply, 500, 'HEALTH_FAILED', job.error ?? 'Health analysis failed');
+      }
+      return reply.send({ jobId, status: job.status, report: job.report });
     },
 
     async jobEvents(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {

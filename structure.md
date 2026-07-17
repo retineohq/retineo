@@ -26,6 +26,7 @@ retineo/
 │   ├── search/          # Query analysis, retrieval (BM25/semantic/hybrid), context assembly, DocumentHit
 │   ├── llm/             # LLM provider abstraction, rate limiting, factory
 │   ├── layers/          # L1/L2/L3 compilation pipelines, queue worker
+│   ├── health/          # Memory health analyzer and diagnostic report builder
 │   ├── context/         # (planned) Context assembly, window management
 │   ├── ghost/           # Orphan recovery, garbage collection
 │   ├── bridge/          # HTTP/gRPC API, WebSocket streaming
@@ -51,6 +52,7 @@ retineo/
 │   ├── i18n/            # Language detector, pack registry tests
 │   ├── bridge/          # HTTP server, routes, SSE tests
 │   ├── cli/             # CLI command parsing and execution tests
+│   ├── health/          # Health analyzer, metrics, findings, report builder tests
 │   ├── mcp/             # MCP server initialization and tool tests
 │   └── integration/     # End-to-end: CLI → HTTP → MCP
 ├── docs/                # Developer documentation
@@ -181,6 +183,23 @@ retineo/
 | `worker.ts`       | `QueueWorker`, `DefaultQueueWorker`, `QueueWorkerOptions`                                                 | Lease-based job processor with heartbeat.                      |
 | `index.ts`        | Barrel export of `l1-generator.js`, `l2-generator.js`, `l3-generator.js`, `pipeline.js`, `worker.js`      | Public layers API entrypoint.                                  |
 
+### `src/health/` — Memory Health Analyzer
+
+| File                         | Exports                                                                                 | Description                                                                                                                  |
+| ---------------------------- | --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `types.ts`                   | `HealthReport`, `MetricResult`, `Finding`, `Recommendation`, `AdvancedMetricHint`       | Health analyzer domain types. `HealthReport` carries `score`, `strong`, `attention`, `recommendations`, `advancedMetrics`.   |
+| `health-analyzer.ts`         | `HealthAnalyzer`, `DefaultHealthAnalyzer`, `HealthAnalyzerDeps`                         | Orchestrator: reads L0–L3 artifacts from CAS, runs all metrics, builds findings and report. Read-only consumer of pipelines. |
+| `metrics/coverage-score.ts`  | `CoverageScoreMetric`                                                                   | `successfulIngests / totalSources` from Registry.                                                                            |
+| `metrics/knowledge-density.ts` | `KnowledgeDensityMetric`                                                              | `claims.length / chunks.length` (or `L2.summary.length / L0.body.length` fallback).                                          |
+| `metrics/duplicate-concepts.ts` | `DuplicateConceptsMetric`                                                            | Cosine similarity between L3 embeddings; groups duplicates above threshold 0.94 by `contentHash`.                            |
+| `metrics/orphans.ts`         | `OrphansMetric`                                                                         | Documents with no `semanticLinks` and no backlinks in L1 chunk references.                                                   |
+| `metrics/ghosts.ts`          | `GhostsMetric`                                                                          | `RegistryEntry.status === 'ghost'`.                                                                                          |
+| `metrics/knowledge-age.ts`   | `KnowledgeAgeMetric`                                                                    | `lastSeenAt` / `createdAt` distribution from Registry.                                                                       |
+| `metrics/memory-score.ts`    | `MemoryScoreMetric`                                                                     | Weighted internal UX score (0–100). Formula is not exposed.                                                                  |
+| `findings-engine.ts`         | `FindingsEngine`, `DefaultFindingsEngine`                                               | Converts metric results into concrete `Finding` objects referencing specific `contentHash` values.                           |
+| `report-builder.ts`          | `ReportBuilder`, `DefaultReportBuilder`                                                 | Builds final `HealthReport` JSON including Pro/Enterprise `advancedMetrics` placeholders.                                    |
+| `index.ts`                   | Barrel export of public health symbols.                                                 | Public health API entrypoint.                                                                                                |
+
 ### `src/context/` — Context Assembly (planned)
 
 | File       | Exports     | Description                |
@@ -202,7 +221,7 @@ retineo/
 | `types.ts`         | `SearchRequest`, `SearchResponse`, `IngestRequest`, `IngestResponse`, `StatusResponse`, `NodeResponse`, `SourceResponse`, `JobResponse`, `BridgeError`, `BridgeConfig` | HTTP API request/response types. `SourceResponse` now mirrors `RegistryEntry` (`sourceId`, `externalId`, `contentHash`, `etag`, `status`, `deletedAt`, `lastSeenAt`). |
 | `server.ts`        | `BridgeServer`, `FastifyBridgeServer`, `BridgeServerOptions`                                                                                                           | Fastify-based localhost-only HTTP server with shutdown hook.       |
 | `routes.ts`        | `registerRoutes`                                                                                                                                                       | Route registration (search, ingest, status, nodes list, nodes/:hash, sources, jobs). |
-| `handlers.ts`      | `BridgeHandlersDeps`, `createHandlers`                                                                                                                                 | Request handlers calling core services. Search/ingest call `auditService.log()`. Status reads real vectorCount. listNodes endpoint. Responses include `contentHash`, `chunkHash`, `isGhost`, and Registry-resolved `sourcePath`. |
+| `handlers.ts`      | `BridgeHandlersDeps`, `createHandlers`                                                                                                                                 | Request handlers calling core services. Search/ingest call `auditService.log()`. Status reads real vectorCount. listNodes endpoint. Health endpoints (`POST /v1/health`, `GET /v1/health/:jobId`, `GET /v1/report/:jobId`) run `syncSource` + `HealthAnalyzer` asynchronously. Responses include `contentHash`, `chunkHash`, `isGhost`, and Registry-resolved `sourcePath`. |
 | `sse.ts`           | `SSEStream`, `createSSEStream`                                                                                                                                         | Server-Sent Events for job progress and search streaming.          |
 | `health.ts`        | `HealthService`, `DefaultHealthService`, `HealthResult`, `ReadyResult`, `HealthServiceDeps`                                                                            | Liveness/readiness probes with SQLite, CAS, LLM, worker checks.    |
 | `metrics.ts`       | `MetricsService`, `DefaultMetricsService`, `MetricsSnapshot`, `MetricsCounters`, `MetricsServiceDeps`, `formatPrometheus`, `createMetricsCounters`                     | Operational metrics collection and Prometheus text export.         |
@@ -213,7 +232,7 @@ retineo/
 
 | File            | Exports                                                                                                         | Description                                                                           |
 | --------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `commands.ts`   | `CLICommands`, `CLICommandsDeps`, `IngestCLIOptions`, `SearchCLIOptions`, `CompileCLIOptions`, `InitCLIOptions` | CLI command implementations: `init` (interactive wizard + non-interactive with required `--llm-model` / `--embed-model`), `ingest` (via `FileSystemSourceAdapter` + `IngestionService`, with `--watch` / `--timeout`, idempotent skip, recursive directory traversal, audit log), `search` (with `--intent <vague|section|precision>` override, ghost badges 👻, audit log), `status`, `compile` (with `--watch` / `--timeout` / `--provider` / `--rebuild-l1` / `--rebuild-l2` / `--rebuild-l3` + dead L3 recovery), `rebuild` (capture source IDs, `--force` wipes `objects/` + `index/` + clears Registry sources/jobs/orphans, then re-sync filesystem adapters; audit log; corrupted SQLite detection), `config`, `jobs`, `recover` (restores from CAS by `contentHash` using `Registry.listByContentHash`, audit log), `doctor`, `key set/get/delete/list`, `worker start/stop/status/logs`, `bridge start/stop/status/logs`, `daemon start/stop/status/logs`. |
+| `commands.ts`   | `CLICommands`, `CLICommandsDeps`, `IngestCLIOptions`, `SearchCLIOptions`, `CompileCLIOptions`, `InitCLIOptions` | CLI command implementations: `init` (interactive wizard + non-interactive with required `--llm-model` / `--embed-model`), `ingest` (via `FileSystemSourceAdapter` + `IngestionService`, with `--watch` / `--timeout`, idempotent skip, recursive directory traversal, audit log), `health` (sync directory, run `HealthAnalyzer`, print JSON report, exit `1` if `score < 50`), `search` (with `--intent <vague|section|precision>` override, ghost badges 👻, audit log), `status`, `compile` (with `--watch` / `--timeout` / `--provider` / `--rebuild-l1` / `--rebuild-l2` / `--rebuild-l3` + dead L3 recovery), `rebuild` (capture source IDs, `--force` wipes `objects/` + `index/` + clears Registry sources/jobs/orphans, then re-sync filesystem adapters; audit log; corrupted SQLite detection), `config`, `jobs`, `recover` (restores from CAS by `contentHash` using `Registry.listByContentHash`, audit log), `doctor`, `key set/get/delete/list`, `worker start/stop/status/logs`, `bridge start/stop/status/logs`, `daemon start/stop/status/logs`. |
 | `doctor.ts`     | `runDoctor`, `formatDoctor`, `DoctorResult`, `DependencyCheck`                                                  | External dependency checker (ffmpeg, tesseract, whisper.cpp, whisper model, whisper key, ollama). |
 | `formatters.ts` | `formatSearchResult`, `formatStatus`, `formatJobs`, `formatIngestResult`, `formatConfig`, `formatRecoverResult` | Output formatters for CLI commands.                                                   |
 | `prompt.ts`     | `ask`, `choose`, `confirm`, `PromptOptions`, `ChoiceOptions`                                                    | Readline-based single-question prompts. No external deps. Used by the `init` wizard. `ask` closes the readline interface before resolving. |
@@ -321,6 +340,7 @@ retineo/
 | `ingest-route.test.ts` | POST /v1/ingest (valid, missing sourcePath)                          | Ingest route validation.                  |
 | `sse.test.ts`          | SSE streaming, headers, events                                       | Server-Sent Events correctness.           |
 | `health.test.ts`       | GET /v1/health (healthy/unhealthy), GET /v1/ready (ready/not ready)  | Liveness and readiness probes.            |
+| `health-api.test.ts`   | POST /v1/health, GET /v1/health/:jobId, GET /v1/report/:jobId        | Async health analysis job endpoints.      |
 | `metrics.test.ts`      | GET /v1/metrics (JSON), GET /v1/metrics/prometheus (text format)     | Metrics collection and Prometheus export. |
 
 ### `tests/ghost/` — Ghost System Tests
@@ -330,11 +350,22 @@ retineo/
 | `orphan-detector.test.ts`  | detectDeletedSources (deleted/existing/multiple), orphan registry integration                 | DefaultOrphanDetector correctness.         |
 | `recovery-service.test.ts` | listGhosts, recover (success/not found/CAS missing), purge                                    | DefaultGhostRecoveryService correctness.   |
 
+### `tests/health/` — Memory Health Tests
+
+| File                        | Tests                                                                              | Description                                  |
+| --------------------------- | ---------------------------------------------------------------------------------- | -------------------------------------------- |
+| `health-analyzer.test.ts`   | Mock CAS with 3–5 documents; verify all metrics run and report is built.           | DefaultHealthAnalyzer orchestration.         |
+| `duplicate-concepts.test.ts`| Mock embeddings with known similarities; verify threshold 0.94 catches duplicates. | DuplicateConceptsMetric cosine logic.        |
+| `knowledge-age.test.ts`     | Mock Registry with varied `lastSeenAt`; verify age distribution.                   | KnowledgeAgeMetric distribution.             |
+| `findings-engine.test.ts`   | Mock metric results; verify findings reference specific hashes.                    | DefaultFindingsEngine rule conversion.       |
+| `report-builder.test.ts`    | Verify JSON structure; verify `score` is number 0–100.                             | DefaultReportBuilder output shape.           |
+
 ### `tests/cli/` — CLI Tests
 
 | File               | Tests                                                        | Description                        |
 | ------------------ | ------------------------------------------------------------ | ---------------------------------- |
 | `commands.test.ts` | `ingest`, `status`, `config`, `recover` with mocked services | CLI command parsing and execution. |
+| `health-cli.test.ts` | `retineo health <path>` prints JSON report and exits `0` for `score >= 50` | Health CLI command correctness. |
 | `compile-provider.test.ts` | `compile` with `--provider` override: accepts valid provider, rejects invalid with available list | Provider override validation and error messages. |
 | `prompt.test.ts` | `ask` closes readline after line input; returns default on empty input | Prompt helper correctness. |
 | `init.test.ts`     | `init` creates directories, config, SQLite schema; idempotent | First-run initialization.          |
@@ -426,6 +457,12 @@ retineo/
 | **Protect LLM calls with circuit breaker**              | `DefaultCircuitBreaker`                        | `src/llm/circuit-breaker.ts`                        | `DefaultLLMProviderFactory` wrapper, fallback                    |
 | **Encrypt and retrieve API secrets**                    | `FileSecretsManager`                           | `src/storage/secrets.ts`                            | `resolveSecret`, `resolveConfigValue`                            |
 | **Add health/readiness probes**                         | `DefaultHealthService`                         | `src/bridge/health.ts`                              | `registerHealthRoutes`, `/v1/health`, `/v1/ready`                |
+| **Analyze memory health of a collection**               | `DefaultHealthAnalyzer`                        | `src/health/health-analyzer.ts`                     | `DefaultFindingsEngine`, `DefaultReportBuilder`, `retineo health` |
+| **Run a single health metric**                          | Metric classes in `src/health/metrics/`        | `src/health/metrics/*.ts`                           | `MetricResult`, `HealthAnalyzerDeps`                             |
+| **Generate concrete health findings from metrics**      | `DefaultFindingsEngine`                        | `src/health/findings-engine.ts`                     | `Finding` references specific `contentHash` values.              |
+| **Build the final health report JSON**                  | `DefaultReportBuilder`                         | `src/health/report-builder.ts`                      | `HealthReport`, `Recommendation`, `AdvancedMetricHint`           |
+| **Run health analysis from CLI**                        | `CLICommands.health`                           | `src/cli/commands.ts`                               | `retineo health <path>`; exit code `1` if `score < 50`.          |
+| **Run health analysis from HTTP API**                   | Bridge health handlers                         | `src/bridge/handlers.ts`                            | `POST /v1/health`, `GET /v1/health/:jobId`, `GET /v1/report/:jobId` |
 | **Export operational metrics**                          | `DefaultMetricsService`                        | `src/bridge/metrics.ts`                             | `formatPrometheus`, `/v1/metrics/prometheus`                     |
 | **Handle errors consistently across HTTP/CLI**          | `sendErrorReply`, `formatCLIError`             | `src/utils/error-handler.ts`                        | `BaseRetineoError`, `isRetineoError`                                   |
 | **Run the L1→L2→L3 compilation pipeline**               | `DefaultCompilationPipeline`                   | `src/layers/pipeline.ts`                            | `QueueWorker`, `Registry`                                        |

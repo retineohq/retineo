@@ -114,6 +114,71 @@ Readiness probe. Returns 200 only when the engine is ready to serve requests.
 }
 ```
 
+### `POST /v1/health`
+
+Start an asynchronous memory-health analysis job for a source.
+
+**Request body:**
+```json
+{
+  "sourceId": "filesystem:/path/to/vault"
+}
+```
+
+For filesystem paths you may pass `path` instead:
+```json
+{
+  "path": "/path/to/vault"
+}
+```
+
+**Response:**
+```json
+{
+  "jobId": "uuid"
+}
+```
+
+The job runs `syncSource` + `HealthAnalyzer.analyze(sourceId)` in the background.
+
+### `GET /v1/health/:jobId`
+
+Poll health job status.
+
+**Response:**
+```json
+{
+  "jobId": "uuid",
+  "status": "pending" | "running" | "completed" | "failed"
+}
+```
+
+### `GET /v1/report/:jobId`
+
+Fetch the completed `HealthReport` for a job.
+
+**Response:**
+```json
+{
+  "score": 76,
+  "strong": ["good connectivity", "few duplicates"],
+  "attention": [
+    {
+      "type": "duplicate",
+      "severity": "warning",
+      "documents": ["hashA", "hashB"],
+      "reason": "..."
+    }
+  ],
+  "recommendations": ["Merge these documents"],
+  "advancedMetrics": [
+    { "metric": "fragmentation", "availableIn": "pro" }
+  ]
+}
+```
+
+Returns `404` if the job does not exist or is not yet completed.
+
 ### `GET /v1/metrics`
 
 Operational metrics as JSON.

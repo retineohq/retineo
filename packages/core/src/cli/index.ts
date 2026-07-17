@@ -56,6 +56,13 @@ export function createCLI(deps: CLICommandsDeps): Command {
     });
 
   program
+    .command('health <path>')
+    .description('Analyze memory health of an ingested directory')
+    .action(async (filePath: string) => {
+      await commands.health(filePath);
+    });
+
+  program
     .command('compile [filePath]')
     .description('Compile pending jobs or a specific file')
     .option('--layer <layer>', 'Compile only specific layer')

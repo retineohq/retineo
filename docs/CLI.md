@@ -59,6 +59,24 @@ retineo ingest ./docs            # sync whole directory
 
 When `watch` is enabled, `ingest` checks if a background worker is running; if not, it starts an inline worker in the same process. It polls the jobs table every 5 seconds and exits with code `1` if any job fails or the timeout (default 1800s) elapses.
 
+### `retineo health <path>`
+
+Analyze the health of an ingested directory and print a diagnostic JSON report.
+
+```bash
+retineo health ./docs
+retineo health /tmp/test-vault
+```
+
+**Report fields:**
+- `score` — integer 0–100 (weighted UX score, not a scientific metric).
+- `strong` — list of healthy aspects (e.g., `good connectivity`, `few duplicates`).
+- `attention` — concrete findings with `type`, `severity`, `documents` (specific `contentHash` values), and `reason`.
+- `recommendations` — actionable next steps (e.g., `Merge these documents`).
+- `advancedMetrics` — Pro/Enterprise metrics (`fragmentation`, `contradictions`, `topicDistribution`) not implemented in Core.
+
+The command first syncs the directory via `FileSystemSourceAdapter`, waits for pending jobs to drain, then runs `HealthAnalyzer.analyze(sourceId)`. Exit code is `1` if `score < 50` (useful for CI gates).
+
 ### `retineo search <query>`
 
 Search the knowledge base.
