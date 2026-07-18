@@ -30,7 +30,7 @@ function makeNode(id: string): ContextNode {
     childrenIds: [],
     depth: 0,
     build: {
-      schemaVersion: 1,
+      schemaVersion: 2,
       nodeVersion: 1,
       rawHash: id,
       contentHash: id,

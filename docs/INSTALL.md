@@ -30,13 +30,13 @@ node --version  # v20.x.x or higher
 ## Install via npm
 
 ```bash
-npm install -g retineo
+npm install -g @retineo/core
 ```
 
 Or run without installing:
 
 ```bash
-npx retineo <command>
+npx @retineo/core <command>
 ```
 
 ### Initialize RETINEO
@@ -169,7 +169,7 @@ Expected output:
 
 ```json
 {
-  "version": "0.1.0",
+  "version": "0.5.3",
   "nodeCount": 0,
   "sourceCount": 0,
   "jobCount": {"pending": 0, "running": 0, "completed": 0, "failed": 0},

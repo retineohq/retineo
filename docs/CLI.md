@@ -43,20 +43,39 @@ retineo init --non-interactive --llm-model gemma4:31b-cloud --embed-model nomic-
 
 ### `retineo ingest <filePath> [--watch] [--timeout <sec>]`
 
-Ingest a file into the knowledge base. With `--watch`, block until all queued jobs are `COMPLETED` (or any fails).
+Ingest a file or directory into the knowledge base via `FileSystemSourceAdapter`. Files are normalized through the document `AdapterManager` by extension (PDF, image, audio, video) or read as raw text. With `--watch`, block until all queued jobs are `COMPLETED` (or any fails).
 
 ```bash
 retineo ingest ./notes.md
-retineo ingest ./doc.pdf --adapter pdf
+retineo ingest ./doc.pdf
 retineo ingest ~/test.md --watch --timeout 600
+retineo ingest ./docs            # sync whole directory
 ```
 
 **Idempotency:** `ingest` is idempotent.
-- Same content hash + same path → prints `Skipped: already ingested (hash: ...)` and does **not** queue any jobs.
-- Same content hash + different path → updates the source path in the registry, prints `Updated source path`, and does **not** queue any jobs.
-- New content hash → full ingest + `GENERATE_L1` jobs queued as usual.
+- Same content hash + same `externalId` → `action: unchanged`, no pipeline run.
+- New content hash → `action: updated`, full ingest + `GENERATE_L1` jobs queued.
+- Same content at a different path → new `RegistryEntry` for that path; the original path becomes a ghost on the next source sync.
 
 When `watch` is enabled, `ingest` checks if a background worker is running; if not, it starts an inline worker in the same process. It polls the jobs table every 5 seconds and exits with code `1` if any job fails or the timeout (default 1800s) elapses.
+
+### `retineo health <path>`
+
+Analyze the health of an ingested directory and print a diagnostic JSON report.
+
+```bash
+retineo health ./docs
+retineo health /tmp/test-vault
+```
+
+**Report fields:**
+- `score` — integer 0–100 (weighted UX score, not a scientific metric).
+- `strong` — list of healthy aspects (e.g., `good connectivity`, `few duplicates`).
+- `attention` — concrete findings with `type`, `severity`, `documents` (specific `contentHash` values), and `reason`.
+- `recommendations` — actionable next steps (e.g., `Merge these documents`).
+- `advancedMetrics` — Pro/Enterprise metrics (`fragmentation`, `contradictions`, `topicDistribution`) not implemented in Core.
+
+The command first syncs the directory via `FileSystemSourceAdapter`, waits for pending jobs to drain, then runs `HealthAnalyzer.analyze(sourceId)`. Exit code is `1` if `score < 50` (useful for CI gates).
 
 ### `retineo search <query>`
 
@@ -67,6 +86,18 @@ retineo search "machine learning"
 retineo search "deep learning" --language en --mode hybrid --top-k 10 --json
 ```
 
+### `retineo similar <hash>`
+
+Find documents semantically similar to a given document.
+
+```bash
+retineo similar <hash>
+retineo similar <hash> --top-k 10 --threshold 0.8
+retineo similar <hash> --json
+```
+
+Default output is a table of `contentHash | similarity | sourcePath`. Use `--json` for raw `SimilarDocument[]`. Exit code is `0` for empty results, `1` if the index is empty (run `retineo ingest <path>` first).
+
 ### `retineo status`
 
 Show engine status.
@@ -75,7 +106,7 @@ Show engine status.
 retineo status
 ```
 
-### `retineo compile [filePath] [--watch] [--timeout <sec>] [--provider <id>]`
+### `retineo compile [filePath] [--watch] [--timeout <sec>] [--provider <id>] [--rebuild-l1] [--rebuild-l2] [--rebuild-l3]`
 
 Compile pending jobs or a specific file. Same `--watch` semantics as `ingest`.
 
@@ -84,6 +115,9 @@ retineo compile
 retineo compile ./notes.md --layer l2 --watch
 retineo compile ./notes.md --provider ollama   # override config provider for this run
 retineo compile ./notes.md --provider mock     # explicitly use mock for testing
+retineo compile --rebuild-l1                   # regenerate L1, L2 and L3 for all sources
+retineo compile --rebuild-l2                   # regenerate L2 and L3 for all sources
+retineo compile --rebuild-l3                   # rebuild the global L3 index from existing L2 artifacts
 ```
 
 When run without a file path, `compile` also:
@@ -91,6 +125,28 @@ When run without a file path, `compile` also:
 - **Queues missing L3 jobs** — finds nodes that have completed L2 but have no L3 job (pending, running, completed, or dead) and enqueues `GENERATE_L3`.
 
 The `--provider` flag overrides the configured `llm.defaultProvider` for this compilation only. If the provider id is not found in `config.yaml`, the command exits with an error listing available providers.
+
+Rebuild flags affect the whole collection and cannot be combined with a `filePath`:
+- `--rebuild-l1` deletes cached `L1.md` / `L1.index.json` and re-queues L1→L2→L3 for every source.
+- `--rebuild-l2` deletes cached `L2.json` and re-queues L2→L3 for every source.
+- `--rebuild-l3` deletes the global `index/` directory and re-queues L3 for every node that already has L2.
+
+### `retineo rebuild [--force]`
+
+Full collection rebuild. Use after schema changes (for example, when `schemaVersion` changes), to recover from a corrupted SQLite database, or when you want a clean recompile.
+
+```bash
+retineo rebuild
+retineo rebuild --force            # wipe data dir before rebuilding
+```
+
+What it does:
+1. With `--force`, wipes the entire data directory first.
+2. Clears Registry, CAS, and the global `index/` directory (`embeddings.jsonl`, `hnsw.bin`, `hnsw.manifest.json`, `bm25.json`).
+3. Re-syncs every registered filesystem source; new/changed files are ingested, deleted files become ghosts.
+4. The pipeline naturally chains `L1` → `L2` → `L3`.
+
+> **Note:** This is a destructive local operation. It only affects compiled artifacts and the registry in the data directory; original source files are untouched.
 
 ### `retineo config set|get|list`
 

@@ -59,4 +59,32 @@ Rules:
     keywordBoost: 1.0,
     semanticBoost: 1.0,
   },
+  intentPatterns: {
+    vague: [
+      /^tell me about/i,
+      /^what is/i,
+      /^who is/i,
+      /^explain/i,
+      /^describe/i,
+      /^(?:how|what).+(?:work|function)/i,
+    ],
+    precision: [
+      /exact/i,
+      /precisely/i,
+      /line \d+/i,
+      /page \d+/i,
+      /timestamp/i,
+      /at \d{1,2}:\d{2}/i,
+      /word for word/i,
+      /verbatim/i,
+    ],
+    section: [
+      /section/i,
+      /chapter/i,
+      /heading/i,
+      /in the .+ (?:meeting|call|doc)/i,
+      /about .+ in/i,
+      /discussed .+ about/i,
+    ],
+  },
 };

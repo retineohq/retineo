@@ -55,6 +55,9 @@ search:
   prompts: {}
   crossLingual:
     enabled: true
+    translateQuery: llm
+    targetLanguages:
+      - en
 i18n:
   defaultLanguage: en
   packs: []

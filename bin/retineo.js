@@ -12,20 +12,48 @@ import { DefaultNodeBuilder } from '../dist/storage/node-builder.js';
 import { FileSecretsManager } from '../dist/storage/secrets.js';
 import { DefaultAdapterManager } from '../dist/adapters/manager.js';
 import { DefaultAdapterProcessRunner } from '../dist/adapters/runner.js';
-import { DefaultIngestionService } from '../dist/adapters/ingestion.js';
+import { DefaultIngestionService } from '../dist/services/ingestion-service.js';
 import { DefaultQueryAnalyzer } from '../dist/search/query-analyzer.js';
 import { DefaultRetrievalService } from '../dist/search/retrieval-service.js';
 import { DefaultContextAssembler } from '../dist/search/context-assembler.js';
+import { createSimilarityService } from '../dist/search/similarity-service.js';
 import { DefaultLLMProviderFactory, DefaultEmbeddingProviderFactory } from '../dist/llm/factory.js';
 import { DefaultCompilationPipeline } from '../dist/layers/pipeline.js';
+import { DefaultHealthAnalyzer } from '../dist/health/health-analyzer.js';
 import { createLogger } from '../dist/utils/logger.js';
 import path from 'path';
 import os from 'os';
-import { readFileSync } from 'fs';
+import { readFileSync, rmSync, existsSync } from 'fs';
 
 const __dirname = path.dirname(new URL(import.meta.url).pathname);
 const pkg = JSON.parse(readFileSync(path.join(__dirname, '..', 'package.json'), 'utf-8'));
 const VERSION = pkg.version;
+
+function createRegistry(dbPath, allowWipe) {
+  try {
+    return new SQLiteRegistry(dbPath);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const isFormatError = msg.includes('Data format v1 is incompatible');
+    const isCorrupted = /duplicate column name|malformed database schema|file is not a database|database disk image is malformed/.test(msg);
+
+    if (allowWipe && (isFormatError || isCorrupted)) {
+      const dataDir = path.dirname(dbPath);
+      console.error(`Corrupted or incompatible database detected in ${dataDir}. Wiping and rebuilding...`);
+      for (const name of ['retineo.sqlite', 'retineo.sqlite-shm', 'retineo.sqlite-wal', 'objects', 'index', 'logs']) {
+        const p = path.join(dataDir, name);
+        if (existsSync(p)) rmSync(p, { recursive: true, force: true });
+      }
+      return new SQLiteRegistry(dbPath);
+    }
+
+    if (isCorrupted) {
+      throw new Error(`Corrupted database detected at ${dbPath}. Run: retineo rebuild --force or remove the directory manually.`);
+    }
+
+    throw err;
+  }
+}
 
 async function main() {
   // --- Config (load first so we can use logging settings) ---
@@ -35,7 +63,7 @@ async function main() {
     config = await configManager.load();
   } catch {
     // Not initialized yet — use defaults
-    const dataDir = path.join(os.homedir(), '.retineo');
+    const dataDir = process.env.RETINEO_DATA_DIR || path.join(os.homedir(), '.retineo');
     config = {
       dataDir,
       defaultAdapter: 'file',
@@ -97,12 +125,14 @@ async function main() {
   }
   const logger = createLogger(logConfig);
 
-  const resolvedDataDir = config.dataDir || dataDir;
+  const resolvedDataDir = config.dataDir || path.join(os.homedir(), '.retineo');
 
   // --- Storage ---
   const cas = new LocalCASStorage(resolvedDataDir);
   const dbPath = path.join(resolvedDataDir, 'retineo.sqlite');
-  const registry = new SQLiteRegistry(dbPath);
+  const isRebuildCmd = process.argv.includes('rebuild');
+  const isForceFlag = process.argv.includes('--force') || process.argv.includes('-f');
+  const registry = createRegistry(dbPath, isRebuildCmd && isForceFlag);
 
   // --- Node builder ---
   const nodeBuilder = new DefaultNodeBuilder();
@@ -136,19 +166,8 @@ async function main() {
     // No adapters dir — ingestion will fail with clear error later
   }
 
-  // --- Ingestion service (real) ---
-  const ingestionService = new DefaultIngestionService(
-    cas,
-    registry,
-    nodeBuilder,
-    adapterManager,
-    computeHash,
-    logger,
-  );
-
   // --- Search ---
   const secretsManager = new FileSecretsManager(path.join(resolvedDataDir, 'secrets.json'));
-  const queryAnalyzer = new DefaultQueryAnalyzer({ searchConfig: config.search });
 
   // --- LLM / Embedding providers from config ---
   const llmFactory = new DefaultLLMProviderFactory();
@@ -170,11 +189,25 @@ async function main() {
     logger.warn('cli.noEmbedProvider', { message: 'No embedding provider configured. L3 generation will fail. Run retineo init to configure.' });
   }
 
+  // Analyzer needs the LLM provider for entity extraction and cross-lingual
+  // query translation.
+  const queryAnalyzer = new DefaultQueryAnalyzer({
+    searchConfig: config.search,
+    llmProvider: llmProvider ?? undefined,
+  });
+
   const retrievalService = new DefaultRetrievalService({
     embeddingProvider: embedder || new (await import('../dist/llm/providers/mock.js')).MockLLMProvider({ id: 'mock-embedder', type: 'mock', dimension: 384 }),
     casStorage: cas,
+    registry,
     indexDir: path.join(resolvedDataDir, 'index'),
     config: config.search,
+    logger,
+  });
+  const similarityService = createSimilarityService({
+    retrievalService,
+    registry,
+    indexDir: path.join(resolvedDataDir, 'index'),
     logger,
   });
   const contextAssembler = new DefaultContextAssembler({ config: config.search });
@@ -192,8 +225,28 @@ async function main() {
     l3Generator,
     llmProvider,
     embeddingProvider: embedder,
+    retrievalService,
     dataDir: resolvedDataDir,
     logger,
+  });
+
+  // --- Ingestion service (real) ---
+  const ingestionService = new DefaultIngestionService(
+    cas,
+    registry,
+    nodeBuilder,
+    adapterManager,
+    pipeline,
+    computeHash,
+    logger,
+    registry,
+  );
+
+  // --- Health analyzer ---
+  const healthAnalyzer = new DefaultHealthAnalyzer({
+    cas,
+    registry,
+    indexDir: path.join(resolvedDataDir, 'index'),
   });
 
   // --- Wire CLI ---
@@ -208,6 +261,9 @@ async function main() {
     pipeline,
     secretsManager,
     cas,
+    auditService: registry,
+    healthAnalyzer,
+    similarityService,
   };
 
   const program = createCLI(deps);

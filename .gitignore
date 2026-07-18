@@ -54,6 +54,9 @@ Thumbs.db
 # ECHO data directory (local dev)
 .echo/
 
+# Local cross-lingual test data
+tmp-crosslingual/
+
 # Handoff files (session context, not source code)
 HANDOFF*
 handoff*

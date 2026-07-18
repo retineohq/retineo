@@ -88,4 +88,59 @@ describe('DefaultL1Generator', () => {
     expect(result.index.sections[0].children[1].title).toBe('A2');
     expect(result.index.sections[1].title).toBe('B');
   });
+
+  it('chunks body of a single-H1 document', async () => {
+    const content = '# Only Title\n\nLine one.\nLine two.\nLine three.';
+    const result = await gen.generate(content);
+
+    expect(result.index.title).toBe('Only Title');
+    expect(result.index.chunks.length).toBeGreaterThan(0);
+    expect(result.index.chunks[0].heading).toBe('Only Title');
+    expect(result.markdown).toContain('<!-- chunk:');
+  });
+
+  it('uses first line as title when there are no headings', async () => {
+    const content = 'First meaningful line\n\nMore text here.';
+    const result = await gen.generate(content);
+
+    expect(result.index.title).toBe('First meaningful line');
+    expect(result.markdown).toContain('# First meaningful line');
+  });
+
+  it('falls back to filename from context when no headings or text', async () => {
+    const content = '   \n\n   ';
+    const result = await gen.generate(content, { uri: '/docs/my-source.md', mimeType: 'text/markdown' });
+
+    expect(result.index.title).toBe('my source');
+    expect(result.index.chunks).toHaveLength(0);
+    expect(result.markdown).toContain('sectionCount: 0');
+    expect(result.markdown).toContain('chunkCount: 0');
+    expect(result.markdown).toContain('isEmpty: true');
+  });
+
+  it('splits plain-text logs into pseudo-sections', async () => {
+    const content = [
+      'ECHO Phase A COMPLETE (2026-04-27): keyword detection',
+      'Latency 90s→1.8s.',
+      '',
+      'ECHO Settings Cleanup COMPLETE (2026-04-21): removed toggles',
+      'Build clean, 671/688 tests pass.',
+      '',
+      'ECHO Storage Layer COMPLETE (2026-04-21): content-addressable keys',
+      'Ready for Phase A.2.',
+    ].join('\n');
+    const result = await gen.generate(content);
+
+    expect(result.index.sections.length).toBeGreaterThanOrEqual(3);
+    expect(result.index.chunks.length).toBeGreaterThan(0);
+    expect(result.markdown).toContain('## ECHO Phase A COMPLETE');
+  });
+
+  it('does not segment normal prose without markers', async () => {
+    const content = 'This is a normal paragraph.\n\nIt has multiple sentences and blank lines, but no log markers.';
+    const result = await gen.generate(content);
+
+    expect(result.index.sections).toHaveLength(0);
+    expect(result.index.chunks.length).toBeGreaterThan(0);
+  });
 });

@@ -13,6 +13,7 @@ import {
 import { DefaultLanguagePackRegistry } from '../../packages/core/src/i18n/registry.js';
 import { MockLLMProvider } from '../../packages/core/src/llm/providers/mock.js';
 import type { SearchConfig } from '../../packages/core/src/storage/config.js';
+import type { QueryTranslator, TranslatedTerms } from '../../packages/core/src/search/query-translator.js';
 
 const mockConfig: SearchConfig = {
   defaultLanguage: 'en',
@@ -39,14 +40,20 @@ describe('DefaultQueryAnalyzer — heuristic detection', () => {
 
   it('detects Russian via heuristic', async () => {
     const result = await analyzer.analyze('Что такое машинное обучение?');
-    // confidence 0.6 is below threshold 0.7, so falls back to defaultLanguage 'en'
-    expect(result.language).toBe('en');
-    expect(result.confidence).toBe(0.5);
+    // Cyrillic script is unambiguous, so the detected language is preserved.
+    expect(result.language).toBe('ru');
+    expect(result.confidence).toBe(0.6);
   });
 
   it('detects Chinese via heuristic', async () => {
     const result = await analyzer.analyze('什么是机器学习？');
-    // confidence 0.6 is below threshold 0.7, so falls back to defaultLanguage 'en'
+    // CJK script is unambiguous, so the detected language is preserved.
+    expect(result.language).toBe('zh');
+    expect(result.confidence).toBe(0.6);
+  });
+
+  it('falls back to defaultLanguage for short Latin query below threshold', async () => {
+    const result = await analyzer.analyze('hello');
     expect(result.language).toBe('en');
     expect(result.confidence).toBe(0.5);
   });
@@ -64,6 +71,26 @@ describe('DefaultQueryAnalyzer — heuristic detection', () => {
   it('classifies section intent', async () => {
     const result = await analyzer.analyze('What did we discuss about pricing in the meeting?');
     expect(result.intent).toBe('section');
+  });
+
+  it('classifies Russian vague intent', async () => {
+    const result = await analyzer.analyze('Как ECHO использует нейросети?');
+    expect(result.intent).toBe('vague');
+  });
+
+  it('classifies Russian precision intent', async () => {
+    const result = await analyzer.analyze('Дословная цитата на строке 10');
+    expect(result.intent).toBe('precision');
+  });
+
+  it('classifies Chinese section intent', async () => {
+    const result = await analyzer.analyze('在会议中讨论的价格部分');
+    expect(result.intent).toBe('section');
+  });
+
+  it('allows explicit intent override', async () => {
+    const result = await analyzer.analyze('any query', undefined, { intent: 'precision' });
+    expect(result.intent).toBe('precision');
   });
 
   it('extracts entities from capitalized words', async () => {
@@ -91,6 +118,55 @@ describe('DefaultQueryAnalyzer — heuristic detection', () => {
     const temporal = result.signals.find((s) => s.type === 'temporal');
     expect(temporal).toBeDefined();
     expect(temporal!.value).toBe('last week');
+  });
+
+  it('injects English translations for non-English queries', async () => {
+    const fakeTranslator: QueryTranslator = {
+      async translate(terms: string[]): Promise<TranslatedTerms> {
+        const map: Record<string, string> = {
+          'машинное обучение': 'machine learning',
+        };
+        return {
+          original: terms,
+          english: terms.map((t) => map[t] ?? t),
+        };
+      },
+    };
+    const analyzerWithTranslator = new DefaultQueryAnalyzer({
+      detector: new HeuristicDetector(),
+      searchConfig: mockConfig,
+      translator: fakeTranslator,
+    });
+    const result = await analyzerWithTranslator.analyze('Что такое "машинное обучение"?');
+    expect(result.language).toBe('ru');
+    expect(result.enrichedQuery).toContain('[en: machine learning]');
+  });
+
+  it('falls back to query words as entities for non-English keyword queries', async () => {
+    const fakeTranslator: QueryTranslator = {
+      async translate(terms: string[]): Promise<TranslatedTerms> {
+        const map: Record<string, string> = {
+          нейронные: 'neural',
+          сети: 'networks',
+        };
+        return {
+          original: terms,
+          english: terms.map((t) => map[t] ?? t),
+        };
+      },
+    };
+    const analyzerWithTranslator = new DefaultQueryAnalyzer({
+      detector: new HeuristicDetector(),
+      searchConfig: mockConfig,
+      translator: fakeTranslator,
+    });
+    const result = await analyzerWithTranslator.analyze('нейронные сети');
+    expect(result.language).toBe('ru');
+    expect(result.entities).toContain('нейронные');
+    expect(result.entities).toContain('сети');
+    expect(result.enrichedQuery).toContain('[en:');
+    expect(result.enrichedQuery).toContain('neural');
+    expect(result.enrichedQuery).toContain('networks');
   });
 });
 

@@ -6,7 +6,8 @@
 import type { QueryAnalyzer } from '../search/query-analyzer.js';
 import type { RetrievalService } from '../search/retrieval-service.js';
 import type { ContextAssembler } from '../search/context-assembler.js';
-import type { IngestionService } from '../adapters/ingestion.js';
+import type { SimilarityService } from '../search/similarity-service.js';
+import type { IngestionService } from '../services/ingestion-service.js';
 import type { Registry } from '../storage/registry.js';
 import type { CASStorage } from '../storage/cas.js';
 import { readFile, existsSync } from 'fs';
@@ -22,6 +23,7 @@ export interface MCPHandlersDeps {
   ingestionService: IngestionService;
   registry: Registry;
   cas: CASStorage;
+  similarityService?: SimilarityService;
   version: string;
 }
 
@@ -52,7 +54,7 @@ export function createHandlers(deps: MCPHandlersDeps) {
         content: [
           {
             type: 'text',
-            text: JSON.stringify({ sourceId: result.node.sourceRef.uri, rootHash: result.node.id, jobs: [], skipped: result.skipped ?? false }, null, 2),
+            text: JSON.stringify({ sourceId: 'filesystem', contentHash: result.contentHash, action: result.action }, null, 2),
           },
         ],
       };
@@ -108,6 +110,38 @@ export function createHandlers(deps: MCPHandlersDeps) {
           },
         ],
       };
+    },
+
+    async retineo_find_similar(args: { hash: string; topK?: number }) {
+      if (!args.hash || typeof args.hash !== 'string') {
+        return {
+          content: [{ type: 'text', text: 'Error: hash is required' }],
+          isError: true,
+        };
+      }
+      if (!deps.similarityService) {
+        return {
+          content: [{ type: 'text', text: 'Error: similarity service is not configured' }],
+          isError: true,
+        };
+      }
+      try {
+        const results = await deps.similarityService.findSimilar(args.hash, { topK: args.topK });
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(results, null, 2),
+            },
+          ],
+        };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return {
+          content: [{ type: 'text', text: `Error: ${msg}` }],
+          isError: true,
+        };
+      }
     },
   };
 }

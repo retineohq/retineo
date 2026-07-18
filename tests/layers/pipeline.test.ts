@@ -58,7 +58,7 @@ describe('DefaultCompilationPipeline', () => {
     writeFileSync(path.join(objPath, 'content.meta.json'), JSON.stringify({ blocks: [] }));
 
     const manifest: BuildManifest = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       nodeVersion: 1,
       rawHash: hash,
       contentHash: hash,

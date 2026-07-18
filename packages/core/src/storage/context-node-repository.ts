@@ -8,9 +8,13 @@ import type { Hash, ContextNode, BuildManifest, L2Artifact, ContentMeta } from '
 import type { CASStorage } from './cas.js';
 import type { Registry } from './registry.js';
 
+function isFormatVersionError(err: unknown): boolean {
+  return err instanceof Error && /Data format v\d+ is incompatible/.test(err.message);
+}
+
 export interface ContextNodeRepository {
   loadByHash(hash: Hash): Promise<ContextNode | null>;
-  loadBySourcePath(path: string): Promise<ContextNode | null>;
+  loadByExternalId(sourceId: string, externalId: string): Promise<ContextNode | null>;
   loadChildren(parentHash: Hash): Promise<ContextNode[]>;
   save(node: ContextNode): Promise<void>;
   buildManifest(node: ContextNode): BuildManifest;
@@ -27,26 +31,24 @@ export class DefaultContextNodeRepository implements ContextNodeRepository {
     try {
       const { node } = await this.cas.readObject(hash);
       return node;
-    } catch {
+    } catch (err) {
+      if (isFormatVersionError(err)) throw err;
       return null;
     }
   }
 
-  async loadBySourcePath(sourcePath: string): Promise<ContextNode | null> {
-    const sources = this.registry.listSources();
-    const source = sources.find((s) => s.uri === sourcePath);
-    if (!source) return null;
-    return this.loadByHash(source.rootHash);
+  async loadByExternalId(sourceId: string, externalId: string): Promise<ContextNode | null> {
+    const entry = this.registry.get(sourceId, externalId);
+    if (!entry) return null;
+    return this.loadByHash(entry.contentHash);
   }
 
   async loadChildren(parentHash: Hash): Promise<ContextNode[]> {
-    const sources = this.registry.listSources();
+    const segments = this.registry.getChildSegments(parentHash);
     const children: ContextNode[] = [];
-    for (const source of sources) {
-      const node = await this.loadByHash(source.rootHash);
-      if (node && node.parentId === parentHash) {
-        children.push(node);
-      }
+    for (const segment of segments) {
+      const node = await this.loadByHash(segment.hash);
+      if (node) children.push(node);
     }
     return children;
   }
@@ -64,7 +66,8 @@ export class DefaultContextNodeRepository implements ContextNodeRepository {
       existingMeta = artifacts.meta;
       existingL1 = artifacts.l1;
       existingL2 = artifacts.l2;
-    } catch {
+    } catch (err) {
+      if (isFormatVersionError(err)) throw err;
       // Node doesn't exist yet — will be created
     }
 
@@ -87,7 +90,8 @@ export class DefaultContextNodeRepository implements ContextNodeRepository {
     try {
       const { artifacts } = await this.cas.readObject(hash);
       return artifacts.l2 ?? null;
-    } catch {
+    } catch (err) {
+      if (isFormatVersionError(err)) throw err;
       return null;
     }
   }

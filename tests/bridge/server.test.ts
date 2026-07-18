@@ -49,6 +49,7 @@ function makeMockDeps(): BridgeHandlersDeps {
           node: {
             id: 'mock-hash',
             sourceRef: { protocol: 'file' as const, uri: filePath, mimeType: 'text/plain' },
+            sourcePath: filePath,
             childrenIds: [],
             depth: 0,
             artifacts: {},

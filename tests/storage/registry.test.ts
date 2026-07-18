@@ -7,7 +7,8 @@ import { mkdtempSync, rmSync } from 'fs';
 import path from 'path';
 import os from 'os';
 import { SQLiteRegistry } from '../../packages/core/src/storage/registry.js';
-import type { SourceRecord, SegmentRecord, JobRecord } from '../../packages/core/src/domain/types.js';
+import type { SegmentRecord, JobRecord } from '../../packages/core/src/domain/types.js';
+import type { RegistryEntry } from '../../packages/core/src/storage/types.js';
 
 let tmpDir: string;
 let dbPath: string;
@@ -24,23 +25,23 @@ afterEach(() => {
   rmSync(tmpDir, { recursive: true, force: true });
 });
 
-function makeSource(id: string): SourceRecord {
+function makeSource(sourceId: string, externalId = '/tmp/test.md', contentHash = 'c'.repeat(64)): RegistryEntry {
   return {
-    id,
-    protocol: 'file',
-    uri: '/tmp/test.md',
-    mimeType: 'text/markdown',
-    adapterId: 'file',
-    rawHash: 'r'.repeat(64),
-    rootHash: 'c'.repeat(64),
-    lastSeenAt: new Date().toISOString(),
+    sourceId,
+    externalId,
+    contentHash,
+    etag: 'etag',
+    status: 'active',
+    deletedAt: null,
+    lastSeenAt: Date.now(),
   };
 }
 
-function makeSegment(hash: string, sourceId: string, parentHash?: string): SegmentRecord {
+function makeSegment(hash: string, sourceId: string, externalId: string, parentHash?: string): SegmentRecord {
   return {
     hash,
     sourceId,
+    externalId,
     spanStart: 0,
     spanEnd: 10,
     adapterId: 'file',
@@ -71,35 +72,35 @@ describe('Sources', () => {
   it('inserts and retrieves source', () => {
     const s = makeSource('s1');
     registry.insertSource(s);
-    const got = registry.getSource('s1');
+    const got = registry.get('s1', '/tmp/test.md');
     expect(got).not.toBeNull();
-    expect(got!.id).toBe('s1');
-    expect(got!.rawHash).toBe('r'.repeat(64));
+    expect(got!.sourceId).toBe('s1');
+    expect(got!.contentHash).toBe('c'.repeat(64));
   });
 
-  it('finds source by raw hash', () => {
+  it('finds source by content hash', () => {
     const s = makeSource('s2');
     registry.insertSource(s);
-    expect(registry.getSourceByRawHash('r'.repeat(64))!.id).toBe('s2');
+    expect(registry.listByContentHash('c'.repeat(64))[0]!.sourceId).toBe('s2');
   });
 
   it('updates source fields', () => {
     const s = makeSource('s3');
     registry.insertSource(s);
-    registry.updateSource('s3', { uri: '/new/path' });
-    expect(registry.getSource('s3')!.uri).toBe('/new/path');
+    registry.updateSource('s3', '/tmp/test.md', { etag: 'new-etag' });
+    expect(registry.get('s3', '/tmp/test.md')!.etag).toBe('new-etag');
   });
 
   it('deletes source', () => {
     const s = makeSource('s4');
     registry.insertSource(s);
-    registry.deleteSource('s4');
-    expect(registry.getSource('s4')).toBeNull();
+    registry.deleteSource('s4', '/tmp/test.md');
+    expect(registry.get('s4', '/tmp/test.md')).toBeNull();
   });
 
   it('lists sources', () => {
     registry.insertSource(makeSource('s5'));
-    registry.insertSource(makeSource('s6'));
+    registry.insertSource(makeSource('s6', '/tmp/other.md'));
     expect(registry.listSources().length).toBe(2);
   });
 });
@@ -108,7 +109,7 @@ describe('Segments', () => {
   it('inserts and retrieves segment', () => {
     const s = makeSource('src1');
     registry.insertSource(s);
-    const seg = makeSegment('h1', 'src1');
+    const seg = makeSegment('h1', 'src1', '/tmp/test.md');
     registry.insertSegment(seg);
     expect(registry.getSegment('h1')!.sourceId).toBe('src1');
   });
@@ -116,23 +117,23 @@ describe('Segments', () => {
   it('gets segments by source', () => {
     const s = makeSource('src2');
     registry.insertSource(s);
-    registry.insertSegment(makeSegment('h2', 'src2'));
-    registry.insertSegment(makeSegment('h3', 'src2'));
-    expect(registry.getSegmentsBySource('src2').length).toBe(2);
+    registry.insertSegment(makeSegment('h2', 'src2', '/tmp/test.md'));
+    registry.insertSegment(makeSegment('h3', 'src2', '/tmp/test.md'));
+    expect(registry.getSegmentsBySource('src2', '/tmp/test.md').length).toBe(2);
   });
 
   it('gets child segments', () => {
     const s = makeSource('src3');
     registry.insertSource(s);
-    registry.insertSegment(makeSegment('parent', 'src3'));
-    registry.insertSegment(makeSegment('child', 'src3', 'parent'));
+    registry.insertSegment(makeSegment('parent', 'src3', '/tmp/test.md'));
+    registry.insertSegment(makeSegment('child', 'src3', '/tmp/test.md', 'parent'));
     expect(registry.getChildSegments('parent').length).toBe(1);
   });
 
   it('deletes segment', () => {
     const s = makeSource('src4');
     registry.insertSource(s);
-    registry.insertSegment(makeSegment('h4', 'src4'));
+    registry.insertSegment(makeSegment('h4', 'src4', '/tmp/test.md'));
     registry.deleteSegment('h4');
     expect(registry.getSegment('h4')).toBeNull();
   });
@@ -140,8 +141,8 @@ describe('Segments', () => {
   it('cascades on source delete', () => {
     const s = makeSource('src5');
     registry.insertSource(s);
-    registry.insertSegment(makeSegment('h5', 'src5'));
-    registry.deleteSource('src5');
+    registry.insertSegment(makeSegment('h5', 'src5', '/tmp/test.md'));
+    registry.deleteSource('src5', '/tmp/test.md');
     expect(registry.getSegment('h5')).toBeNull();
   });
 });
@@ -215,7 +216,8 @@ describe('Orphans', () => {
     registry.insertOrphan('o1', 'src', '/path/l2.json');
     const o = registry.getOrphan('o1');
     expect(o).not.toBeNull();
-    expect(o!.originalSourceId).toBe('src');
+    expect(o!.sourceId).toBe('src');
+    expect(o!.externalId).toBe('/path/l2.json');
   });
 
   it('lists orphans excluding recovered', () => {

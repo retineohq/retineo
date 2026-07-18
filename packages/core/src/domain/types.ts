@@ -11,30 +11,27 @@ export interface SourceRef {
   mimeType: string;
 }
 
-export interface SourceRecord {
-  id: string;
-  protocol: string;
-  uri: string;
-  mimeType: string;
-  adapterId: string;
-  rawHash: Hash;      // SHA-256 of original file
-  rootHash: Hash;     // contentHash of first segment or single node
-  lastSeenAt: string; // ISO 8601
-}
+
 
 export interface SegmentRecord {
   hash: Hash;         // PRIMARY KEY, contentHash of normalized text
-  sourceId: string;
+  sourceId: string;   // sources.source_id
+  externalId: string; // sources.external_id
   spanStart: number;  // char offset or ms
   spanEnd: number;
   adapterId: string;
   parentHash: Hash | null;
 }
 
+export interface SemanticLink {
+  targetHash: Hash;
+  reason: string;
+}
+
 export interface ContextNode {
   id: Hash;           // contentHash
-  sourceRef: SourceRef;
-  parentId?: Hash;
+  sourceRef: SourceRef; // retained for runtime convenience; NOT persisted in node.json
+  parentHash?: Hash;  // contentHash of parent segment
   childrenIds: Hash[];
   depth: number;
   artifacts: {
@@ -42,6 +39,7 @@ export interface ContextNode {
     l1?: L1Artifact;
     l2?: L2Artifact;
   };
+  semanticLinks?: SemanticLink[];
   build: BuildManifest;
   createdAt: string;
   updatedAt: string;
@@ -63,7 +61,9 @@ export interface L1Artifact {
 
 export interface L2Artifact {
   summary: string;
+  language?: string;
   concepts: string[];
+  conceptsEn?: string[];
   entities: string[];
   claims: string[];
   relations: Relation[];

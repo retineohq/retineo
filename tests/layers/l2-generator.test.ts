@@ -15,10 +15,30 @@ describe('DefaultL2Generator', () => {
     const l2 = await gen.generate(l1, provider);
 
     expect(l2.summary).toBeTruthy();
+    expect(l2.language).toBe('en');
     expect(l2.concepts).toBeInstanceOf(Array);
+    expect(l2.conceptsEn).toBeInstanceOf(Array);
+    expect(l2.conceptsEn?.length).toBe(l2.concepts.length);
     expect(l2.entities).toBeInstanceOf(Array);
     expect(l2.claims).toBeInstanceOf(Array);
     expect(l2.relations).toBeInstanceOf(Array);
+  });
+
+  it('falls back to heuristic language detection when LLM omits language', async () => {
+    const russianProvider = new MockLLMProvider({ id: 'mock', type: 'mock', model: 'test' });
+    const originalGenerate = russianProvider.generate.bind(russianProvider);
+    russianProvider.generate = async (prompt, opts) => {
+      const raw = await originalGenerate(prompt, opts);
+      const parsed = JSON.parse(raw);
+      delete parsed.language;
+      delete parsed.conceptsEn;
+      return JSON.stringify(parsed);
+    };
+
+    const l1 = '# Title\n\nЭто документ на русском языке.';
+    const l2 = await gen.generate(l1, russianProvider);
+    expect(l2.language).toBe('ru');
+    expect(l2.conceptsEn).toBeDefined();
   });
 
   it('retries on invalid JSON then succeeds', async () => {

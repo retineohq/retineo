@@ -70,6 +70,8 @@ search:
 
   crossLingual:
     enabled: true
+    translateQuery: "llm"      # none | llm
+    targetLanguages: ["en"]    # bridge query entities into these languages
 ```
 
 ### Prompt Override Rules
@@ -110,6 +112,7 @@ Fast **rule-based** classification runs first (<1ms). If no rule matches and an 
 
 - **Pronoun resolution**: "What did **he** say?" → resolves to last entity from session context.
 - **Entity injection**: Extracted entities are appended as weighted keywords.
+- **Cross-lingual entity translation**: For non-English queries, entities are translated into English (when `crossLingual.translateQuery` is `llm` and an LLM provider is configured) and appended as `[en: ...]`. This bridges the query into the English `conceptsEn` BM25 tokens.
 - **Temporal signals**: "last week", "Q2 2026" → captured as `QuerySignal` (filters are future work).
 
 ---
@@ -118,9 +121,9 @@ Fast **rule-based** classification runs first (<1ms). If no rule matches and an 
 
 ### L3 Semantic Search
 
-Reads `index/embeddings.jsonl` (produced by `DefaultL3Generator`) and performs **brute-force cosine similarity**.
+Loads the `hnsw.bin` index (built from `index/embeddings.jsonl` by `DefaultL3Generator`) and performs **HNSW approximate nearest neighbor search**. Distance is converted to similarity (`score = 1 - distance`).
 
-> **MVP simplification**: O(N) brute-force is acceptable for <10K documents (<100ms). Replace with HNSW or vector DB for production scale.
+The index is loaded or built automatically when `DefaultRetrievalService` starts. New vectors are added to the index immediately after each successful `GENERATE_L3` job.
 
 ### Hybrid Mode
 
@@ -136,10 +139,10 @@ Weights are configurable via `search.semantic.hybridWeight`.
 
 Scores top-K candidates by:
 
-- **Concept overlap**: +1.0 per matching concept
+- **Concept overlap**: +1.0 per matching concept (matches both `concepts` and `conceptsEn`)
 - **Claim match**: +0.5 per claim containing query terms
 - **Summary similarity**: keyword overlap with summary
-- **Language match**: +0.3 if document language matches query language
+- **Language match**: +0.3 if document language matches query language (only applied when `language` is known)
 
 Weights are fully configurable via `search.rerank.weights`.
 

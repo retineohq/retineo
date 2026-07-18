@@ -97,8 +97,8 @@ describe('End-to-end search pipeline', () => {
 
     // Russian query about machine learning
     const analyzed = await analyzer.analyze('расскажи про машинное обучение');
-    // heuristic detects 'ru' with 0.6 confidence, but threshold 0.7 falls back to 'en'
-    expect(analyzed.language).toBe('en');
+    // Cyrillic script is unambiguous, so heuristic detection is preserved.
+    expect(analyzed.language).toBe('ru');
     expect(analyzed.intent).toBe('vague');
 
     const result = await retrieval.search(analyzed, { mode: 'semantic', finalTopK: 3 });
@@ -106,7 +106,7 @@ describe('End-to-end search pipeline', () => {
     expect(result.citations.length).toBeGreaterThan(0);
 
     const ctx = await assembler.assemble(analyzed, result.selected, { maxTokens: 2000 });
-    expect(ctx.language).toBe('en');
+    expect(ctx.language).toBe('ru');
     expect(ctx.segments.length).toBeGreaterThan(0);
     expect(ctx.totalTokens).toBeGreaterThan(0);
     expect(ctx.trace.budgetUsed).toBeLessThanOrEqual(2000);
@@ -132,8 +132,8 @@ describe('End-to-end search pipeline', () => {
 
     // Russian query, English content in index
     const analyzed = await analyzer.analyze('машинное обучение');
-    // heuristic detects 'ru' with 0.6 confidence, but threshold 0.7 falls back to 'en'
-    expect(analyzed.language).toBe('en');
+    // Cyrillic script is unambiguous, so heuristic detection is preserved.
+    expect(analyzed.language).toBe('ru');
 
     const result = await retrieval.search(analyzed, { mode: 'semantic' });
     // Should still find English doc because shared embedding space

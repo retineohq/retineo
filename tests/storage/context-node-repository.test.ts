@@ -9,7 +9,8 @@ import os from 'os';
 import { DefaultContextNodeRepository } from '../../packages/core/src/storage/context-node-repository.js';
 import { LocalCASStorage, computeHash } from '../../packages/core/src/storage/cas.js';
 import { SQLiteRegistry } from '../../packages/core/src/storage/registry.js';
-import type { ContextNode, BuildManifest, SourceRecord } from '../../packages/core/src/domain/types.js';
+import type { ContextNode, BuildManifest } from '../../packages/core/src/domain/types.js';
+import type { RegistryEntry } from '../../packages/core/src/storage/types.js';
 
 describe('DefaultContextNodeRepository', () => {
   let tmpDir: string;
@@ -38,7 +39,7 @@ describe('DefaultContextNodeRepository', () => {
       depth: 0,
       artifacts: {},
       build: {
-        schemaVersion: 1,
+        schemaVersion: 2,
         nodeVersion: 1,
         rawHash: hash,
         contentHash: hash,
@@ -59,17 +60,16 @@ describe('DefaultContextNodeRepository', () => {
     const node = makeNode(hash);
     await cas.writeObject(node, { content, meta: { blocks: [] } });
 
-    const source: SourceRecord = {
-      id: `src-${hash.slice(0, 8)}`,
-      protocol: 'file',
-      uri: sourceUri,
-      mimeType: 'text/markdown',
-      adapterId: 'markdown',
-      rawHash: hash,
-      rootHash: hash,
-      lastSeenAt: new Date().toISOString(),
+    const source: RegistryEntry = {
+      sourceId: 'filesystem',
+      externalId: sourceUri,
+      contentHash: hash,
+      etag: 'etag',
+      status: 'active',
+      deletedAt: null,
+      lastSeenAt: Date.now(),
     };
-    registry.insertSource(source);
+    registry.set(source);
     return hash;
   }
 
@@ -79,7 +79,7 @@ describe('DefaultContextNodeRepository', () => {
     expect(node).not.toBeNull();
     expect(node!.id).toBe(hash);
     expect(node!.build).toBeDefined();
-    expect(node!.build.schemaVersion).toBe(1);
+    expect(node!.build.schemaVersion).toBe(2);
   });
 
   it('loadByHash — returns null for non-existent hash', async () => {
@@ -87,15 +87,15 @@ describe('DefaultContextNodeRepository', () => {
     expect(node).toBeNull();
   });
 
-  it('loadBySourcePath — returns ContextNode for registered source', async () => {
+  it('loadByExternalId — returns ContextNode for registered source', async () => {
     const hash = await seedNode('# Doc', '/docs/readme.md');
-    const node = await repo.loadBySourcePath('/docs/readme.md');
+    const node = await repo.loadByExternalId('filesystem', '/docs/readme.md');
     expect(node).not.toBeNull();
     expect(node!.id).toBe(hash);
   });
 
-  it('loadBySourcePath — returns null for unregistered path', async () => {
-    const node = await repo.loadBySourcePath('/nonexistent.md');
+  it('loadByExternalId — returns null for unregistered path', async () => {
+    const node = await repo.loadByExternalId('filesystem', '/nonexistent.md');
     expect(node).toBeNull();
   });
 
@@ -121,7 +121,7 @@ describe('DefaultContextNodeRepository', () => {
 
     const manifest = repo.buildManifest(node!);
     expect(manifest.contentHash).toBe(hash);
-    expect(manifest.schemaVersion).toBe(1);
+    expect(manifest.schemaVersion).toBe(2);
   });
 
   it('loadL2 — returns L2 artifact when present', async () => {
@@ -147,7 +147,7 @@ describe('DefaultContextNodeRepository', () => {
     // Seed parent
     const parentHash = await seedNode('# Parent', '/parent.md');
 
-    // Seed children (with parentId set in their node.json)
+    // Seed children (with parentHash set on the node)
     const childHash1 = computeHash('child1');
     const childHash2 = computeHash('child2');
 
@@ -158,19 +158,27 @@ describe('DefaultContextNodeRepository', () => {
       writeFileSync(path.join(objDir, 'content.meta.json'), JSON.stringify({ blocks: [] }));
 
       const childNode = makeNode(childHash);
-      childNode.parentId = parentHash;
-      // Use cas.writeObject to persist parentId in extended format
+      childNode.parentHash = parentHash;
+      // CAS only persists node.build; parentHash is reconstructed below via registry segments
       await cas.writeObject(childNode, { content, meta: { blocks: [] } });
 
-      registry.insertSource({
-        id: `src-${childHash.slice(0, 8)}`,
-        protocol: 'file',
-        uri: `/${content}.md`,
-        mimeType: 'text/markdown',
+      registry.set({
+        sourceId: 'filesystem',
+        externalId: `/${content}.md`,
+        contentHash: childHash,
+        etag: 'etag',
+        status: 'active',
+        deletedAt: null,
+        lastSeenAt: Date.now(),
+      });
+      registry.insertSegment({
+        hash: childHash,
+        sourceId: 'filesystem',
+        externalId: `/${content}.md`,
+        spanStart: 0,
+        spanEnd: content.length,
         adapterId: 'markdown',
-        rawHash: childHash,
-        rootHash: childHash,
-        lastSeenAt: new Date().toISOString(),
+        parentHash: parentHash,
       });
     }
 

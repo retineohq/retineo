@@ -3,11 +3,12 @@
  * Phase 7: L3 semantic search → L2 rerank → L1/L0 cascade with LRU cache.
  */
 
-import { readFile, existsSync } from 'fs';
+import { readFile, readFileSync, existsSync } from 'fs';
 import { promisify } from 'util';
 import path from 'path';
 import type { EmbeddingProvider } from '../llm/provider.js';
 import type { CASStorage } from '../storage/cas.js';
+import type { Registry } from '../storage/registry.js';
 import type { Hash, L2Artifact, SourceRef } from '../domain/types.js';
 import type { Section, Chunk, L1Index } from '../layers/l1-generator.js';
 import type { SearchConfig } from '../storage/config.js';
@@ -17,6 +18,9 @@ import { getGlobalLogger } from '../utils/logger.js';
 import type { LRUCache } from '../utils/cache.js';
 import { SimpleLRUCache } from '../utils/cache.js';
 import { OkapiBM25, tokenize } from './bm25.js';
+import { HeuristicDetector } from '../i18n/detector.js';
+import { loadOrBuildHNSW, type HNSWIndex } from '../embeddings/hnsw-index.js';
+import type { L3Chunk } from '../layers/l3-generator.js';
 
 const readFileAsync = promisify(readFile);
 
@@ -32,12 +36,17 @@ export interface SearchOptions {
 }
 
 export interface CandidateNode {
-  nodeId: Hash;
-  score: number;
+  nodeId: Hash;            // chunkHash (kept for compatibility)
+  contentHash: Hash;       // root content hash (CAS key)
+  chunkHash: Hash;         // chunk-level hash
+  score: number;           // rerank score
+  similarity?: number;     // original L3/BM25 score
   l2Summary?: string;
   l1Preview?: string;
   l0Preview?: string;
   sourceRef?: SourceRef;
+  sourcePath?: string;     // resolved post-search from Registry
+  isGhost?: boolean;
   l2Artifact?: L2Artifact;
   lineRange?: { start: number; end: number };
 }
@@ -56,11 +65,16 @@ export interface RetrievalResult {
 }
 
 export interface Citation {
-  nodeId: Hash;
+  nodeId: Hash;            // chunkHash
+  contentHash: Hash;       // root content hash
+  chunkHash: Hash;         // chunk-level hash
   level: 'L2' | 'L1' | 'L0';
   content: string;
+  score?: number;
   span?: { start: number; end: number };
   sourceRef?: SourceRef;
+  sourcePath?: string;     // resolved from Registry
+  isGhost?: boolean;
 }
 
 // --- Document Hit + L1 Navigation (Section 5) ---
@@ -157,10 +171,10 @@ export function buildNavigationTree(
 
 /** Group chunk hits by source document. */
 export function aggregateDocumentHits(
-  chunkHits: Array<ChunkHit & { sourceHash: Hash; sourcePath: string }>,
+  chunkHits: Array<ChunkHit & { sourceHash: Hash; sourcePath?: string }>,
   l1Indices: Map<Hash, L1Index>
 ): DocumentHit[] {
-  const byDoc = new Map<Hash, Array<ChunkHit & { sourceHash: Hash; sourcePath: string }>>();
+  const byDoc = new Map<Hash, Array<ChunkHit & { sourceHash: Hash; sourcePath?: string }>>();
   for (const ch of chunkHits) {
     const existing = byDoc.get(ch.sourceHash) ?? [];
     existing.push(ch);
@@ -169,23 +183,23 @@ export function aggregateDocumentHits(
 
   const hits: DocumentHit[] = [];
   for (const [hash, chunks] of byDoc) {
-    const chunkHits: ChunkHit[] = chunks.map((c) => ({
+    const docChunkHits: ChunkHit[] = chunks.map((c) => ({
       chunkId: c.chunkId,
       score: c.score,
       sectionId: c.sectionId,
       lineRange: c.lineRange,
     }));
-    const score = calculateDocumentScore(chunkHits);
+    const score = calculateDocumentScore(docChunkHits);
     const l1 = l1Indices.get(hash) ?? null;
     hits.push({
       sourceHash: hash,
-      sourcePath: chunks[0].sourcePath,
+      sourcePath: chunks[0].sourcePath ?? hash,
       documentScore: score.documentScore,
       maxChunkScore: score.maxChunkScore,
       coverageBonus: score.coverageBonus,
       densityBonus: score.densityBonus,
-      chunks: chunkHits,
-      navigationTree: l1 ? buildNavigationTree(chunkHits, l1) : null,
+      chunks: docChunkHits,
+      navigationTree: l1 ? buildNavigationTree(docChunkHits, l1) : null,
     });
   }
 
@@ -197,6 +211,7 @@ export function aggregateDocumentHits(
 
 export interface RetrievalService {
   search(query: AnalyzedQuery, options?: SearchOptions): Promise<RetrievalResult>;
+  addVectors(chunks: L3Chunk[]): Promise<void>;
 }
 
 function cosineSimilarity(a: number[], b: number[]): number {
@@ -211,23 +226,39 @@ function cosineSimilarity(a: number[], b: number[]): number {
   return dot / (Math.sqrt(normA) * Math.sqrt(normB) || 1);
 }
 
-/** Load all embeddings from jsonl. */
-async function loadEmbeddings(indexDir: string): Promise<Array<{ hash: string; vector: number[] }>> {
+interface EmbeddingRecord {
+  hash: string;
+  vector: number[];
+  parentId?: string;
+  rootHash?: string;
+  chunkId?: string;
+  lineStart?: number;
+  lineEnd?: number;
+  charStart?: number;
+  charEnd?: number;
+}
+
+/** Load embedding metadata (hash → sourcePath/rootHash) from jsonl. */
+function loadEmbeddingRecords(indexDir: string): EmbeddingRecord[] {
   const embeddingsPath = path.join(indexDir, 'embeddings.jsonl');
   if (!existsSync(embeddingsPath)) return [];
-  const raw = await readFileAsync(embeddingsPath, 'utf-8');
-  const lines = raw.trim().split('\n');
-  const out: Array<{ hash: string; vector: number[] }> = [];
-  for (const line of lines) {
-    if (!line.trim()) continue;
-    try {
-      const rec = JSON.parse(line) as { hash: string; vector: number[] };
-      out.push(rec);
-    } catch {
-      // skip malformed
+  try {
+    const raw = readFileSync(embeddingsPath, 'utf-8');
+    const lines = raw.trim().split('\n');
+    const out: EmbeddingRecord[] = [];
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      try {
+        const rec = JSON.parse(line) as EmbeddingRecord;
+        out.push(rec);
+      } catch {
+        // skip malformed
+      }
     }
+    return out;
+  } catch {
+    return [];
   }
-  return out;
 }
 
 /** Load BM25 data and build OkapiBM25 index. */
@@ -270,22 +301,42 @@ export interface RetrievalServiceDeps {
   embeddingCache?: LRUCache<string, number[]>;
   l2Cache?: LRUCache<string, L2Artifact>;
   searchCache?: LRUCache<string, RetrievalResult>;
+  model?: string;
+  registry?: Registry;
 }
 
 export class DefaultRetrievalService implements RetrievalService {
   private embedder: EmbeddingProvider;
   private cas: CASStorage;
+  private registry: Registry | null;
   private indexDir: string;
   private config: SearchConfig;
   private logger: Logger;
   private embeddingCache: LRUCache<string, number[]>;
   private l2Cache: LRUCache<string, L2Artifact>;
   private searchCache: LRUCache<string, RetrievalResult>;
+  private languageDetector: HeuristicDetector;
+  private hnswIndex: HNSWIndex | null = null;
+  private hnswInit: Promise<void> | null = null;
+  private model: string;
+  private chunkToSource: Map<
+    Hash,
+    {
+      rootHash: Hash;
+      chunkId?: string;
+      lineStart?: number;
+      lineEnd?: number;
+      charStart?: number;
+      charEnd?: number;
+    }
+  > = new Map();
 
   constructor(deps: RetrievalServiceDeps) {
     this.embedder = deps.embeddingProvider;
     this.cas = deps.casStorage;
+    this.registry = deps.registry ?? null;
     this.indexDir = deps.indexDir;
+    this.model = deps.model ?? deps.embeddingProvider.config.model;
     this.logger = deps.logger ?? getGlobalLogger().child({ layer: 'search' });
     this.embeddingCache = deps.embeddingCache ?? new SimpleLRUCache(1000);
     this.l2Cache = deps.l2Cache ?? new SimpleLRUCache(500);
@@ -298,8 +349,89 @@ export class DefaultRetrievalService implements RetrievalService {
       cascade: { budgets: { vague: 500, section: 800, precision: 1500 } },
       citations: { format: 'markdown', includeLineNumbers: true, includeTimestamps: true },
       prompts: {},
-      crossLingual: { enabled: true },
+      crossLingual: { enabled: true, translateQuery: 'llm', targetLanguages: ['en'] },
     };
+    this.languageDetector = new HeuristicDetector();
+  }
+
+  private async ensureHNSW(): Promise<void> {
+    if (this.hnswIndex) return;
+    if (this.hnswInit) return this.hnswInit;
+    this.hnswInit = (async () => {
+      const dim = this.embedder.dimension();
+      const { index } = await loadOrBuildHNSW(this.indexDir, dim, this.model);
+      this.hnswIndex = index;
+      this.loadChunkToSource();
+    })();
+    return this.hnswInit;
+  }
+
+  private loadChunkToSource(): void {
+    this.chunkToSource.clear();
+    for (const rec of loadEmbeddingRecords(this.indexDir)) {
+      if (rec.parentId) {
+        const rootHash = rec.rootHash ?? rec.hash;
+        this.chunkToSource.set(rec.hash, {
+          rootHash,
+          chunkId: rec.chunkId,
+          lineStart: rec.lineStart,
+          lineEnd: rec.lineEnd,
+          charStart: rec.charStart,
+          charEnd: rec.charEnd,
+        });
+      }
+    }
+  }
+
+  private resolveSource(contentHash: Hash): {
+    sourcePath: string;
+    sourceRef?: SourceRef;
+    isGhost: boolean;
+  } {
+    if (!this.registry) {
+      return { sourcePath: contentHash, isGhost: false };
+    }
+    const entries = this.registry.listByContentHash(contentHash);
+    const active = entries.find((e) => e.status === 'active');
+    if (active) {
+      return {
+        sourcePath: active.externalId,
+        sourceRef: { protocol: 'file', uri: active.externalId, mimeType: 'text/markdown' },
+        isGhost: false,
+      };
+    }
+    const anyEntry = entries[0];
+    if (anyEntry) {
+      return {
+        sourcePath: anyEntry.externalId,
+        sourceRef: { protocol: 'file', uri: anyEntry.externalId, mimeType: 'text/markdown' },
+        isGhost: true,
+      };
+    }
+    return { sourcePath: contentHash, isGhost: true };
+  }
+
+  async addVectors(chunks: L3Chunk[]): Promise<void> {
+    await this.ensureHNSW();
+    if (!this.hnswIndex) return;
+    let added = 0;
+    for (const c of chunks) {
+      if (this.hnswIndex.has(c.chunkHash)) continue;
+      this.hnswIndex.add(c.chunkHash, c.vector);
+      added++;
+      this.chunkToSource.set(c.chunkHash, {
+        rootHash: c.rootHash,
+        chunkId: c.chunkId,
+        lineStart: c.lineStart,
+        lineEnd: c.lineEnd,
+        charStart: c.charStart,
+        charEnd: c.charEnd,
+      });
+    }
+    if (added > 0) {
+      const hnswPath = path.join(this.indexDir, 'hnsw.bin');
+      await this.hnswIndex.save(hnswPath);
+    }
   }
 
   async search(query: AnalyzedQuery, options: SearchOptions = {}): Promise<RetrievalResult> {
@@ -323,16 +455,19 @@ export class DefaultRetrievalService implements RetrievalService {
 
     // L3 Semantic Search
     trace.steps.push('L3: load embeddings');
-    const embeddings = await loadEmbeddings(this.indexDir);
     const queryVector = await this.getQueryVector(query.enrichedQuery);
 
     let l3Scores: Array<{ hash: string; score: number }> = [];
 
     if (mode === 'semantic' || mode === 'hybrid') {
-      for (const rec of embeddings) {
-        const score = cosineSimilarity(queryVector, rec.vector);
-        if (score >= threshold) {
-          l3Scores.push({ hash: rec.hash, score });
+      await this.ensureHNSW();
+      if (this.hnswIndex) {
+        const hnswResults = this.hnswIndex.search(queryVector, topK);
+        for (const r of hnswResults) {
+          const score = 1 - r.distance;
+          if (score >= threshold) {
+            l3Scores.push({ hash: r.hash, score });
+          }
         }
       }
       l3Scores.sort((a, b) => b.score - a.score);
@@ -340,7 +475,7 @@ export class DefaultRetrievalService implements RetrievalService {
     }
 
     // Keyword search (Okapi BM25)
-    let kwScores = new Map<string, number>();
+    const kwScores = new Map<string, number>();
     if (mode === 'keyword' || mode === 'hybrid') {
       trace.steps.push('L3: BM25 search');
       const bm25 = await loadOkapiBM25(this.indexDir);
@@ -383,24 +518,44 @@ export class DefaultRetrievalService implements RetrievalService {
     trace.steps.push('L2: rerank start');
     const candidates: CandidateNode[] = [];
     for (const s of l3Scores) {
-      const l2 = await this.loadL2(s.hash);
+      const sourceInfo = this.chunkToSource.get(s.hash);
+      const rootHash = sourceInfo?.rootHash ?? s.hash;
+      const l2 = await this.loadL2(rootHash);
       if (!l2) continue;
-      const rerankScore = this.scoreL2(l2, query, queryLang);
-      candidates.push({
+      const source = this.resolveSource(rootHash);
+      const rerankScore = await this.scoreL2(l2, query, queryLang);
+      const candidate: CandidateNode = {
         nodeId: s.hash,
+        contentHash: rootHash,
+        chunkHash: s.hash,
         score: rerankScore,
+        similarity: s.score,
         l2Summary: l2.summary,
         l2Artifact: l2,
-      });
+        sourcePath: source.sourcePath,
+        sourceRef: source.sourceRef,
+        isGhost: source.isGhost,
+      };
+      candidates.push(candidate);
     }
     candidates.sort((a, b) => b.score - a.score);
     const reranked = candidates.slice(0, rerankTopK);
     trace.steps.push(`L2: ${reranked.length} reranked`);
 
+    // Deduplicate by contentHash so one document does not occupy multiple result slots.
+    const seenHashes = new Set<Hash>();
+    const uniqueReranked: CandidateNode[] = [];
+    for (const c of reranked) {
+      if (!seenHashes.has(c.contentHash)) {
+        seenHashes.add(c.contentHash);
+        uniqueReranked.push(c);
+      }
+    }
+
     // L1/L0 Cascade
     trace.steps.push('L1/L0: cascade start');
     const selected: CandidateNode[] = [];
-    for (const c of reranked.slice(0, finalTopK)) {
+    for (const c of uniqueReranked.slice(0, finalTopK)) {
       const enriched = await this.cascade(c, query.intent);
       selected.push(enriched);
     }
@@ -411,10 +566,15 @@ export class DefaultRetrievalService implements RetrievalService {
     for (const c of selected) {
       citations.push({
         nodeId: c.nodeId,
+        contentHash: c.contentHash,
+        chunkHash: c.chunkHash,
         level: query.intent === 'precision' ? 'L0' : query.intent === 'section' ? 'L1' : 'L2',
         content: c.l2Summary ?? c.l1Preview ?? c.l0Preview ?? '',
+        score: c.score,
         span: c.lineRange,
         sourceRef: c.sourceRef,
+        sourcePath: c.sourcePath,
+        isGhost: c.isGhost,
       });
     }
 
@@ -423,7 +583,7 @@ export class DefaultRetrievalService implements RetrievalService {
 
     const result: RetrievalResult = {
       query: query.originalQuery,
-      candidates: reranked,
+      candidates: uniqueReranked,
       selected,
       citations,
       trace,
@@ -457,12 +617,26 @@ export class DefaultRetrievalService implements RetrievalService {
     }
   }
 
-  private scoreL2(l2: L2Artifact, query: AnalyzedQuery, queryLang: string): number {
+  private async scoreL2(l2: L2Artifact, query: AnalyzedQuery, queryLang: string): Promise<number> {
     const w = this.config.rerank.weights;
     let score = 0;
 
+    // Detect document language (prefer stored field, fallback to heuristic on summary)
+    let docLang = l2.language;
+    if (!docLang) {
+      const detected = await this.languageDetector.detect(l2.summary.slice(0, 1000));
+      docLang = detected.code;
+    }
+    const sameLanguage = docLang === queryLang;
+
+    // Query terms include entities, signals, and English translations injected by analyzer
     const qTerms = new Set(query.entities.concat(query.signals.map((s) => s.value)));
+
+    // Concept overlap: match against original concepts and English translations
     const concepts = new Set(l2.concepts.map((c) => c.toLowerCase()));
+    if (l2.conceptsEn) {
+      for (const c of l2.conceptsEn) concepts.add(c.toLowerCase());
+    }
     let conceptHits = 0;
     for (const t of qTerms) {
       for (const c of concepts) {
@@ -487,14 +661,25 @@ export class DefaultRetrievalService implements RetrievalService {
     }
     score += summaryHits * w.summary;
 
-    score += w.language * 0.5;
+    // Language match boost: only when document and query share a language
+    if (sameLanguage) {
+      score += w.language * 0.5;
+    }
 
     return score;
   }
 
   private async cascade(candidate: CandidateNode, intent: QueryIntent): Promise<CandidateNode> {
-    const hash = candidate.nodeId;
-    const objPath = this.cas.getObjectPath(hash);
+    const chunkHash = candidate.nodeId;
+    const sourceInfo = this.chunkToSource.get(chunkHash);
+    const rootHash = sourceInfo?.rootHash ?? candidate.contentHash ?? chunkHash;
+
+    if (candidate.isGhost) {
+      // Ghost documents provide L2 essence only; do not load L0.
+      return candidate;
+    }
+
+    const objPath = this.cas.getObjectPath(rootHash);
 
     if (intent === 'section' || intent === 'precision') {
       try {
@@ -513,20 +698,35 @@ export class DefaultRetrievalService implements RetrievalService {
         const l0Path = path.join(objPath, 'content.md');
         if (existsSync(l0Path)) {
           const l0Raw = await readFileAsync(l0Path, 'utf-8');
-          const chunks = l0Raw.split('\n\n');
-          let bestChunk = chunks[0] ?? l0Raw.slice(0, 512);
-          let bestScore = -1;
-          for (const chunk of chunks) {
-            const score = this.chunkScore(chunk, candidate.l2Artifact);
-            if (score > bestScore) {
-              bestScore = score;
-              bestChunk = chunk;
+
+          // Exact slice from L1/L3 chunk geometry if available.
+          if (
+            sourceInfo?.charStart !== undefined &&
+            sourceInfo?.charEnd !== undefined &&
+            sourceInfo.lineStart !== undefined &&
+            sourceInfo.lineEnd !== undefined
+          ) {
+            const exact = l0Raw.slice(sourceInfo.charStart, sourceInfo.charEnd + 1);
+            candidate.l0Preview = exact.slice(0, 1500);
+            candidate.lineRange = { start: sourceInfo.lineStart, end: sourceInfo.lineEnd };
+          } else {
+            // Fallback: heuristic paragraph search.
+            const chunks = l0Raw.split('\n\n');
+            let bestChunk = chunks[0] ?? l0Raw.slice(0, 512);
+            let bestScore = -1;
+            for (const chunk of chunks) {
+              const score = this.chunkScore(chunk, candidate.l2Artifact);
+              if (score > bestScore) {
+                bestScore = score;
+                bestChunk = chunk;
+              }
             }
+            candidate.l0Preview = bestChunk.slice(0, 512);
+            const idx = l0Raw.indexOf(bestChunk);
+            const linesBefore = idx >= 0 ? l0Raw.slice(0, idx).split('\n').length - 1 : 0;
+            const lineCount = bestChunk.split('\n').length;
+            candidate.lineRange = { start: linesBefore, end: linesBefore + lineCount };
           }
-          candidate.l0Preview = bestChunk.slice(0, 512);
-          const linesBefore = l0Raw.slice(0, l0Raw.indexOf(bestChunk)).split('\n').length - 1;
-          const lineCount = bestChunk.split('\n').length;
-          candidate.lineRange = { start: linesBefore, end: linesBefore + lineCount };
         }
       } catch {
         // ignore

@@ -4,12 +4,12 @@
 
 ### Overview
 
-Replaces brute-force cosine search with Hierarchical Navigable Small World (HNSW) for O(log N) approximate nearest neighbors.
+Hierarchical Navigable Small World (HNSW) is the default vector index for O(log N) approximate nearest neighbors.
 
 ### Implementation
 
 - **Primary:** `hnswlib-node` (native bindings, fast).
-- **Fallback:** Brute-force cosine similarity (pure JS, always works).
+- **Fallback:** `BruteForceHNSW` pure-JS implementation for tests or when native bindings are unavailable.
 
 ```typescript
 import { createHNSWIndex, loadOrBuildHNSW } from 'retineo/embeddings';
@@ -37,82 +37,17 @@ await index.save('/path/to/hnsw.bin');
 await index.load('/path/to/hnsw.bin');
 ```
 
-## Parquet Embedding Store
+## Embedding Store
 
 ### Overview
 
-Optional replacement for `embeddings.jsonl` using Apache Parquet for better compression and query performance.
+Embeddings are persisted as `index/embeddings.jsonl` — one JSON line per vector. This keeps the core dependency-free and portable.
 
 ### Implementation
 
 - **Interface:** `ParquetEmbeddingStore` (append, readAll, readBatch).
-- **Current:** JSONL fallback (no native deps, always works).
-- **Future:** `apache-arrow` migration when package size/performance is verified.
-
-```typescript
-import { createEmbeddingStore } from 'retineo/embeddings';
-
-const store = createEmbeddingStore(indexDir);
-await store.append([{ hash: 'abc', vector: [...], model: 'text-embedding-3-small', dimension: 1536 }]);
-```
-
-## Batch Embedding
-
-### Overview
-
-Groups texts into batches to reduce API calls and latency.
-
-### Config
-
-```yaml
-performance:
-  batchEmbedding:
-    batchSize: 100
-    maxConcurrency: 2
-```
-
-### Usage
-
-`DefaultL3Generator.batchEmbed(items, provider)` groups items into batches of `batchSize` and calls `provider.embed(batchTexts)`.
-
-OpenAI and Ollama both support batch embedding. Fallback to single embedding if provider rejects batches.
-
-## LRU Cache
-
-### Overview
-
-Caches frequently accessed data to avoid disk I/O.
-
-### Caches
-
-| Cache | Key | Max Entries | TTL |
-|-------|-----|-------------|-----|
-| Embedding | `query string` → `vector` | 1,000 | none |
-| L2 Artifact | `hash` → `L2Artifact` | 500 | none |
-| Search Result | `query+options` → `RetrievalResult` | 100 | 5 min |
-
-### Config
-
-```yaml
-performance:
-  cache:
-    embeddingMax: 1000
-    l2Max: 500
-    searchMax: 100
-    searchTtlMs: 300000
-```
-
-### Implementation
-
-`SimpleLRUCache` supports TTL eviction and MRU reordering on `get()`.
-
-```typescript
-import { SimpleLRUCache } from 'retineo/utils';
-
-const cache = new SimpleLRUCache<string, number[]>(1000);
-cache.set('key', value);
-const hit = cache.get('key'); // moves to most-recent
-```
+- **Current:** `JSONLEmbeddingStore` is the concrete implementation.
+- **Future:** Parquet/`apache-arrow` backend may be added later without consumer changes.
 
 ## Benchmarks (MVP, 10K vectors)
 

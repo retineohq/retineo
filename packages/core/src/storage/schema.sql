@@ -1,35 +1,42 @@
 -- RETINEO Core — SQLite Registry Schema
--- Phase 0: Domain Storage
+-- Phase 8: Content-addressable Registry. Source metadata only; no paths inside CAS.
 
--- Sources: mutable registry of ingested files
+-- Sources: mutable registry of external documents.
+-- Primary key is the external identity (sourceId + externalId).
+-- contentHash links to CAS.
 CREATE TABLE sources (
-    id          TEXT PRIMARY KEY,           -- sourceId (e.g., filename or UUID)
-    protocol    TEXT NOT NULL,              -- file | http | https
-    uri         TEXT NOT NULL,              -- full path or URL
-    mime_type   TEXT NOT NULL,
-    adapter_id  TEXT NOT NULL,
-    raw_hash    TEXT NOT NULL,              -- SHA-256 of original file
-    root_hash   TEXT,                       -- contentHash of root node
-    last_seen_at TEXT NOT NULL,             -- ISO 8601
-    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    source_id   TEXT NOT NULL,              -- adapter/namespace id: "filesystem", "s3-bucket-alpha"
+    external_id TEXT NOT NULL,              -- path or key in the source's namespace
+    content_hash TEXT NOT NULL,             -- SHA-256 of L0 body (CAS key)
+    etag        TEXT NOT NULL,              -- source-specific version tag
+    status      TEXT NOT NULL CHECK(status IN ('active','ghost','deleted')),
+    deleted_at  INTEGER,                    -- epoch ms, null unless status = deleted
+    last_seen_at INTEGER NOT NULL,          -- epoch ms
+    created_at  INTEGER NOT NULL DEFAULT 0, -- epoch ms
+    updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    retention_policy TEXT NOT NULL DEFAULT 'standard',
+    sensitivity_level TEXT NOT NULL DEFAULT 'none',
+    encryption_key_id TEXT,                 -- null if unencrypted
+    PRIMARY KEY (source_id, external_id)
 );
 
-CREATE INDEX idx_sources_raw_hash ON sources(raw_hash);
-CREATE INDEX idx_sources_adapter ON sources(adapter_id);
+CREATE INDEX idx_sources_content_hash ON sources(content_hash);
+CREATE INDEX idx_sources_source_id ON sources(source_id);
 
--- Segments: fractal nodes linkage
+-- Segments: fractal node linkage.
+-- (source_id, external_id) references the root source row that produced this segment.
 CREATE TABLE segments (
     hash        TEXT PRIMARY KEY,           -- contentHash (CAS key)
-    source_id   TEXT NOT NULL,
+    source_id   TEXT NOT NULL,              -- sources.source_id
+    external_id TEXT NOT NULL,              -- sources.external_id
     span_start  INTEGER NOT NULL,           -- char offset or ms
     span_end    INTEGER NOT NULL,
     adapter_id  TEXT NOT NULL,
-    parent_hash TEXT,                       -- null for root nodes
-    FOREIGN KEY (source_id) REFERENCES sources(id) ON DELETE CASCADE
+    parent_hash TEXT,                       -- contentHash of parent segment
+    FOREIGN KEY (source_id, external_id) REFERENCES sources(source_id, external_id) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_segments_source ON segments(source_id);
+CREATE INDEX idx_segments_source ON segments(source_id, external_id);
 CREATE INDEX idx_segments_parent ON segments(parent_hash);
 
 -- Jobs: background compilation queue with lease
@@ -56,8 +63,8 @@ CREATE INDEX idx_jobs_lease ON jobs(lease_until) WHERE status = 'RUNNING';
 -- Orphaned objects: Ghost System
 CREATE TABLE orphaned_objects (
     hash            TEXT PRIMARY KEY,       -- contentHash
-    original_source_id TEXT NOT NULL,
-    l2_path         TEXT,                   -- path to L2.json artifact
+    source_id       TEXT NOT NULL,          -- original source namespace
+    external_id     TEXT NOT NULL,          -- original external id
     orphaned_at     TEXT NOT NULL DEFAULT (datetime('now')),
     recovered_at    TEXT,
     scheduled_purge_at TEXT                 -- orphaned_at + 90 days
@@ -77,20 +84,17 @@ CREATE TABLE encryption_keys (
 
 CREATE INDEX idx_encryption_keys_active ON encryption_keys(status) WHERE status = 'active';
 
--- Audit logs (append-only, not partitioned in SQLite)
-CREATE TABLE audit_logs (
+-- Audit log: append-only operational log
+CREATE TABLE audit_log (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    event_id    TEXT NOT NULL UNIQUE,
-    timestamp   TEXT NOT NULL DEFAULT (datetime('now')),
-    actor       TEXT NOT NULL,
-    action      TEXT NOT NULL CHECK(action IN ('CREATE','UPDATE','DELETE','GRANT','REVOKE','LOGIN','EXPORT')),
-    resource    TEXT NOT NULL,
-    before_state TEXT,                      -- JSON
-    after_state  TEXT,                      -- JSON
-    ip          TEXT,
-    user_agent  TEXT,
-    session_id  TEXT
+    timestamp   INTEGER NOT NULL,           -- epoch ms
+    actor       TEXT NOT NULL DEFAULT 'system',
+    action      TEXT NOT NULL,
+    resource_hash TEXT,
+    level       TEXT,
+    metadata    TEXT                        -- JSON
 );
 
-CREATE INDEX idx_audit_actor ON audit_logs(actor, timestamp);
-CREATE INDEX idx_audit_resource ON audit_logs(resource, timestamp);
+CREATE INDEX idx_audit_log_timestamp ON audit_log(timestamp);
+CREATE INDEX idx_audit_log_action ON audit_log(action, timestamp);
+CREATE INDEX idx_audit_log_resource ON audit_log(resource_hash, timestamp);

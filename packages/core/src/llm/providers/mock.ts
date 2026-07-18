@@ -27,7 +27,9 @@ export class MockLLMProvider implements LLMProvider, EmbeddingProvider {
     if (options?.jsonMode) {
       return JSON.stringify({
         summary: `Mock summary for prompt hash ${prefix}`,
+        language: 'en',
         concepts: ['mock-concept-a', 'mock-concept-b'],
+        conceptsEn: ['mock-concept-a', 'mock-concept-b'],
         entities: ['mock-entity-1'],
         claims: [`Mock claim from hash ${prefix}`],
         relations: [{ source: 'mock-concept-a', target: 'mock-concept-b', type: 'related_to' }],

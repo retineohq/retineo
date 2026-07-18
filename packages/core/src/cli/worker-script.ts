@@ -9,12 +9,11 @@
  */
 
 import { FileConfigManager } from '../storage/config.js';
-import { LocalCASStorage, computeHash } from '../storage/cas.js';
+import { LocalCASStorage } from '../storage/cas.js';
 import { SQLiteRegistry } from '../storage/registry.js';
 import { DefaultNodeBuilder } from '../storage/node-builder.js';
 import { DefaultAdapterManager } from '../adapters/manager.js';
 import { DefaultAdapterProcessRunner } from '../adapters/runner.js';
-import { DefaultIngestionService } from '../adapters/ingestion.js';
 import { DefaultLLMProviderFactory, DefaultEmbeddingProviderFactory } from '../llm/factory.js';
 import { FileSecretsManager } from '../storage/secrets.js';
 import { DefaultCompilationPipeline } from '../layers/pipeline.js';
@@ -25,6 +24,7 @@ import { DefaultL2Generator } from '../layers/l2-generator.js';
 import { DefaultL3Generator } from '../layers/l3-generator.js';
 import { createLogger } from '../utils/logger.js';
 import { DefaultShutdownManager } from '../utils/shutdown.js';
+import { DefaultRetrievalService } from '../search/retrieval-service.js';
 import path from 'path';
 
 export interface WorkerScriptOptions {
@@ -107,6 +107,16 @@ export async function startWorkerServices(
   const l3Generator = new DefaultL3Generator();
 
   const contextNodeRepository = new DefaultContextNodeRepository(cas, registry);
+  const indexDir = path.join(dataDir, 'index');
+  const retrievalService = new DefaultRetrievalService({
+    embeddingProvider: embedder,
+    casStorage: cas,
+    registry,
+    indexDir,
+    config: config.search,
+    logger,
+    model: embedder.config.model,
+  });
   const pipeline = new DefaultCompilationPipeline({
     cas,
     registry,
@@ -116,6 +126,7 @@ export async function startWorkerServices(
     l3Generator,
     llmProvider,
     embeddingProvider: embedder,
+    retrievalService,
     dataDir,
     logger,
   });
@@ -173,8 +184,9 @@ async function main(): Promise<void> {
 }
 
 const isForked =
-  typeof process.send === 'function' ||
-  process.env.RETINEO_WORKER_SCRIPT === '1';
+  !process.env.VITEST &&
+  (typeof process.send === 'function' ||
+    process.env.RETINEO_WORKER_SCRIPT === '1');
 
 if (isForked) {
   main().catch((err) => {

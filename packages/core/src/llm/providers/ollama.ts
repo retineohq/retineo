@@ -138,7 +138,7 @@ export class OllamaProvider implements LLMProvider, EmbeddingProvider {
   }
 
   dimension(): number {
-    // Ollama embedding dimensions vary by model; default to common value
-    return (this.config.dimension as number | undefined) ?? 4096;
+    // Ollama embedding dimensions vary by model; default to nomic-embed-text / all-minilm
+    return (this.config.dimension as number | undefined) ?? 768;
   }
 }

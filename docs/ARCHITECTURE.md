@@ -10,16 +10,21 @@ Every artifact is stored by the SHA-256 hash of its content. Once written, an ob
 ### Fractal ContextNode
 A `ContextNode` is the atomic unit of context. It contains:
 - `id` — content hash (SHA-256)
-- `sourceRef` — where the data came from
-- `parentId` / `childrenIds` — tree linkage
+- `sourceRef` — where the data came from (`sourceId`, `externalId`)
+- `parentId` / `childrenIds` — tree linkage by content hash
 - `depth` — level in the tree (0 = root)
 - `artifacts` — L0 (raw text), L1 (structured), L2 (semantic)
+- `semanticLinks` — optional `SemanticLink[]` placeholder for future Pro/Plugin L4 features
 - `build` — manifest of generators and versions
+
+`sourcePath` is not stored inside the node; it is resolved post-search from the Registry (`externalId`) for UI display.
 
 Nodes are fractal: a 10-minute video becomes a root node with child segments, each its own node. A 500-page PDF becomes a root with chapter children. Any node can stand alone or participate in a tree.
 
-### Adapter IPC
-Adapters are external child processes that speak JSON-RPC 2.0 over stdin/stdout. They convert any file format into normalized text + metadata blocks. RETINEO Core does not parse PDFs, transcribe audio, or OCR images itself — it delegates to adapters. This keeps the core small and makes format support pluggable.
+### Adapter IPC + SourceAdapter
+Document adapters are external child processes that speak JSON-RPC 2.0 over stdin/stdout. They convert any file format into normalized text + metadata blocks. RETINEO Core does not parse PDFs, transcribe audio, or OCR images itself — it delegates to adapters.
+
+`SourceAdapter` is a separate abstraction for *sources* of documents (filesystem, S3, API, etc.). A `SourceAdapter` exposes `sync()` and `fetch(externalId)`; Core only sees `(sourceId, externalId, body, etag)`. The CLI `retineo ingest` uses `FileSystemSourceAdapter`, one of many possible implementations.
 
 ## L0–L3 Pipeline
 
@@ -71,7 +76,7 @@ AssembledContext     (ready for LLM consumption)
 | **L0** | Adapter output | Normalized text + metadata blocks | `objects/{hash}/content.md` + `content.meta.json` |
 | **L1** | L0 content | Structured markdown (headings, sections) + index | `objects/{hash}/L1.md` + `L1.index.json` |
 | **L2** | L0 + L1 | Summary, concepts, entities, claims, relations | `objects/{hash}/L2.json` |
-| **L3** | L2 + embeddings | Search index, candidate ranking | `index/embeddings.jsonl` + `bm25.json` + `hnsw.manifest.json` + `hnsw.bin` |
+| **L3** | L0 body + embeddings | Search index, candidate ranking | `index/embeddings.jsonl` + `bm25.json` + `hnsw.manifest.json` + `hnsw.bin` |
 
 ## Queue Model
 Background compilation (L1, L2, embedding) is handled by a SQLite-backed job queue with lease-based workers:
@@ -218,11 +223,12 @@ ChunkHit[] → aggregateDocumentHits() → DocumentHit[]
 
 ### HNSW Vector Index
 
-Approximate nearest neighbor search via `hnswlib-node` (native, required dependency) with automatic brute-force fallback:
+Approximate nearest neighbor search via `hnswlib-node` (native, required dependency):
 - `createHNSWIndex(dimension, metric)` returns the best available implementation
 - `NativeHNSWWrapper` maintains label→hash mapping (persisted as `.labels.json` alongside `hnsw.bin`)
-- Fallback to `BruteForceHNSW` logs a warning via the logger
-- `loadOrBuildHNSW(indexDir, dimension, model)` rebuilds from `embeddings.jsonl` on manifest mismatch
+- `BruteForceHNSW` is available as a test/debug fallback
+- `loadOrBuildHNSW(indexDir, dimension, model)` loads an existing index or rebuilds from `embeddings.jsonl` on manifest mismatch
+- `DefaultRetrievalService` loads the HNSW index at startup and uses it for semantic/hybrid search
 - Manifest tracks `dimension`, `metric`, `model`, `count`, `version`
 
 ### Parquet Embedding Store
@@ -256,14 +262,17 @@ data/
 │       └── cdef.../
 │           ├── content.md          # L0 normalized text
 │           ├── content.meta.json   # L0 metadata blocks
+│           ├── node.json           # BuildManifest + sourceRef/parentId/semanticLinks (no sourcePath)
 │           ├── L1.md               # L1 structured markdown
 │           ├── L1.index.json       # L1 heading index
 │           └── L2.json             # L2 semantic artifact
 ├── index/
-│   ├── embeddings.jsonl            # MVP: one JSON line per vector (Phase 4: parquet)
+│   ├── embeddings.jsonl            # One JSON line per vector
 │   ├── bm25.json                   # Okapi BM25 inverted index + doc lengths
-│   └── hnsw.manifest.json          # Index metadata (Phase 4: hnsw.bin)
-└── retineo.sqlite                     # Registry: sources, segments, jobs, orphans
+│   ├── hnsw.bin                    # HNSW approximate nearest neighbor index
+│   ├── hnsw.manifest.json          # Index metadata
+│   └── hnsw.labels.json            # label → hash mapping
+└── retineo.sqlite                  # Registry: sources, segments, jobs, orphans
 ```
 
 ## Module Map
@@ -271,8 +280,9 @@ data/
 | Module | Responsibility |
 |--------|---------------|
 | `domain/` | Types, Zod schemas, shared language |
-| `adapters/` | JSON-RPC protocol, transport, runner, manager, ingestion service |
-| `storage/` | CAS (filesystem), Registry (SQLite), NodeBuilder, Config, SecretsManager, ContextNodeRepository |
+| `adapters/` | JSON-RPC protocol, transport, runner, manager, `SourceAdapter` interface, `FileSystemSourceAdapter` |
+| `services/` | `IngestionService` — source-agnostic ingestion orchestrator |
+| `storage/` | CAS (filesystem), Registry (SQLite), AuditLog, NodeBuilder, Config, SecretsManager, ContextNodeRepository |
 | `embeddings/` | HNSW index, Parquet/JSONL embedding store, vector I/O |
 | `search/` | Query analysis, Okapi BM25, semantic/keyword/hybrid retrieval, L2 rerank, L1/L0 cascade, DocumentHit aggregation, context assembly |
 | `llm/` | Provider abstraction, rate limiting, circuit breaker, factory (Ollama, OpenAI-compatible, Mock) |
@@ -313,16 +323,17 @@ IngestionService / RetrievalService / CompilationPipeline
 ### CLI Commands (Phase 7)
 
 ```
-retineo ingest <file>          # Ingest a file
+retineo ingest <file>          # Ingest a file via FileSystemSourceAdapter
 retineo search <query>         # Search with --language, --mode, --top-k, --json
 retineo status                 # Engine status
 retineo compile [file]         # Compile pending jobs or specific file
+retineo rebuild [--force]      # Full rebuild: delete index + reset L1/L2 + re-sync adapters; --force wipes data dir
 retineo config [key] [value]   # Read/write config
 retineo jobs                   # List recent jobs
-retineo recover <hash>         # Recover orphaned node
-retineo ghost list             # List orphaned objects
-retineo ghost recover <hash>   # Recover orphan from CAS
-retineo ghost purge <days>     # Remove old orphans
+retineo recover <hash>         # Recover ghost node
+retineo ghost list             # List ghost objects
+retineo ghost recover <hash>   # Recover ghost from CAS
+retineo ghost purge <days>     # Remove old ghosts
 retineo key set <p> <key>      # Store encrypted API key
 retineo key get <p>            # Show masked key
 retineo key delete <p>         # Remove key

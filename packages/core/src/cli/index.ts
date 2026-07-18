@@ -4,7 +4,7 @@
  * Phase 8: Worker/bridge/daemon lifecycle, --watch flag, interactive init wizard.
  */
 
-import { Command } from 'commander';
+import { Command, Option } from 'commander';
 import { CLICommands } from './commands.js';
 import type { CLICommandsDeps } from './commands.js';
 
@@ -42,9 +42,20 @@ export function createCLI(deps: CLICommandsDeps): Command {
     .option('-l, --language <code>', 'Override language detection')
     .option('-m, --mode <mode>', 'Search mode: semantic, keyword, hybrid')
     .option('-k, --top-k <n>', 'Number of results', parseInt)
+    .addOption(new Option('-i, --intent <intent>', 'Override query intent: vague, section, precision').choices(['vague', 'section', 'precision']))
     .option('--json', 'Output raw JSON')
-    .action(async (query: string, options: { language?: string; mode?: 'semantic' | 'keyword' | 'hybrid'; topK?: number; json?: boolean }) => {
+    .action(async (query: string, options: { language?: string; mode?: 'semantic' | 'keyword' | 'hybrid'; topK?: number; intent?: 'vague' | 'section' | 'precision'; json?: boolean }) => {
       await commands.search(query, options);
+    });
+
+  program
+    .command('similar <hash>')
+    .description('Find documents semantically similar to a given document')
+    .option('-k, --top-k <n>', 'Number of results', parseInt)
+    .option('--threshold <n>', 'Minimum similarity threshold', parseFloat)
+    .option('--json', 'Output raw JSON')
+    .action(async (hash: string, options: { topK?: number; threshold?: number; json?: boolean }) => {
+      await commands.similar(hash, options);
     });
 
   program
@@ -55,14 +66,34 @@ export function createCLI(deps: CLICommandsDeps): Command {
     });
 
   program
+    .command('health <path>')
+    .description('Analyze memory health of an ingested directory')
+    .action(async (filePath: string) => {
+      await commands.health(filePath);
+    });
+
+  program
     .command('compile [filePath]')
     .description('Compile pending jobs or a specific file')
     .option('--layer <layer>', 'Compile only specific layer')
     .option('--provider <id>', 'Override LLM provider for this compilation')
+    .option('--rebuild-l1', 'Delete existing L1 artifacts and re-generate L1/L2/L3 for all sources')
+    .option('--rebuild-l2', 'Delete existing L2 artifacts and re-generate L2/L3 for all sources')
+    .option('--rebuild-l3', 'Delete the global L3 index and re-generate L3 for all sources with L2')
     .option('-w, --watch', 'Block until all queued jobs are COMPLETED')
     .option('-t, --timeout <seconds>', 'Watch timeout in seconds (default 1800)', parseInt)
-    .action(async (filePath?: string, options?: { layer?: string; provider?: string; watch?: boolean; timeout?: number }) => {
-      await commands.compile(filePath, { layer: options?.layer, provider: options?.provider, watch: options?.watch, timeout: options?.timeout });
+    .action(async (filePath?: string, options?: { layer?: string; provider?: string; rebuildL1?: boolean; rebuildL2?: boolean; rebuildL3?: boolean; watch?: boolean; timeout?: number }) => {
+      await commands.compile(filePath, { layer: options?.layer, provider: options?.provider, rebuildL1: options?.rebuildL1, rebuildL2: options?.rebuildL2, rebuildL3: options?.rebuildL3, watch: options?.watch, timeout: options?.timeout });
+    });
+
+  program
+    .command('rebuild')
+    .description('Delete the search index and re-compile L1/L2/L3 for all known sources')
+    .option('-f, --force', 'Wipe all data and rebuild from registered sources')
+    .option('-w, --watch', 'Block until all queued jobs are COMPLETED')
+    .option('-t, --timeout <seconds>', 'Watch timeout in seconds (default 1800)', parseInt)
+    .action(async (options: { force?: boolean; watch?: boolean; timeout?: number }) => {
+      await commands.rebuild({ force: options.force, watch: options.watch, timeout: options.timeout });
     });
 
   const configCmd = program.command('config').description('Read or write configuration values');

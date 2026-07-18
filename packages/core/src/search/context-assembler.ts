@@ -11,18 +11,28 @@ import type { CandidateNode } from './retrieval-service.js';
 export interface ContextSegment {
   level: 'L2' | 'L1' | 'L0';
   nodeId: Hash;
+  contentHash?: Hash;
+  chunkHash?: Hash;
   content: string;
+  score?: number;
   span?: { start: number; end: number };
   sourceRef?: SourceRef;
+  sourcePath?: string;
+  isGhost?: boolean;
   children?: ContextSegment[];
 }
 
 export interface AssembledCitation {
   nodeId: Hash;
+  contentHash?: Hash;
+  chunkHash?: Hash;
   level: 'L2' | 'L1' | 'L0';
   content: string;
+  score?: number;
   span?: { start: number; end: number };
   sourceRef?: SourceRef;
+  sourcePath?: string;
+  isGhost?: boolean;
 }
 
 export interface AssembledContext {
@@ -120,7 +130,7 @@ export class DefaultContextAssembler implements ContextAssembler {
       cascade: { budgets: { vague: 500, section: 800, precision: 1500 } },
       citations: { format: 'markdown', includeLineNumbers: true, includeTimestamps: true },
       prompts: {},
-      crossLingual: { enabled: true },
+      crossLingual: { enabled: true, translateQuery: 'llm', targetLanguages: ['en'] },
     };
   }
 
@@ -171,8 +181,13 @@ export class DefaultContextAssembler implements ContextAssembler {
       const seg: ContextSegment = {
         level: 'L2',
         nodeId: c.nodeId,
+        contentHash: c.contentHash,
+        chunkHash: c.chunkHash,
         content,
+        score: c.score,
         sourceRef: c.sourceRef,
+        sourcePath: c.sourcePath,
+        isGhost: c.isGhost,
       };
       if (options.includeChildren && (intent === 'section' || intent === 'precision')) {
         seg.children = []; // populated later if L1 available
@@ -182,9 +197,14 @@ export class DefaultContextAssembler implements ContextAssembler {
 
       citations.push({
         nodeId: c.nodeId,
+        contentHash: c.contentHash,
+        chunkHash: c.chunkHash,
         level: 'L2',
         content,
+        score: c.score,
         sourceRef: c.sourceRef,
+        sourcePath: c.sourcePath,
+        isGhost: c.isGhost,
       });
     }
     traceSteps.push(`L2: ${segments.length} segments, ${l2Spent} tokens`);
@@ -201,8 +221,13 @@ export class DefaultContextAssembler implements ContextAssembler {
         const seg: ContextSegment = {
           level: 'L1',
           nodeId: c.nodeId,
+          contentHash: c.contentHash,
+          chunkHash: c.chunkHash,
           content,
+          score: c.score,
           sourceRef: c.sourceRef,
+          sourcePath: c.sourcePath,
+          isGhost: c.isGhost,
         };
         if (options.includeChildren && intent === 'precision') {
           seg.children = [];
@@ -212,9 +237,14 @@ export class DefaultContextAssembler implements ContextAssembler {
 
         citations.push({
           nodeId: c.nodeId,
+          contentHash: c.contentHash,
+          chunkHash: c.chunkHash,
           level: 'L1',
           content,
+          score: c.score,
           sourceRef: c.sourceRef,
+          sourcePath: c.sourcePath,
+          isGhost: c.isGhost,
         });
 
         // Link as child of matching L2 segment
@@ -242,19 +272,29 @@ export class DefaultContextAssembler implements ContextAssembler {
         const seg: ContextSegment = {
           level: 'L0',
           nodeId: c.nodeId,
+          contentHash: c.contentHash,
+          chunkHash: c.chunkHash,
           content,
+          score: c.score,
           span: c.lineRange,
           sourceRef: c.sourceRef,
+          sourcePath: c.sourcePath,
+          isGhost: c.isGhost,
         };
         l0Segments.push(seg);
         l0Spent += estimateTokens(content);
 
         citations.push({
           nodeId: c.nodeId,
+          contentHash: c.contentHash,
+          chunkHash: c.chunkHash,
           level: 'L0',
           content,
+          score: c.score,
           span: c.lineRange,
           sourceRef: c.sourceRef,
+          sourcePath: c.sourcePath,
+          isGhost: c.isGhost,
         });
 
         // Link as child of matching L1 segment

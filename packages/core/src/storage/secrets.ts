@@ -8,6 +8,7 @@ import { existsSync } from 'fs';
 import path from 'path';
 import os from 'os';
 import crypto from 'crypto';
+import { ConfigSecretNotFound } from '../utils/errors.js';
 
 export interface SecretsManager {
   set(key: string, value: string): Promise<void>;
@@ -163,7 +164,10 @@ export async function resolveConfigValue(
   let resolved = value;
   for (const name of results) {
     const secretValue = await resolveSecret(name, secrets);
-    resolved = resolved.replaceAll('${' + name + '}', secretValue ?? '');
+    if (secretValue === undefined) {
+      throw ConfigSecretNotFound(name);
+    }
+    resolved = resolved.replaceAll('${' + name + '}', secretValue);
   }
   return resolved;
 }

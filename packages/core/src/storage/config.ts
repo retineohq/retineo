@@ -51,6 +51,8 @@ export interface SearchConfig {
   };
   crossLingual: {
     enabled: boolean;
+    translateQuery: 'none' | 'dictionary' | 'llm';
+    targetLanguages: string[];
   };
 }
 
@@ -158,6 +160,8 @@ const DEFAULT_SEARCH_CONFIG: SearchConfig = {
   prompts: {},
   crossLingual: {
     enabled: true,
+    translateQuery: 'llm',
+    targetLanguages: ['en'],
   },
 };
 
@@ -262,6 +266,8 @@ function mergeSearchConfig(raw: unknown): SearchConfig {
     },
     crossLingual: {
       enabled: (s.crossLingual as Record<string, unknown>)?.enabled as boolean ?? DEFAULT_SEARCH_CONFIG.crossLingual.enabled,
+      translateQuery: ((s.crossLingual as Record<string, unknown>)?.translateQuery as 'none' | 'dictionary' | 'llm') ?? DEFAULT_SEARCH_CONFIG.crossLingual.translateQuery,
+      targetLanguages: ((s.crossLingual as Record<string, unknown>)?.targetLanguages as string[]) ?? DEFAULT_SEARCH_CONFIG.crossLingual.targetLanguages,
     },
   };
 }
@@ -342,13 +348,14 @@ export class FileConfigManager implements ConfigManager {
 
   async load(): Promise<RetineoConfig> {
     if (!existsSync(this.configPath)) {
-      await this.save(DEFAULT_CONFIG);
-      return structuredClone(DEFAULT_CONFIG);
+      const defaultConfig = { ...DEFAULT_CONFIG, dataDir: this.dataDir };
+      await this.save(defaultConfig);
+      return structuredClone(defaultConfig);
     }
     const raw = await readFile(this.configPath, 'utf-8');
     const parsed = yaml.load(raw) as Partial<RetineoConfig> & Record<string, unknown>;
     return {
-      dataDir: parsed.dataDir ?? DEFAULT_CONFIG.dataDir,
+      dataDir: parsed.dataDir ?? this.dataDir,
       defaultAdapter: parsed.defaultAdapter ?? DEFAULT_CONFIG.defaultAdapter,
       llmProvider: parsed.llmProvider ?? DEFAULT_CONFIG.llmProvider,
       embeddingModel: parsed.embeddingModel ?? DEFAULT_CONFIG.embeddingModel,

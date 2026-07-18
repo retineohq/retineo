@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 2,
+  "indexVersion": 4,
+  "embeddingModel": "test",
+  "embeddingProvider": "mock",
+  "dimension": 384,
+  "metric": "cosine",
+  "vectorCount": 4,
+  "createdAt": "2026-07-07T20:20:27.807Z"
+}

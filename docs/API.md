@@ -34,6 +34,36 @@ Search the knowledge base.
 }
 ```
 
+### `POST /v1/similar`
+
+Find documents semantically similar to a given document by `contentHash`.
+
+**Request body:**
+```json
+{
+  "hash": "sha256 contentHash, required",
+  "topK": 5,
+  "threshold": 0.75,
+  "includeGhosts": false
+}
+```
+
+**Response:**
+```json
+{
+  "results": [
+    {
+      "contentHash": "sha256",
+      "sourcePath": "/path/to/doc.md",
+      "similarity": 0.9123,
+      "matchedChunks": 2
+    }
+  ]
+}
+```
+
+Returns `400` when `hash` is missing.
+
 ### `POST /v1/search/stream`
 
 Stream search assembly events via SSE.
@@ -75,7 +105,7 @@ Engine status.
 **Response:**
 ```json
 {
-  "version": "0.1.0",
+  "version": "0.5.5",
   "nodeCount": 1234,
   "sourceCount": 567,
   "jobCount": { "pending": 12, "running": 0, "completed": 0, "failed": 0 },
@@ -113,6 +143,71 @@ Readiness probe. Returns 200 only when the engine is ready to serve requests.
   "queueHealthy": true
 }
 ```
+
+### `POST /v1/health`
+
+Start an asynchronous memory-health analysis job for a source.
+
+**Request body:**
+```json
+{
+  "sourceId": "filesystem:/path/to/vault"
+}
+```
+
+For filesystem paths you may pass `path` instead:
+```json
+{
+  "path": "/path/to/vault"
+}
+```
+
+**Response:**
+```json
+{
+  "jobId": "uuid"
+}
+```
+
+The job runs `syncSource` + `HealthAnalyzer.analyze(sourceId)` in the background.
+
+### `GET /v1/health/:jobId`
+
+Poll health job status.
+
+**Response:**
+```json
+{
+  "jobId": "uuid",
+  "status": "pending" | "running" | "completed" | "failed"
+}
+```
+
+### `GET /v1/report/:jobId`
+
+Fetch the completed `HealthReport` for a job.
+
+**Response:**
+```json
+{
+  "score": 76,
+  "strong": ["good connectivity", "few duplicates"],
+  "attention": [
+    {
+      "type": "duplicate",
+      "severity": "warning",
+      "documents": ["hashA", "hashB"],
+      "reason": "..."
+    }
+  ],
+  "recommendations": ["Merge these documents"],
+  "advancedMetrics": [
+    { "metric": "fragmentation", "availableIn": "pro" }
+  ]
+}
+```
+
+Returns `404` if the job does not exist or is not yet completed.
 
 ### `GET /v1/metrics`
 

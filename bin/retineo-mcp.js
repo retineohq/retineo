@@ -16,6 +16,7 @@ import { DefaultIngestionService } from '../dist/adapters/ingestion.js';
 import { DefaultQueryAnalyzer } from '../dist/search/query-analyzer.js';
 import { DefaultRetrievalService } from '../dist/search/retrieval-service.js';
 import { DefaultContextAssembler } from '../dist/search/context-assembler.js';
+import { createSimilarityService } from '../dist/search/similarity-service.js';
 import { MockLLMProvider } from '../dist/llm/providers/mock.js';
 import { createLogger } from '../dist/utils/logger.js';
 import path from 'path';
@@ -59,22 +60,37 @@ async function main() {
 
   const ingestionService = new DefaultIngestionService(cas, registry, nodeBuilder, adapterManager, computeHash, logger);
 
-  const queryAnalyzer = new DefaultQueryAnalyzer({ searchConfig: config.search });
-
-  // Load real embedding provider from config (same as retineo.js)
-  const { DefaultEmbeddingProviderFactory } = await import('../dist/llm/factory.js');
+  // Load LLM provider from config so the analyzer can extract entities and
+  // translate non-English queries for cross-lingual keyword search.
+  const { DefaultLLMProviderFactory, DefaultEmbeddingProviderFactory } = await import('../dist/llm/factory.js');
+  const llmFactory = new DefaultLLMProviderFactory();
   const embedFactory = new DefaultEmbeddingProviderFactory();
+  try {
+    await llmFactory.loadFromConfig(config, secretsManager);
+  } catch {
+    // search will fall back to rule-based analysis
+  }
   try {
     await embedFactory.loadFromConfig(config, secretsManager);
   } catch {
     // fallback to mock
   }
+  const llmProvider = llmFactory.list().length > 0 ? llmFactory.getDefault() : undefined;
   const embedder = embedFactory.list().length > 0 ? embedFactory.getDefault() : new MockLLMProvider({ id: 'mock-embedder', type: 'mock', dimension: 384 });
+
+  const queryAnalyzer = new DefaultQueryAnalyzer({ searchConfig: config.search, llmProvider });
   const retrievalService = new DefaultRetrievalService({
     embeddingProvider: embedder,
     casStorage: cas,
+    registry,
     indexDir: path.join(dataDir, 'index'),
     config: config.search,
+    logger,
+  });
+  const similarityService = createSimilarityService({
+    retrievalService,
+    registry,
+    indexDir: path.join(dataDir, 'index'),
     logger,
   });
 
@@ -88,6 +104,7 @@ async function main() {
       ingestionService,
       registry,
       cas,
+      similarityService,
       version: VERSION,
     },
     logger,

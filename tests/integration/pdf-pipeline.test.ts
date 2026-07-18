@@ -12,7 +12,7 @@ import { SQLiteRegistry } from '../../packages/core/src/storage/registry.js';
 import { DefaultNodeBuilder } from '../../packages/core/src/storage/node-builder.js';
 import { DefaultAdapterManager } from '../../packages/core/src/adapters/manager.js';
 import { DefaultAdapterProcessRunner } from '../../packages/core/src/adapters/runner.js';
-import { DefaultIngestionService } from '../../packages/core/src/adapters/ingestion.js';
+import { DefaultIngestionService } from '../../packages/core/src/services/ingestion-service.js';
 import { DefaultCompilationPipeline } from '../../packages/core/src/layers/pipeline.js';
 import { DefaultContextNodeRepository } from '../../packages/core/src/storage/context-node-repository.js';
 import { DefaultL1Generator } from '../../packages/core/src/layers/l1-generator.js';
@@ -52,7 +52,6 @@ beforeEach(async () => {
 
   const runner = new DefaultAdapterProcessRunner(tmpDir);
   const manager = new DefaultAdapterManager(adaptersDir, runner);
-  service = new DefaultIngestionService(cas, registry, builder, manager, computeHash);
   await manager.loadBuiltIn();
 
   const llm = new MockLLMProvider({ id: 'mock', model: 'mock', apiKey: '' });
@@ -69,6 +68,7 @@ beforeEach(async () => {
     embeddingProvider: embedder,
     dataDir,
   });
+  service = new DefaultIngestionService(cas, registry, builder, manager, pipeline, computeHash);
 });
 
 afterEach(() => {
@@ -122,15 +122,14 @@ describe('PDF Pipeline', () => {
     const filePath = makePDFWithText('RETINEO PDF Pipeline Test');
 
     const result = await service.ingestFile(filePath);
-    const node = result.node;
-    expect(node.id).toMatch(/^[a-f0-9]{64}$/);
-    expect(node.depth).toBe(0);
+    const contentHash = result.contentHash;
+    expect(contentHash).toMatch(/^[a-f0-9]{64}$/);
 
-    const obj = await cas.readObject(node.id);
+    const obj = await cas.readObject(contentHash);
     expect(obj.artifacts.content).toContain('RETINEO PDF Pipeline Test');
 
     const jobs = registry.getPendingJobs(10);
-    const job = jobs.find((j) => j.payload.includes(node.id));
+    const job = jobs.find((j) => j.payload.includes(contentHash));
     expect(job).toBeDefined();
     expect(job!.type).toBe('GENERATE_L1');
   });
@@ -139,17 +138,17 @@ describe('PDF Pipeline', () => {
     const filePath = makePDFWithText('Machine learning is a subset of artificial intelligence.');
 
     const result = await service.ingestFile(filePath);
-    const node = result.node;
+    const contentHash = result.contentHash;
 
     // Process L1
     const l1Job = registry.acquireLease('worker-1', 60000)!;
-    expect(l1Job.payload).toContain(node.id);
+    expect(l1Job.payload).toContain(contentHash);
     await pipeline.processJob(l1Job);
     registry.completeJob(l1Job.id);
 
     // L2 should be queued
     const l2Jobs = registry.getPendingJobs(10);
-    const l2Job = l2Jobs.find((j) => j.type === 'GENERATE_L2' && j.payload.includes(node.id));
+    const l2Job = l2Jobs.find((j) => j.type === 'GENERATE_L2' && j.payload.includes(contentHash));
     expect(l2Job).toBeDefined();
 
     // Process L2
@@ -159,7 +158,7 @@ describe('PDF Pipeline', () => {
 
     // L3 should be queued
     const l3Jobs = registry.getPendingJobs(10);
-    const l3Job = l3Jobs.find((j) => j.type === 'GENERATE_L3' && j.payload.includes(node.id));
+    const l3Job = l3Jobs.find((j) => j.type === 'GENERATE_L3' && j.payload.includes(contentHash));
     expect(l3Job).toBeDefined();
 
     // Process L3
@@ -168,7 +167,7 @@ describe('PDF Pipeline', () => {
     registry.completeJob(l3Lease.id);
 
     // Verify artifacts exist
-    const objPath = cas.getObjectPath(node.id);
+    const objPath = cas.getObjectPath(contentHash);
     const { existsSync } = require('fs');
     expect(existsSync(path.join(objPath, 'L1.md'))).toBe(true);
     expect(existsSync(path.join(objPath, 'L2.json'))).toBe(true);

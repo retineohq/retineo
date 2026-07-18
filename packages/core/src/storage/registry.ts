@@ -1,43 +1,38 @@
 /**
  * RETINEO Core — Registry
- * Phase 1: SQLite-backed registry with job lease model
+ * Phase 8: SQLite-backed RegistryStore. Source metadata only; CAS knows only contentHash.
  */
 
 import Database from 'better-sqlite3';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import path from 'path';
-import type {
-  Hash,
-  SourceRecord,
-  SegmentRecord,
-  JobRecord,
-  JobStatus,
-} from '../domain/types.js';
+import type { Hash, SegmentRecord, JobRecord, JobStatus } from '../domain/types.js';
+import type { RegistryEntry, RegistryStore, SourceStatus } from './types.js';
+import type { AuditService, AuditLog } from './audit.js';
 
 export interface OrphanRecord {
   hash: Hash;
-  originalSourceId: string;
-  l2Path: string | null;
+  sourceId: string;
+  externalId: string;
   orphanedAt: string;
   recoveredAt: string | null;
   scheduledPurgeAt: string | null;
 }
 
-export interface Registry {
-  insertSource(source: SourceRecord): void;
-  getSource(id: string): SourceRecord | null;
-  getSourceByRawHash(rawHash: Hash): SourceRecord | null;
-  getSourceByRootHash(rootHash: Hash): SourceRecord | null;
-  getSourcesByRootHash(rootHash: Hash): SourceRecord[];
-  updateSource(id: string, updates: Partial<SourceRecord>): void;
-  updateSourcePath(id: string, uri: string): void;
-  deleteSource(id: string): void;
-  listSources(): SourceRecord[];
+export interface Registry extends RegistryStore {
+  insertSource(entry: RegistryEntry): void;
+  updateSource(
+    sourceId: string,
+    externalId: string,
+    updates: Partial<Omit<RegistryEntry, 'sourceId' | 'externalId'>>
+  ): void;
+  deleteSource(sourceId: string, externalId: string): void;
+  listSources(): RegistryEntry[];
 
   insertSegment(segment: SegmentRecord): void;
   getSegment(hash: Hash): SegmentRecord | null;
-  getSegmentsBySource(sourceId: string): SegmentRecord[];
+  getSegmentsBySource(sourceId: string, externalId: string): SegmentRecord[];
   getChildSegments(parentHash: Hash): SegmentRecord[];
   deleteSegment(hash: Hash): void;
 
@@ -51,30 +46,46 @@ export interface Registry {
   getRunningJobs(workerId: string): JobRecord[];
   getPendingJobs(limit: number): JobRecord[];
   getDeadJobs(limit: number): JobRecord[];
-  getJobsBySource(nodeId: string): JobRecord[];
+  getJobsBySource(contentHash: string): JobRecord[];
   getJob(jobId: string): JobRecord | null;
   getJobCounts(): { pending: number; running: number; completed: number; failed: number; dead: number };
   getLastHeartbeat(workerId: string): string | null;
   getRunningWorkerIds(): string[];
-  jobsByNodeHash(nodeHash: string): JobRecord[];
 
-  insertOrphan(hash: Hash, sourceId: string, l2Path: string): void;
+  insertOrphan(hash: Hash, sourceId: string, externalId: string): void;
   getOrphan(hash: Hash): OrphanRecord | null;
   recoverOrphan(hash: Hash): void;
   listOrphans(): OrphanRecord[];
   purgeOrphansOlderThan(days: number): number;
+  isOrphan(hash: Hash): boolean;
+
+  clearSources(): void;
+  clearJobs(): void;
+  clearOrphans(): void;
 }
 
-function rowToSource(row: Record<string, unknown>): SourceRecord {
+function parseTimestamp(value: unknown): number {
+  if (typeof value === 'number') return value;
+  if (typeof value === 'string') {
+    const parsed = Date.parse(value);
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }
+  return 0;
+}
+
+function rowToEntry(row: Record<string, unknown>): RegistryEntry {
   return {
-    id: row.id as string,
-    protocol: row.protocol as string,
-    uri: row.uri as string,
-    mimeType: row.mime_type as string,
-    adapterId: row.adapter_id as string,
-    rawHash: row.raw_hash as Hash,
-    rootHash: (row.root_hash as Hash | null) ?? '',
-    lastSeenAt: row.last_seen_at as string,
+    sourceId: row.source_id as string,
+    externalId: row.external_id as string,
+    contentHash: row.content_hash as Hash,
+    etag: row.etag as string,
+    status: row.status as SourceStatus,
+    deletedAt: row.deleted_at as number | null,
+    lastSeenAt: row.last_seen_at as number,
+    createdAt: parseTimestamp(row.created_at),
+    retentionPolicy: (row.retention_policy as string) ?? 'standard',
+    sensitivityLevel: (row.sensitivity_level as string) ?? 'none',
+    encryptionKeyId: (row.encryption_key_id as string | null) ?? null,
   };
 }
 
@@ -82,6 +93,7 @@ function rowToSegment(row: Record<string, unknown>): SegmentRecord {
   return {
     hash: row.hash as Hash,
     sourceId: row.source_id as string,
+    externalId: row.external_id as string,
     spanStart: row.span_start as number,
     spanEnd: row.span_end as number,
     adapterId: row.adapter_id as string,
@@ -110,15 +122,15 @@ function rowToJob(row: Record<string, unknown>): JobRecord {
 function rowToOrphan(row: Record<string, unknown>): OrphanRecord {
   return {
     hash: row.hash as Hash,
-    originalSourceId: row.original_source_id as string,
-    l2Path: (row.l2_path as string | null) ?? null,
+    sourceId: row.source_id as string,
+    externalId: row.external_id as string,
     orphanedAt: row.orphaned_at as string,
     recoveredAt: (row.recovered_at as string | null) ?? null,
     scheduledPurgeAt: (row.scheduled_purge_at as string | null) ?? null,
   };
 }
 
-export class SQLiteRegistry implements Registry {
+export class SQLiteRegistry implements Registry, AuditService {
   private db: Database.Database;
 
   constructor(dbPath: string) {
@@ -128,105 +140,211 @@ export class SQLiteRegistry implements Registry {
   }
 
   private initSchema(): void {
+    const tableInfo = this.db.prepare("PRAGMA table_info(sources)").all() as Array<{ name: string }>;
+    const hasContentHash = tableInfo.some((col) => col.name === 'content_hash');
+    if (tableInfo.length > 0 && !hasContentHash) {
+      throw new Error('Data format v1 is incompatible. Run: retineo rebuild');
+    }
+
     const __dirname = path.dirname(fileURLToPath(import.meta.url));
     const schemaPath = path.join(__dirname, 'schema.sql');
     const sql = readFileSync(schemaPath, 'utf-8');
-    // Split on CREATE TABLE/INDEX and add IF NOT EXISTS to avoid
-    // "table already exists" errors when init command already ran.
     const patched = sql
       .replace(/CREATE TABLE (\w+)/g, 'CREATE TABLE IF NOT EXISTS $1')
       .replace(/CREATE INDEX (\w+)/g, 'CREATE INDEX IF NOT EXISTS $1');
     this.db.exec(patched);
+    this.migrateRegistrySchema();
+    this.db.pragma('user_version = 2');
+  }
+
+  private migrateRegistrySchema(): void {
+    const tableInfo = this.db.prepare("PRAGMA table_info(sources)").all() as Array<{ name: string }>;
+    const columns = new Set(tableInfo.map((c) => c.name));
+    const addColumn = (name: string, ddl: string) => {
+      if (!columns.has(name)) {
+        this.db.exec(`ALTER TABLE sources ADD COLUMN ${ddl}`);
+      }
+    };
+    addColumn('created_at', "INTEGER NOT NULL DEFAULT 0");
+    addColumn('retention_policy', "TEXT NOT NULL DEFAULT 'standard'");
+    addColumn('sensitivity_level', "TEXT NOT NULL DEFAULT 'none'");
+    addColumn('encryption_key_id', "TEXT DEFAULT NULL");
+
+    this.db.exec(`CREATE TABLE IF NOT EXISTS audit_log (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      timestamp   INTEGER NOT NULL,
+      actor       TEXT NOT NULL DEFAULT 'system',
+      action      TEXT NOT NULL,
+      resource_hash TEXT,
+      level       TEXT,
+      metadata    TEXT
+    )`);
+    this.db.exec(`CREATE INDEX IF NOT EXISTS idx_audit_log_timestamp ON audit_log(timestamp)`);
+    this.db.exec(`CREATE INDEX IF NOT EXISTS idx_audit_log_action ON audit_log(action, timestamp)`);
+    this.db.exec(`CREATE INDEX IF NOT EXISTS idx_audit_log_resource ON audit_log(resource_hash, timestamp)`);
   }
 
   close(): void {
     this.db.close();
   }
 
-  // --- Sources ---
+  // --- AuditService ---
 
-  insertSource(source: SourceRecord): void {
+  async log(
+    action: string,
+    resourceHash?: string,
+    level?: string,
+    metadata?: Record<string, unknown>
+  ): Promise<void> {
     const stmt = this.db.prepare(
-      `INSERT INTO sources (id, protocol, uri, mime_type, adapter_id, raw_hash, root_hash, last_seen_at, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`
+      `INSERT INTO audit_log (timestamp, actor, action, resource_hash, level, metadata)
+       VALUES (?, ?, ?, ?, ?, ?)`
     );
     stmt.run(
-      source.id,
-      source.protocol,
-      source.uri,
-      source.mimeType,
-      source.adapterId,
-      source.rawHash,
-      source.rootHash || null,
-      source.lastSeenAt
+      Date.now(),
+      'system',
+      action,
+      resourceHash ?? null,
+      level ?? null,
+      metadata ? JSON.stringify(metadata) : null
     );
   }
 
-  getSource(id: string): SourceRecord | null {
-    const row = this.db.prepare('SELECT * FROM sources WHERE id = ?').get(id) as
-      | Record<string, unknown>
-      | undefined;
-    return row ? rowToSource(row) : null;
+  readAuditLogs(limit = 1000): AuditLog[] {
+    const rows = this.db
+      .prepare('SELECT * FROM audit_log ORDER BY timestamp DESC LIMIT ?')
+      .all(limit) as Record<string, unknown>[];
+    return rows.map((row) => ({
+      id: row.id as number,
+      timestamp: row.timestamp as number,
+      actor: row.actor as string,
+      action: row.action as string,
+      resourceHash: (row.resource_hash as string | null) ?? undefined,
+      level: (row.level as string | null) ?? undefined,
+      metadata: row.metadata ? JSON.parse(row.metadata as string) : undefined,
+    }));
   }
 
-  getSourceByRawHash(rawHash: Hash): SourceRecord | null {
-    const row = this.db.prepare('SELECT * FROM sources WHERE raw_hash = ?').get(rawHash) as
-      | Record<string, unknown>
-      | undefined;
-    return row ? rowToSource(row) : null;
+  // --- RegistryStore ---
+
+  get(sourceId: string, externalId: string): RegistryEntry | null {
+    const row = this.db
+      .prepare('SELECT * FROM sources WHERE source_id = ? AND external_id = ?')
+      .get(sourceId, externalId) as Record<string, unknown> | undefined;
+    return row ? rowToEntry(row) : null;
   }
 
-  getSourceByRootHash(rootHash: Hash): SourceRecord | null {
-    const row = this.db.prepare('SELECT * FROM sources WHERE root_hash = ?').get(rootHash) as
-      | Record<string, unknown>
-      | undefined;
-    return row ? rowToSource(row) : null;
+  set(entry: RegistryEntry): void {
+    const createdAt = entry.createdAt ?? Date.now();
+    const retentionPolicy = entry.retentionPolicy ?? 'standard';
+    const sensitivityLevel = entry.sensitivityLevel ?? 'none';
+    const encryptionKeyId = entry.encryptionKeyId ?? null;
+    const stmt = this.db.prepare(
+      `INSERT INTO sources (source_id, external_id, content_hash, etag, status, deleted_at, last_seen_at, created_at, updated_at, retention_policy, sensitivity_level, encryption_key_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, ?)
+       ON CONFLICT(source_id, external_id) DO UPDATE SET
+         content_hash = excluded.content_hash,
+         etag = excluded.etag,
+         status = excluded.status,
+         deleted_at = excluded.deleted_at,
+         last_seen_at = excluded.last_seen_at,
+         created_at = excluded.created_at,
+         retention_policy = excluded.retention_policy,
+         sensitivity_level = excluded.sensitivity_level,
+         encryption_key_id = excluded.encryption_key_id,
+         updated_at = datetime('now')`
+    );
+    stmt.run(
+      entry.sourceId,
+      entry.externalId,
+      entry.contentHash,
+      entry.etag,
+      entry.status,
+      entry.deletedAt,
+      entry.lastSeenAt,
+      createdAt,
+      retentionPolicy,
+      sensitivityLevel,
+      encryptionKeyId
+    );
   }
 
-  getSourcesByRootHash(rootHash: Hash): SourceRecord[] {
-    const rows = this.db.prepare('SELECT * FROM sources WHERE root_hash = ?').all(rootHash) as Record<string, unknown>[];
-    return rows.map(rowToSource);
+  listByContentHash(hash: Hash): RegistryEntry[] {
+    const rows = this.db
+      .prepare('SELECT * FROM sources WHERE content_hash = ?')
+      .all(hash) as Record<string, unknown>[];
+    return rows.map(rowToEntry);
   }
 
-  updateSource(id: string, updates: Partial<SourceRecord>): void {
+  listBySourceId(sourceId: string): RegistryEntry[] {
+    const rows = this.db.prepare('SELECT * FROM sources WHERE source_id = ?').all(sourceId) as Record<string, unknown>[];
+    return rows.map(rowToEntry);
+  }
+
+  // --- Sources (convenience aliases) ---
+
+  insertSource(entry: RegistryEntry): void {
+    this.set(entry);
+  }
+
+  updateSource(
+    sourceId: string,
+    externalId: string,
+    updates: Partial<Omit<RegistryEntry, 'sourceId' | 'externalId'>>
+  ): void {
     const sets: string[] = [];
     const values: unknown[] = [];
-    if (updates.protocol !== undefined) { sets.push('protocol = ?'); values.push(updates.protocol); }
-    if (updates.uri !== undefined) { sets.push('uri = ?'); values.push(updates.uri); }
-    if (updates.mimeType !== undefined) { sets.push('mime_type = ?'); values.push(updates.mimeType); }
-    if (updates.adapterId !== undefined) { sets.push('adapter_id = ?'); values.push(updates.adapterId); }
-    if (updates.rawHash !== undefined) { sets.push('raw_hash = ?'); values.push(updates.rawHash); }
-    if (updates.rootHash !== undefined) { sets.push('root_hash = ?'); values.push(updates.rootHash || null); }
+    if (updates.contentHash !== undefined) { sets.push('content_hash = ?'); values.push(updates.contentHash); }
+    if (updates.etag !== undefined) { sets.push('etag = ?'); values.push(updates.etag); }
+    if (updates.status !== undefined) { sets.push('status = ?'); values.push(updates.status); }
+    if (updates.deletedAt !== undefined) { sets.push('deleted_at = ?'); values.push(updates.deletedAt); }
     if (updates.lastSeenAt !== undefined) { sets.push('last_seen_at = ?'); values.push(updates.lastSeenAt); }
+    if (updates.createdAt !== undefined) { sets.push('created_at = ?'); values.push(updates.createdAt); }
+    if (updates.retentionPolicy !== undefined) { sets.push('retention_policy = ?'); values.push(updates.retentionPolicy); }
+    if (updates.sensitivityLevel !== undefined) { sets.push('sensitivity_level = ?'); values.push(updates.sensitivityLevel); }
+    if (updates.encryptionKeyId !== undefined) { sets.push('encryption_key_id = ?'); values.push(updates.encryptionKeyId); }
     sets.push('updated_at = datetime(\'now\')');
-    values.push(id);
-    const stmt = this.db.prepare(`UPDATE sources SET ${sets.join(', ')} WHERE id = ?`);
+    values.push(sourceId, externalId);
+    const stmt = this.db.prepare(`UPDATE sources SET ${sets.join(', ')} WHERE source_id = ? AND external_id = ?`);
     stmt.run(...values);
   }
 
-  updateSourcePath(id: string, uri: string): void {
-    this.db.prepare(
-      `UPDATE sources SET uri = ?, updated_at = datetime('now') WHERE id = ?`
-    ).run(uri, id);
+  deleteSource(sourceId: string, externalId: string): void {
+    this.db.prepare('DELETE FROM sources WHERE source_id = ? AND external_id = ?').run(sourceId, externalId);
   }
 
-  deleteSource(id: string): void {
-    this.db.prepare('DELETE FROM sources WHERE id = ?').run(id);
+  clearSources(): void {
+    this.db.prepare('DELETE FROM sources').run();
   }
 
-  listSources(): SourceRecord[] {
+  clearJobs(): void {
+    this.db.prepare('DELETE FROM jobs').run();
+  }
+
+  clearOrphans(): void {
+    this.db.prepare('DELETE FROM orphaned_objects').run();
+  }
+
+  listSources(): RegistryEntry[] {
     const rows = this.db.prepare('SELECT * FROM sources').all() as Record<string, unknown>[];
-    return rows.map(rowToSource);
+    return rows.map(rowToEntry);
   }
 
   // --- Segments ---
 
   insertSegment(segment: SegmentRecord): void {
     const stmt = this.db.prepare(
-      `INSERT INTO segments (hash, source_id, span_start, span_end, adapter_id, parent_hash)
-       VALUES (?, ?, ?, ?, ?, ?)`
+      `INSERT INTO segments (hash, source_id, external_id, span_start, span_end, adapter_id, parent_hash)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(hash) DO UPDATE SET
+         source_id = excluded.source_id,
+         external_id = excluded.external_id,
+         span_start = excluded.span_start,
+         span_end = excluded.span_end,
+         adapter_id = excluded.adapter_id,
+         parent_hash = excluded.parent_hash`
     );
-    stmt.run(segment.hash, segment.sourceId, segment.spanStart, segment.spanEnd, segment.adapterId, segment.parentHash);
+    stmt.run(segment.hash, segment.sourceId, segment.externalId, segment.spanStart, segment.spanEnd, segment.adapterId, segment.parentHash);
   }
 
   getSegment(hash: Hash): SegmentRecord | null {
@@ -236,13 +354,17 @@ export class SQLiteRegistry implements Registry {
     return row ? rowToSegment(row) : null;
   }
 
-  getSegmentsBySource(sourceId: string): SegmentRecord[] {
-    const rows = this.db.prepare('SELECT * FROM segments WHERE source_id = ?').all(sourceId) as Record<string, unknown>[];
+  getSegmentsBySource(sourceId: string, externalId: string): SegmentRecord[] {
+    const rows = this.db
+      .prepare('SELECT * FROM segments WHERE source_id = ? AND external_id = ?')
+      .all(sourceId, externalId) as Record<string, unknown>[];
     return rows.map(rowToSegment);
   }
 
   getChildSegments(parentHash: Hash): SegmentRecord[] {
-    const rows = this.db.prepare('SELECT * FROM segments WHERE parent_hash = ?').all(parentHash) as Record<string, unknown>[];
+    const rows = this.db
+      .prepare('SELECT * FROM segments WHERE parent_hash = ?')
+      .all(parentHash) as Record<string, unknown>[];
     return rows.map(rowToSegment);
   }
 
@@ -278,7 +400,6 @@ export class SQLiteRegistry implements Registry {
     const now = new Date().toISOString();
     const leaseUntil = new Date(Date.now() + leaseDurationMs).toISOString();
 
-    // Find highest priority pending job
     const row = this.db.prepare(
       `SELECT * FROM jobs WHERE status = 'PENDING' ORDER BY priority DESC, created_at ASC LIMIT 1`
     ).get() as Record<string, unknown> | undefined;
@@ -333,10 +454,9 @@ export class SQLiteRegistry implements Registry {
       `SELECT * FROM jobs WHERE status = 'RUNNING' AND lease_until < ?`
     ).all(now) as Record<string, unknown>[];
 
-    const stmt = this.db.prepare(
+    this.db.prepare(
       `UPDATE jobs SET status = 'PENDING', lease_until = NULL, worker_id = NULL WHERE status = 'RUNNING' AND lease_until < ?`
-    );
-    stmt.run(now);
+    ).run(now);
 
     return expired.map(rowToJob).map(j => ({ ...j, status: 'PENDING' as JobStatus, leaseUntil: null, workerId: null }));
   }
@@ -374,10 +494,10 @@ export class SQLiteRegistry implements Registry {
     return rows.map(rowToJob);
   }
 
-  getJobsBySource(nodeId: string): JobRecord[] {
+  getJobsBySource(contentHash: string): JobRecord[] {
     const rows = this.db.prepare(
       `SELECT * FROM jobs WHERE json_extract(payload, '$.nodeId') = ? ORDER BY created_at ASC`
-    ).all(nodeId) as Record<string, unknown>[];
+    ).all(contentHash) as Record<string, unknown>[];
     return rows.map(rowToJob);
   }
 
@@ -424,13 +544,19 @@ export class SQLiteRegistry implements Registry {
 
   // --- Orphans ---
 
-  insertOrphan(hash: Hash, sourceId: string, l2Path: string): void {
+  insertOrphan(hash: Hash, sourceId: string, externalId: string): void {
     const orphanedAt = new Date().toISOString();
     const scheduledPurgeAt = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
     this.db.prepare(
-      `INSERT INTO orphaned_objects (hash, original_source_id, l2_path, orphaned_at, scheduled_purge_at)
-       VALUES (?, ?, ?, ?, ?)`
-    ).run(hash, sourceId, l2Path, orphanedAt, scheduledPurgeAt);
+      `INSERT INTO orphaned_objects (hash, source_id, external_id, orphaned_at, scheduled_purge_at)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(hash) DO UPDATE SET
+         source_id = excluded.source_id,
+         external_id = excluded.external_id,
+         orphaned_at = excluded.orphaned_at,
+         recovered_at = NULL,
+         scheduled_purge_at = excluded.scheduled_purge_at`
+    ).run(hash, sourceId, externalId, orphanedAt, scheduledPurgeAt);
   }
 
   getOrphan(hash: Hash): OrphanRecord | null {
@@ -457,5 +583,12 @@ export class SQLiteRegistry implements Registry {
       `DELETE FROM orphaned_objects WHERE scheduled_purge_at < ? AND recovered_at IS NULL`
     ).run(cutoff);
     return result.changes;
+  }
+
+  isOrphan(hash: Hash): boolean {
+    const row = this.db.prepare(
+      `SELECT 1 FROM orphaned_objects WHERE hash = ? AND recovered_at IS NULL`
+    ).get(hash) as { '1': number } | undefined;
+    return row !== undefined;
   }
 }

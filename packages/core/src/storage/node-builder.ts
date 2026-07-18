@@ -5,18 +5,22 @@
 
 import type {
   Hash,
-  SourceRecord,
   ContextNode,
   BuildManifest,
   GeneratorInfo,
   SegmentRef,
   NormalizedContent,
+  SourceRef,
 } from '../domain/types.js';
+import type { RegistryEntry } from './types.js';
 import { computeHash } from './cas.js';
+
+const CURRENT_SCHEMA_VERSION = 2;
 
 export interface NodeBuilder {
   buildRoot(
-    source: SourceRecord,
+    entry: RegistryEntry,
+    sourceRef: SourceRef,
     normalized: NormalizedContent,
     rawHash: Hash
   ): Promise<ContextNode>;
@@ -24,7 +28,8 @@ export interface NodeBuilder {
   buildSegments(
     parent: ContextNode,
     segments: SegmentRef[],
-    source: SourceRecord
+    entry: RegistryEntry,
+    sourceRef: SourceRef
   ): Promise<ContextNode[]>;
 
   createBuildManifest(
@@ -41,7 +46,8 @@ const PLACEHOLDER_GENERATOR: GeneratorInfo = {
 
 export class DefaultNodeBuilder implements NodeBuilder {
   async buildRoot(
-    source: SourceRecord,
+    entry: RegistryEntry,
+    sourceRef: SourceRef,
     normalized: NormalizedContent,
     rawHash: Hash
   ): Promise<ContextNode> {
@@ -52,11 +58,7 @@ export class DefaultNodeBuilder implements NodeBuilder {
 
     return {
       id: contentHash,
-      sourceRef: {
-        protocol: source.protocol as 'file' | 'http' | 'https',
-        uri: source.uri,
-        mimeType: source.mimeType,
-      },
+      sourceRef,
       childrenIds: [],
       depth: 0,
       artifacts: {
@@ -67,6 +69,7 @@ export class DefaultNodeBuilder implements NodeBuilder {
           charCount: normalized.content.length,
         },
       },
+      semanticLinks: [],
       build,
       createdAt: now,
       updatedAt: now,
@@ -76,22 +79,19 @@ export class DefaultNodeBuilder implements NodeBuilder {
   async buildSegments(
     parent: ContextNode,
     segments: SegmentRef[],
-    source: SourceRecord
+    entry: RegistryEntry,
+    sourceRef: SourceRef
   ): Promise<ContextNode[]> {
     const now = new Date().toISOString();
 
-    return segments.map((seg, idx) => {
+    return segments.map((seg) => {
       const contentHash = computeHash(seg.content);
       const build: BuildManifest = this.createBuildManifest(parent.build.rawHash, contentHash);
 
       return {
         id: contentHash,
-        sourceRef: {
-          protocol: source.protocol as 'file' | 'http' | 'https',
-          uri: source.uri,
-          mimeType: source.mimeType,
-        },
-        parentId: parent.id,
+        sourceRef,
+        parentHash: parent.id,
         childrenIds: [],
         depth: parent.depth + 1,
         artifacts: {
@@ -102,6 +102,7 @@ export class DefaultNodeBuilder implements NodeBuilder {
             charCount: seg.content.length,
           },
         },
+        semanticLinks: [],
         build,
         createdAt: now,
         updatedAt: now,
@@ -116,7 +117,7 @@ export class DefaultNodeBuilder implements NodeBuilder {
   ): BuildManifest {
     const now = new Date().toISOString();
     return {
-      schemaVersion: 1,
+      schemaVersion: CURRENT_SCHEMA_VERSION,
       nodeVersion: 1,
       rawHash,
       contentHash,

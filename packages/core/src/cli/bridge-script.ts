@@ -12,15 +12,22 @@ import { SQLiteRegistry } from '../storage/registry.js';
 import { DefaultNodeBuilder } from '../storage/node-builder.js';
 import { DefaultAdapterManager } from '../adapters/manager.js';
 import { DefaultAdapterProcessRunner } from '../adapters/runner.js';
-import { DefaultIngestionService } from '../adapters/ingestion.js';
+import { DefaultIngestionService } from '../services/ingestion-service.js';
 import { DefaultQueryAnalyzer } from '../search/query-analyzer.js';
 import { DefaultRetrievalService } from '../search/retrieval-service.js';
 import { DefaultContextAssembler } from '../search/context-assembler.js';
+import { createSimilarityService } from '../search/similarity-service.js';
 import { DefaultLLMProviderFactory, DefaultEmbeddingProviderFactory } from '../llm/factory.js';
 import { FileSecretsManager } from '../storage/secrets.js';
+import { DefaultCompilationPipeline } from '../layers/pipeline.js';
+import { DefaultContextNodeRepository } from '../storage/context-node-repository.js';
+import { DefaultL1Generator } from '../layers/l1-generator.js';
+import { DefaultL2Generator } from '../layers/l2-generator.js';
+import { DefaultL3Generator } from '../layers/l3-generator.js';
 import { FastifyBridgeServer } from '../bridge/server.js';
 import { DefaultHealthService } from '../bridge/health.js';
 import { DefaultMetricsService } from '../bridge/metrics.js';
+import { DefaultHealthAnalyzer } from '../health/health-analyzer.js';
 import { createLogger } from '../utils/logger.js';
 import { DefaultShutdownManager } from '../utils/shutdown.js';
 import path from 'path';
@@ -72,20 +79,49 @@ export async function startBridgeServices(): Promise<RunningBridgeServices> {
   const retrievalService = new DefaultRetrievalService({
     embeddingProvider: embedder,
     casStorage: cas,
+    registry,
     indexDir,
     config: config.search,
     logger,
   });
+  const similarityService = createSimilarityService({
+    retrievalService,
+    registry,
+    indexDir,
+    logger,
+  });
   const contextAssembler = new DefaultContextAssembler({ config: config.search });
+  const contextNodeRepository = new DefaultContextNodeRepository(cas, registry);
+
+  const l1Generator = new DefaultL1Generator();
+  const l2Generator = new DefaultL2Generator();
+  const l3Generator = new DefaultL3Generator();
+  const pipeline = new DefaultCompilationPipeline({
+    cas,
+    registry,
+    contextNodeRepository,
+    l1Generator,
+    l2Generator,
+    l3Generator,
+    llmProvider,
+    embeddingProvider: embedder,
+    retrievalService,
+    dataDir,
+    logger,
+  });
 
   const ingestionService = new DefaultIngestionService(
     cas,
     registry,
     nodeBuilder,
     adapterManager,
+    pipeline,
     computeHash,
     logger,
+    registry,
   );
+
+  const healthAnalyzer = new DefaultHealthAnalyzer({ cas, registry, indexDir });
 
   const shutdownManager = new DefaultShutdownManager({ logger, timeoutMs: 10000 });
   const bridge = new FastifyBridgeServer({
@@ -99,8 +135,11 @@ export async function startBridgeServices(): Promise<RunningBridgeServices> {
       registry,
       cas,
       configManager,
+      auditService: registry,
       version: '0.1.0',
       indexDir,
+      healthAnalyzer,
+      similarityService,
     },
     healthDeps: {
       healthService: new DefaultHealthService({ registry, cas, llmProvider, indexDir, shutdownManager }),

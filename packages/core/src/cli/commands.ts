@@ -4,15 +4,19 @@
  */
 
 import type { CASStorage } from '../storage/cas.js';
-import type { IngestionService } from '../adapters/ingestion.js';
+import type { AuditService } from '../storage/audit.js';
+import type { IngestionService, IngestResult, SyncResult } from '../services/ingestion-service.js';
 import type { RetrievalService } from '../search/retrieval-service.js';
-import type { QueryAnalyzer } from '../search/query-analyzer.js';
+import type { QueryAnalyzer, QueryIntent } from '../search/query-analyzer.js';
 import type { ContextAssembler } from '../search/context-assembler.js';
+import type { SimilarityService } from '../search/similarity-service.js';
 import type { Registry } from '../storage/registry.js';
 import type { ConfigManager, RetineoConfig, ProviderConfigEntry } from '../storage/config.js';
 import type { CompilationPipeline } from '../layers/pipeline.js';
 import type { SecretsManager } from '../storage/secrets.js';
+import type { HealthAnalyzer } from '../health/health-analyzer.js';
 import { formatSearchResult, formatStatus, formatJobs, formatIngestResult, formatConfig, formatRecoverResult } from './formatters.js';
+import { FileSystemSourceAdapter } from '../adapters/filesystem-adapter.js';
 import { DefaultGhostRecoveryService } from '../ghost/recovery-service.js';
 import type { L1Index } from '../layers/l1-generator.js';
 import { runDoctor, formatDoctor } from './doctor.js';
@@ -48,12 +52,22 @@ export interface CompileCLIOptions {
   provider?: string;
   watch?: boolean;
   timeout?: number;
+  rebuildL1?: boolean;
+  rebuildL2?: boolean;
+  rebuildL3?: boolean;
 }
 
 export interface SearchCLIOptions {
   language?: string;
   mode?: 'semantic' | 'keyword' | 'hybrid';
   topK?: number;
+  json?: boolean;
+  intent?: QueryIntent;
+}
+
+export interface SimilarCLIOptions {
+  topK?: number;
+  threshold?: number;
   json?: boolean;
 }
 
@@ -73,6 +87,9 @@ export interface CLICommandsDeps {
   pipeline: CompilationPipeline;
   secretsManager: SecretsManager;
   cas: CASStorage;
+  auditService: AuditService;
+  healthAnalyzer?: HealthAnalyzer;
+  similarityService?: SimilarityService;
   version: string;
 }
 
@@ -85,32 +102,22 @@ export class CLICommands {
 
   async ingest(filePath: string, options?: IngestCLIOptions): Promise<void> {
     const result = await this.deps.ingestionService.ingestFile(filePath);
-    if (!result.skipped) {
-      const jobs = this.deps.registry.getJobsBySource(result.node.id);
-      const jobIds = jobs.map((j) => j.id);
-      console.log(formatIngestResult(result.node.sourceRef.uri, result.node.id, jobIds));
-    }
+    await this.deps.auditService.log('ingest', result.contentHash, undefined, { externalId: filePath });
+    console.log(formatIngestResult(filePath, result));
 
     if (options?.watch) {
-      await this.watchJobs(result.node.id, { timeoutSec: options.timeout ?? 1800 });
+      const jobs = this.deps.registry.getJobsBySource(result.contentHash);
+      const jobIds = jobs.map((j) => j.id);
+      if (jobIds.length > 0) {
+        await this.watchJobs(result.contentHash, { timeoutSec: options.timeout ?? 1800 });
+      }
     }
   }
 
   async ingestBatch(paths: string[], options?: IngestCLIOptions): Promise<void> {
-    const { existsSync, lstatSync, readdirSync } = await import('fs');
-    const expanded: string[] = [];
-
-    function collectFiles(dir: string): void {
-      const entries = readdirSync(dir, { withFileTypes: true });
-      for (const entry of entries) {
-        const full = path.join(dir, entry.name);
-        if (entry.isDirectory()) {
-          collectFiles(full);
-        } else if (entry.isFile()) {
-          expanded.push(full);
-        }
-      }
-    }
+    const { existsSync, lstatSync } = await import('fs');
+    const files: string[] = [];
+    const dirs: string[] = [];
 
     for (const p of paths) {
       const resolved = path.resolve(p);
@@ -120,46 +127,93 @@ export class CLICommands {
       }
       const stat = lstatSync(resolved);
       if (stat.isDirectory()) {
-        collectFiles(resolved);
+        dirs.push(resolved);
       } else if (stat.isFile()) {
-        expanded.push(resolved);
+        files.push(resolved);
       }
     }
 
-    if (expanded.length === 0) {
-      console.log('No valid files found.');
+    if (files.length === 0 && dirs.length === 0) {
+      console.log('No valid files or directories found.');
       return;
     }
 
-    if (expanded.length === 1) {
-      return this.ingest(expanded[0], options);
+    if (files.length === 1 && dirs.length === 0) {
+      return this.ingest(files[0], options);
     }
 
-    console.log(`Ingesting ${expanded.length} files...`);
     const allJobIds: string[] = [];
-    for (const fp of expanded) {
+    const results: Array<{ path: string; result: IngestResult | SyncResult; sourceId?: string }> = [];
+
+    for (const fp of files) {
       try {
         const res = await this.deps.ingestionService.ingestFile(fp);
-        if (!res.skipped) {
-          const jobs = this.deps.registry.getJobsBySource(res.node.id);
+        results.push({ path: fp, result: res });
+        if (res.action !== 'unchanged') {
+          const jobs = this.deps.registry.getJobsBySource(res.contentHash);
           allJobIds.push(...jobs.map((j) => j.id));
         }
-        console.log(`  ✓ ${fp} → ${res.node.id.slice(0, 12)}...`);
+        console.log(`  ✓ ${fp} → ${res.contentHash.slice(0, 12)}... (${res.action})`);
       } catch (err) {
         console.error(`  ✗ ${fp}: ${err instanceof Error ? err.message : String(err)}`);
       }
     }
-    console.log(`Queued ${allJobIds.length} job(s) for ${expanded.length} file(s).`);
 
-    if (options?.watch && allJobIds.length > 0) {
-      // Watch all jobs from all files
-      const startIds = new Set(allJobIds);
-      await this.watchAnyJobCompletion(startIds, { timeoutSec: options.timeout ?? 1800 });
+    for (const dir of dirs) {
+      try {
+        const res = await this.deps.ingestionService.syncDirectory(dir);
+        results.push({ path: dir, result: res, sourceId: res.sourceId });
+        console.log(`  ✓ ${dir} → ${res.processed} processed, ${res.ghosts} ghosts (${res.sourceId})`);
+      } catch (err) {
+        console.error(`  ✗ ${dir}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+
+    if (options?.watch) {
+      if (dirs.length === 1 && files.length === 0) {
+        const dir = dirs[0];
+        const sourceId = (results.find((r) => r.path === dir)?.sourceId) ?? `filesystem:${dir}`;
+        await this.watchSourceSync(sourceId, { timeoutSec: options.timeout ?? 1800 });
+      } else if (allJobIds.length > 0) {
+        const startIds = new Set(allJobIds);
+        await this.watchAnyJobCompletion(startIds, { timeoutSec: options.timeout ?? 1800 });
+      }
     }
   }
 
+  async health(filePath: string): Promise<void> {
+    const absolutePath = path.resolve(filePath);
+    if (!existsSync(absolutePath)) {
+      console.error(`  Not found: ${filePath}`);
+      process.exitCode = 1;
+      return;
+    }
+
+    const { processed, ghosts, sourceId } = await this.deps.ingestionService.syncDirectory(absolutePath);
+    console.log(`  synced ${processed} changed, ${ghosts} ghosts (${sourceId})`);
+
+    if (!this.deps.healthAnalyzer) {
+      console.error('Health analyzer is not configured.');
+      process.exitCode = 1;
+      return;
+    }
+
+    const counts = this.deps.registry.getJobCounts();
+    if (counts.pending > 0 || counts.running > 0) {
+      const workerRunning = isWorkerProcessRunning();
+      if (!workerRunning) {
+        await this.startInlineWorker();
+      }
+      await this.waitForJobDrain({ timeoutSec: 1800 });
+    }
+
+    const report = await this.deps.healthAnalyzer.analyze(sourceId);
+    console.log(JSON.stringify(report, null, 2));
+    process.exitCode = report.score < 50 ? 1 : 0;
+  }
+
   async search(query: string, options?: SearchCLIOptions): Promise<void> {
-    const analyzed = await this.deps.queryAnalyzer.analyze(query);
+    const analyzed = await this.deps.queryAnalyzer.analyze(query, undefined, { intent: options?.intent });
     const results = await this.deps.retrievalService.search(analyzed, {
       language: options?.language,
       mode: options?.mode,
@@ -175,42 +229,52 @@ export class CLICommands {
     const { existsSync } = await import('fs');
     const { join } = await import('path');
 
-    // Build document hits directly from selected candidates
+    // Resolve source paths post-search via Registry
     const docHits: Array<{
       sourceHash: string;
       sourcePath: string;
       score: number;
       l2Summary: string;
       navTree: L1Index['sections'] | null;
+      isGhost?: boolean;
     }> = [];
     for (const c of results.selected) {
-      const sources = this.deps.registry.listSources();
-      const source = sources.find((s) => s.rootHash === c.nodeId);
-      const sourcePath = source?.uri ?? c.nodeId;
+      const contentHash = c.contentHash ?? c.nodeId;
+      const entries = this.deps.registry.listByContentHash(contentHash);
+      const active = entries.find((e) => e.status === 'active');
+      const sourcePath = active?.externalId ?? entries[0]?.externalId ?? contentHash;
+      const isGhost = c.isGhost ?? !active;
 
       // Load L1 index for navigation tree
       let sections: L1Index['sections'] | null = null;
-      if (!l1Indices.has(c.nodeId)) {
+      if (!l1Indices.has(contentHash)) {
         try {
-          const objPath = this.deps.cas.getObjectPath(c.nodeId);
+          const objPath = this.deps.cas.getObjectPath(contentHash);
           const l1Path = join(objPath, 'L1.index.json');
           if (existsSync(l1Path)) {
-            l1Indices.set(c.nodeId, JSON.parse(await readFile(l1Path, 'utf-8')) as L1Index);
+            l1Indices.set(contentHash, JSON.parse(await readFile(l1Path, 'utf-8')) as L1Index);
           }
         } catch {
           // skip
         }
       }
-      sections = l1Indices.get(c.nodeId)?.sections ?? null;
+      sections = l1Indices.get(contentHash)?.sections ?? null;
 
       docHits.push({
-        sourceHash: c.nodeId,
+        sourceHash: contentHash,
         sourcePath,
         score: c.score,
         l2Summary: c.l2Summary ?? '',
         navTree: sections,
+        isGhost,
       });
     }
+
+    await this.deps.auditService.log('search', undefined, undefined, {
+      query,
+      mode: options?.mode ?? 'semantic',
+      resultCount: results.selected.length,
+    });
 
     const payload = {
       query,
@@ -223,6 +287,57 @@ export class CLICommands {
       documentHits: docHits,
     };
     console.log(formatSearchResult(payload, { json: options?.json }));
+  }
+
+  async similar(hash: string, options?: SimilarCLIOptions): Promise<void> {
+    if (!this.deps.similarityService) {
+      console.error('Similarity service is not configured.');
+      process.exitCode = 1;
+      return;
+    }
+
+    const cfg = await this.deps.configManager.load();
+    const { join } = await import('path');
+    const { existsSync, readFileSync } = await import('fs');
+    const embeddingsPath = join(cfg.dataDir, 'index', 'embeddings.jsonl');
+    let vectorCount = 0;
+    if (existsSync(embeddingsPath)) {
+      const raw = readFileSync(embeddingsPath, 'utf-8').trim();
+      if (raw) {
+        vectorCount = raw.split('\n').filter((l: string) => l.trim()).length;
+      }
+    }
+    if (vectorCount === 0) {
+      console.error('Index is empty. Run `retineo ingest <path>` first.');
+      process.exitCode = 1;
+      return;
+    }
+
+    const results = await this.deps.similarityService.findSimilar(hash, {
+      topK: options?.topK,
+      threshold: options?.threshold,
+    });
+
+    if (options?.json) {
+      console.log(JSON.stringify(results, null, 2));
+      return;
+    }
+
+    if (results.length === 0) {
+      console.log('No similar documents found.');
+      return;
+    }
+
+    const lines: string[] = [];
+    lines.push('contentHash                          | similarity | sourcePath');
+    lines.push('─────────────────────────────────────┬────────────┬───────────');
+    for (const doc of results) {
+      const hashCol = doc.contentHash.slice(0, 36).padEnd(36, ' ');
+      const simCol = doc.similarity.toFixed(4).padStart(10, ' ');
+      const pathCol = doc.sourcePath ?? '';
+      lines.push(`${hashCol} | ${simCol} | ${pathCol}`);
+    }
+    console.log(lines.join('\n'));
   }
 
   async status(): Promise<void> {
@@ -264,6 +379,68 @@ export class CLICommands {
     console.log(formatStatus(status));
   }
 
+  async rebuild(options?: CompileCLIOptions & { force?: boolean }): Promise<void> {
+    const config = await this.deps.configManager.load();
+    const { rmSync, existsSync } = await import('fs');
+    const pathMod = await import('path');
+
+    // Capture source IDs before clearing the registry.
+    const sources = this.deps.registry.listSources();
+
+    if (options?.force) {
+      for (const name of ['index', 'objects']) {
+        const p = pathMod.join(config.dataDir, name);
+        if (existsSync(p)) rmSync(p, { recursive: true, force: true });
+      }
+      this.deps.registry.clearSources();
+      this.deps.registry.clearJobs();
+      this.deps.registry.clearOrphans();
+    }
+
+    const indexDir = pathMod.join(config.dataDir, 'index');
+    if (existsSync(indexDir)) {
+      rmSync(indexDir, { recursive: true, force: true });
+    }
+
+    // Sync every filesystem source so deleted files become ghosts and changed/new files are ingested.
+    const sourceIds = new Set<string>();
+    for (const src of sources) {
+      if (src.sourceId.startsWith('filesystem')) sourceIds.add(src.sourceId);
+    }
+
+    let processed = 0;
+    let ghosts = 0;
+    for (const sourceId of sourceIds) {
+      // Lazily register a filesystem adapter for every known filesystem source.
+      if (sourceId.startsWith('filesystem:')) {
+        const root = sourceId.slice('filesystem:'.length);
+        if (root) {
+          this.deps.ingestionService.registerAdapter(
+            new FileSystemSourceAdapter(root, undefined, sourceId)
+          );
+        }
+      }
+      try {
+        const res = await this.deps.ingestionService.syncSource(sourceId);
+        processed += res.processed;
+        ghosts += res.ghosts;
+      } catch (err) {
+        console.error(`  ✗ sync ${sourceId}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+
+    console.log(`Rebuilt ${sourceIds.size} source(s): ${processed} changed/new, ${ghosts} ghosts`);
+    await this.deps.auditService.log('rebuild', undefined, undefined, { sources: sourceIds.size, processed, ghosts, force: !!options?.force });
+
+    if (options?.watch) {
+      const allPending = this.deps.registry.getPendingJobs(100);
+      const startIds = new Set(allPending.map((j) => j.id));
+      if (startIds.size > 0) {
+        await this.watchAnyJobCompletion(startIds, { timeoutSec: options.timeout ?? 1800 });
+      }
+    }
+  }
+
   async compile(filePath?: string, options?: CompileCLIOptions): Promise<void> {
     // Load config and resolve provider override if specified
     const config = await this.deps.configManager.load();
@@ -280,15 +457,52 @@ export class CLICommands {
 
     if (filePath) {
       const res = await this.deps.ingestionService.ingestFile(filePath);
-      if (res.skipped) {
-        console.log(`Skipped: already ingested (hash: ${res.node.id})`);
-      } else {
-        console.log(`Compiled: ${filePath} → ${res.node.id}`);
-      }
-      if (options?.watch) {
-        await this.watchJobs(res.node.id, { timeoutSec: options.timeout ?? 1800 });
+      console.log(formatIngestResult(filePath, res));
+      if (options?.watch && res.action !== 'unchanged') {
+        const jobs = this.deps.registry.getJobsBySource(res.contentHash);
+        if (jobs.length > 0) {
+          await this.watchJobs(res.contentHash, { timeoutSec: options.timeout ?? 1800 });
+        }
       }
     } else {
+      // Optional: force re-generation of L1 artifacts for all sources
+      if (options?.rebuildL1) {
+        const { rmSync, existsSync } = await import('fs');
+        const pathMod = await import('path');
+        const sources = this.deps.registry.listSources();
+        let queued = 0;
+        for (const src of sources) {
+          const nodeHash = src.contentHash;
+          const objPath = this.deps.cas.getObjectPath(nodeHash);
+          for (const file of ['L1.md', 'L1.index.json']) {
+            const p = pathMod.join(objPath, file);
+            if (existsSync(p)) rmSync(p);
+          }
+          this.deps.pipeline.enqueueL1(nodeHash, src.sourceId);
+          queued++;
+        }
+        console.log(`Queued ${queued} source(s) for L1 rebuild`);
+      }
+
+      // Optional: force re-generation of L2 artifacts for all sources
+      if (options?.rebuildL2) {
+        const { rmSync, existsSync } = await import('fs');
+        const pathMod = await import('path');
+        const sources = this.deps.registry.listSources();
+        let queued = 0;
+        for (const src of sources) {
+          const nodeHash = src.contentHash;
+          const objPath = this.deps.cas.getObjectPath(nodeHash);
+          const l2Path = pathMod.join(objPath, 'L2.json');
+          if (existsSync(l2Path)) {
+            rmSync(l2Path);
+          }
+          this.deps.pipeline.enqueueL2(nodeHash);
+          queued++;
+        }
+        console.log(`Queued ${queued} source(s) for L2 rebuild`);
+      }
+
       const pending = this.deps.registry.getPendingJobs(100);
       console.log(`Compiling ${pending.length} pending jobs...`);
 
@@ -309,8 +523,7 @@ export class CLICommands {
       const sources = this.deps.registry.listSources();
       let missingL3 = 0;
       for (const src of sources) {
-        const nodeHash = src.rootHash;
-        if (!nodeHash) continue;
+        const nodeHash = src.contentHash;
         const jobs = this.deps.registry.getJobsBySource(nodeHash);
         const hasL3Job = jobs.some((j) => j.type === 'GENERATE_L3');
         if (!hasL3Job) {
@@ -323,6 +536,28 @@ export class CLICommands {
       }
       if (missingL3 > 0) {
         console.log(`Queued ${missingL3} missing L3 job(s)`);
+      }
+
+      // Optional: force full L3 index rebuild for all sources with L2.
+      if (options?.rebuildL3) {
+        const { rmSync, existsSync } = await import('fs');
+        const pathMod = await import('path');
+        const cfg = await this.deps.configManager.load();
+        const indexDir = pathMod.join(cfg.dataDir, 'index');
+        if (existsSync(indexDir)) {
+          rmSync(indexDir, { recursive: true, force: true });
+        }
+        const sources = this.deps.registry.listSources();
+        let queued = 0;
+        for (const src of sources) {
+          const nodeHash = src.contentHash;
+          const objPath = this.deps.cas.getObjectPath(nodeHash);
+          if (existsSync(pathMod.join(objPath, 'L2.json'))) {
+            this.deps.pipeline.enqueueL3(nodeHash);
+            queued++;
+          }
+        }
+        console.log(`Queued ${queued} source(s) for L3 rebuild`);
       }
 
       if (options?.watch) {
@@ -364,65 +599,21 @@ export class CLICommands {
   }
 
   async recover(hash: string): Promise<void> {
-    const { readFileSync, writeFileSync, mkdirSync, existsSync } = await import('fs');
-    const pathMod = await import('path');
-    const crypto = await import('crypto');
-
-    // 1. Find source(s) by hash (try rootHash first, then rawHash)
-    let sources = this.deps.registry.getSourcesByRootHash(hash);
-    if (sources.length === 0) {
-      const byRaw = this.deps.registry.getSourceByRawHash(hash);
-      if (byRaw) {
-        sources = [byRaw];
-      }
-    }
-    if (sources.length === 0) {
+    const entries = this.deps.registry.listByContentHash(hash);
+    if (entries.length === 0) {
       console.log(`Recover failed: ${hash} — not found in registry`);
       return;
     }
-    const sourceRecord = sources[0]!;
-    const sourcePath = sourceRecord.uri;
-    const contentHash = sourceRecord.rootHash || sourceRecord.rawHash;
 
-    // 2. Check if file exists at sourcePath and hash matches
-    if (existsSync(sourcePath)) {
-      const fileBuf = readFileSync(sourcePath);
-      const fileHash = crypto.createHash('sha256').update(fileBuf).digest('hex');
-      if (fileHash === sourceRecord.rawHash || fileHash === contentHash) {
-        console.log(`Already valid: ${hash} → ${sourcePath}`);
-        this.deps.registry.recoverOrphan(contentHash);
-        return;
-      }
+    for (const entry of entries) {
+      this.deps.registry.updateSource(entry.sourceId, entry.externalId, {
+        status: 'active',
+        deletedAt: null,
+      });
     }
-
-    // 3. Try to restore from CAS (content.md inside object dir)
-    const casObjPath = this.deps.cas.getObjectPath(contentHash);
-    const contentPath = pathMod.join(casObjPath, 'content.md');
-    if (existsSync(contentPath)) {
-      mkdirSync(pathMod.dirname(sourcePath), { recursive: true });
-      writeFileSync(sourcePath, readFileSync(contentPath));
-      console.log(`Recovered: ${hash} → ${sourcePath} (file restored from CAS)`);
-      this.deps.registry.recoverOrphan(contentHash);
-      return;
-    }
-
-    // 4. File exists at different path with same hash?
-    for (const src of sources) {
-      if (src.uri !== sourcePath && existsSync(src.uri)) {
-        const fileBuf = readFileSync(src.uri);
-        const fileHash = crypto.createHash('sha256').update(fileBuf).digest('hex');
-        if (fileHash === src.rawHash || fileHash === src.rootHash) {
-          // Update registry to point to existing file
-          this.deps.registry.updateSourcePath(sourceRecord.id, src.uri);
-          console.log(`Recovered: ${hash} → ${src.uri} (path updated to existing file)`);
-          this.deps.registry.recoverOrphan(contentHash);
-          return;
-        }
-      }
-    }
-
-    // 5. CAS content not found
-    console.log(`Recover failed: ${hash} — content not found in CAS storage`);
+    this.deps.registry.recoverOrphan(hash);
+    await this.deps.auditService.log('recover', hash, undefined, { sourceCount: entries.length });
+    console.log(`Recovered: ${hash} → ${entries.map((e) => `${e.sourceId}:${e.externalId}`).join(', ')}`);
   }
 
   // --- Key management ---
@@ -1024,11 +1215,43 @@ export class CLICommands {
     process.exitCode = 1;
   }
 
+  private async watchSourceSync(sourceId: string, options: { timeoutSec: number; intervalSec?: number }): Promise<void> {
+    const startTime = Date.now();
+    const timeoutMs = options.timeoutSec * 1000;
+    const intervalMs = (options.intervalSec ?? 30) * 1000;
+    console.log(`⏳ Watching ${sourceId} for changes...`);
+    while (Date.now() - startTime < timeoutMs) {
+      try {
+        const res = await this.deps.ingestionService.syncSource(sourceId);
+        if (res.processed > 0 || res.ghosts > 0) {
+          console.log(`  sync: ${res.processed} processed, ${res.ghosts} ghosts`);
+        }
+      } catch (err) {
+        console.error(`  sync failed: ${err instanceof Error ? err.message : String(err)}`);
+        return;
+      }
+      await new Promise((r) => setTimeout(r, intervalMs));
+    }
+    console.log(`⏱️  Watch timeout after ${options.timeoutSec}s`);
+  }
+
   private async startInlineWorker(): Promise<void> {
     // Spawn a background worker (detached) so the parent can poll the
     // registry while the worker drains the queue. This is identical to
     // running `retineo worker start` programmatically.
     await this.startService('worker');
+  }
+
+  private async waitForJobDrain(options: { timeoutSec: number }): Promise<void> {
+    const start = Date.now();
+    const timeoutMs = options.timeoutSec * 1000;
+    const pollMs = 1000;
+    while (Date.now() - start < timeoutMs) {
+      const counts = this.deps.registry.getJobCounts();
+      if (counts.pending === 0 && counts.running === 0) return;
+      await new Promise((r) => setTimeout(r, pollMs));
+    }
+    console.log(`⏱️  Timeout after ${options.timeoutSec}s waiting for jobs`);
   }
 
   // --- Ghost System ---
@@ -1043,8 +1266,8 @@ export class CLICommands {
     console.log(`Found ${orphans.length} orphaned object(s):\n`);
     for (const o of orphans) {
       console.log(`  Hash:     ${o.hash}`);
-      console.log(`  Source:   ${o.originalSourceId}`);
-      console.log(`  Path:     ${o.l2Path ?? '(unknown)'}`);
+      console.log(`  Source:   ${o.sourceId}`);
+      console.log(`  Path:     ${o.externalId}`);
       console.log(`  Orphaned: ${o.orphanedAt}`);
       console.log('');
     }
@@ -1212,7 +1435,7 @@ const DEFAULT_SEARCH: RetineoConfig['search'] = {
   cascade: { budgets: { vague: 500, section: 800, precision: 1500 } },
   citations: { format: 'markdown', includeLineNumbers: true, includeTimestamps: true },
   prompts: {},
-  crossLingual: { enabled: true },
+  crossLingual: { enabled: true, translateQuery: 'llm', targetLanguages: ['en'] },
 };
 
 const DEFAULT_I18N: RetineoConfig['i18n'] = { defaultLanguage: 'en', packs: [] };

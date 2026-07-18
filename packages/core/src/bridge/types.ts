@@ -52,12 +52,12 @@ export interface NodeResponse {
 }
 
 export interface SourceResponse {
-  id: string;
-  protocol: string;
-  uri: string;
-  mimeType: string;
-  adapterId: string;
-  rootHash: string;
+  sourceId: string;
+  externalId: string;
+  contentHash: string;
+  etag: string;
+  status: string;
+  deletedAt: number | null;
   lastSeenAt: string;
 }
 
@@ -75,10 +75,15 @@ export interface JobResponse {
 
 export interface CitationDTO {
   nodeId: string;
+  contentHash?: string;
+  chunkHash?: string;
   level: 'L2' | 'L1' | 'L0';
   content: string;
+  score?: number;
   span?: { start: number; end: number };
   sourceRef?: { protocol: string; uri: string; mimeType: string };
+  sourcePath?: string;
+  isGhost?: boolean;
 }
 
 export interface BridgeError {
@@ -95,4 +100,34 @@ export interface BridgeConfig {
     heartbeatIntervalMs: number;
     maxConnections: number;
   };
+}
+
+export interface HealthRequest {
+  sourceId?: string;
+  path?: string;
+}
+
+export interface SimilarRequest {
+  hash: string;
+  topK?: number;
+  threshold?: number;
+  includeGhosts?: boolean;
+}
+
+export interface SimilarResponse {
+  results: Array<{
+    contentHash: string;
+    sourcePath?: string;
+    similarity: number;
+    matchedChunks: number;
+  }>;
+}
+
+export interface HealthJobResponse {
+  jobId: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+}
+
+export interface ReportResponse {
+  report: unknown;
 }

@@ -4,9 +4,9 @@
 [![CI](https://github.com/retineohq/retineo/actions/workflows/ci.yml/badge.svg)](https://github.com/retineohq/retineo/actions)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-**Version:** 0.2.0  
+**Version:** 0.6.1  
 **License:** Apache 2.0  
-**Status:** Production-ready — 408 tests passing
+**Status:** Production-ready — 458 tests passing
 
 ## What is Retineo Core?
 
@@ -19,7 +19,7 @@ Retineo Core is a **fractal knowledge management engine** (L0–L3) that transfo
 | **L0** | `content.md` + `content.meta.json` | Normalized text + multimodal offsets (timestamps, speakers, OCR bbox) |
 | **L1** | `L1.md` + `L1.index.json` | Structural outline: headings, sections, chunk anchors, line ranges |
 | **L2** | `L2.json` | Semantic object: summary, concepts[], claims[], relations[] |
-| **L3** | `embeddings.parquet` + `hnsw.bin` + `bm25.json` | Vector index + keyword index |
+| **L3** | `embeddings.jsonl` + `hnsw.bin` + `bm25.json` | Vector index + keyword index |
 
 ## Install
 
@@ -42,7 +42,11 @@ retineo init      # create ~/.retineo/ config
 retineo status    # check engine status
 retineo ingest ./my-document.pdf
 retineo search "semantic search query"
+retineo similar <contentHash>   # find semantically similar documents
+retineo health ./my-notes       # diagnostic memory health report
 ```
+
+The `retineo health` command syncs a directory, analyzes coverage, duplicates, orphans, ghosts, and knowledge age, then prints a JSON report with a 0–100 score and concrete findings referencing specific content hashes.
 
 ## Architecture Principles
 

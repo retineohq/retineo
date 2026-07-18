@@ -12,7 +12,7 @@ import { SQLiteRegistry } from '../../packages/core/src/storage/registry.js';
 import { DefaultNodeBuilder } from '../../packages/core/src/storage/node-builder.js';
 import { DefaultAdapterManager } from '../../packages/core/src/adapters/manager.js';
 import { DefaultAdapterProcessRunner } from '../../packages/core/src/adapters/runner.js';
-import { DefaultIngestionService } from '../../packages/core/src/adapters/ingestion.js';
+import { DefaultIngestionService } from '../../packages/core/src/services/ingestion-service.js';
 import { DefaultCompilationPipeline } from '../../packages/core/src/layers/pipeline.js';
 import { DefaultContextNodeRepository } from '../../packages/core/src/storage/context-node-repository.js';
 import { DefaultL1Generator } from '../../packages/core/src/layers/l1-generator.js';
@@ -52,7 +52,6 @@ beforeEach(async () => {
 
   const runner = new DefaultAdapterProcessRunner(tmpDir);
   const manager = new DefaultAdapterManager(adaptersDir, runner);
-  service = new DefaultIngestionService(cas, registry, builder, manager, computeHash);
   await manager.loadBuiltIn();
 
   const llm = new MockLLMProvider({ id: 'mock', model: 'mock', apiKey: '' });
@@ -69,6 +68,7 @@ beforeEach(async () => {
     embeddingProvider: embedder,
     dataDir,
   });
+  service = new DefaultIngestionService(cas, registry, builder, manager, pipeline, computeHash);
 });
 
 afterEach(() => {
@@ -121,46 +121,44 @@ describe('Image Pipeline', () => {
     writeFileSync(filePath, createMinimalPNG());
 
     const result = await service.ingestFile(filePath);
-    const node = result.node;
-    expect(node.id).toMatch(/^[a-f0-9]{64}$/);
-    expect(node.depth).toBe(0);
-    expect(node.childrenIds.length).toBe(0); // atomic
+    const contentHash = result.contentHash;
+    expect(contentHash).toMatch(/^[a-f0-9]{64}$/);
 
-    const obj = await cas.readObject(node.id);
+    const obj = await cas.readObject(contentHash);
     expect(obj.artifacts.content).toBe('');
     expect(obj.artifacts.meta.blocks.length).toBe(0);
 
     const jobs = registry.getPendingJobs(10);
-    const job = jobs.find((j) => j.payload.includes(node.id));
+    const job = jobs.find((j) => j.payload.includes(contentHash));
     expect(job).toBeDefined();
     expect(job!.type).toBe('GENERATE_L1');
   });
 
-  it('processes GENERATE_L1 → L2 → L3 for blank image', async () => {
+  it('skips L2/L3 for blank image with empty content', async () => {
     const filePath = path.join(tmpDir, 'blank.png');
     writeFileSync(filePath, createMinimalPNG());
 
     const result = await service.ingestFile(filePath);
-    const node = result.node;
+    const contentHash = result.contentHash;
 
     // L1
     const l1Job = registry.acquireLease('worker-1', 60000)!;
     await pipeline.processJob(l1Job);
     registry.completeJob(l1Job.id);
 
-    // L2
-    const l2Lease = registry.acquireLease('worker-1', 60000)!;
-    await pipeline.processJob(l2Lease);
-    registry.completeJob(l2Lease.id);
+    // Empty source should not produce L2/L3 jobs.
+    const pending = registry.getPendingJobs(10);
+    const hasL2 = pending.some((j) => j.type === 'GENERATE_L2');
+    const hasL3 = pending.some((j) => j.type === 'GENERATE_L3');
+    expect(hasL2).toBe(false);
+    expect(hasL3).toBe(false);
 
-    // L3
-    const l3Lease = registry.acquireLease('worker-1', 60000)!;
-    await pipeline.processJob(l3Lease);
-    registry.completeJob(l3Lease.id);
-
-    const objPath = cas.getObjectPath(node.id);
+    const objPath = cas.getObjectPath(contentHash);
     const { existsSync } = require('fs');
     expect(existsSync(path.join(objPath, 'L1.md'))).toBe(true);
-    expect(existsSync(path.join(objPath, 'L2.json'))).toBe(true);
+    expect(existsSync(path.join(objPath, 'L2.json'))).toBe(false);
+
+    const l1 = await cas.readObject(contentHash);
+    expect(l1.artifacts.l1 ?? '').toContain('chunkCount: 0');
   });
 });

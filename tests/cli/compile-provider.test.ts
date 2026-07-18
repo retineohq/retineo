@@ -42,6 +42,7 @@ function makeDeps(configOverride?: { llm?: { defaultProvider: string; providers:
           node: {
             id: 'hash123',
             sourceRef: { protocol: 'file' as const, uri: filePath, mimeType: 'text/plain' },
+            sourcePath: filePath,
             childrenIds: [],
             depth: 0,
             artifacts: {},

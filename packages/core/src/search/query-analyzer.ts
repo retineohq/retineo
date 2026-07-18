@@ -9,6 +9,8 @@ import { createDetector } from '../i18n/detector.js';
 import type { LanguagePackRegistry } from '../i18n/registry.js';
 import { DefaultLanguagePackRegistry } from '../i18n/registry.js';
 import type { SearchConfig } from '../storage/config.js';
+import type { QueryTranslator } from './query-translator.js';
+import { LLMQueryTranslator, NoOpQueryTranslator } from './query-translator.js';
 
 export type QueryIntent = 'vague' | 'section' | 'precision';
 
@@ -34,11 +36,16 @@ export interface AnalyzedQuery {
   signals: QuerySignal[];
 }
 
-export interface QueryAnalyzer {
-  analyze(query: string, sessionContext?: SessionContext): Promise<AnalyzedQuery>;
+export interface AnalyzeOptions {
+  /** Force a specific intent, bypassing classification */
+  intent?: QueryIntent;
 }
 
-// Rule-based intent signals
+export interface QueryAnalyzer {
+  analyze(query: string, sessionContext?: SessionContext, options?: AnalyzeOptions): Promise<AnalyzedQuery>;
+}
+
+// Fallback English rule-based intent signals for unknown languages
 const VAGUE_PATTERNS = [
   /^tell me about/i,
   /^what is/i,
@@ -75,6 +82,20 @@ function ruleBasedIntent(query: string): QueryIntent | null {
   if (PRECISION_PATTERNS.some((re) => re.test(q))) return 'precision';
   if (SECTION_PATTERNS.some((re) => re.test(q))) return 'section';
   if (VAGUE_PATTERNS.some((re) => re.test(q))) return 'vague';
+  return null;
+}
+
+function detectIntentWithPack(
+  query: string,
+  language: string,
+  registry: LanguagePackRegistry
+): QueryIntent | null {
+  const pack = registry.get(language);
+  if (!pack?.intentPatterns) return null;
+  const q = query.toLowerCase();
+  if (pack.intentPatterns.precision?.some((re) => re.test(q))) return 'precision';
+  if (pack.intentPatterns.section?.some((re) => re.test(q))) return 'section';
+  if (pack.intentPatterns.vague?.some((re) => re.test(q))) return 'vague';
   return null;
 }
 
@@ -132,12 +153,14 @@ export interface QueryAnalyzerDeps {
   registry?: LanguagePackRegistry;
   llmProvider?: LLMProvider;
   searchConfig?: SearchConfig;
+  translator?: QueryTranslator;
 }
 
 export class DefaultQueryAnalyzer implements QueryAnalyzer {
   private detector: LanguageDetector;
   private registry: LanguagePackRegistry;
   private llmProvider?: LLMProvider;
+  private translator: QueryTranslator;
   private config: SearchConfig;
 
   constructor(deps: QueryAnalyzerDeps = {}) {
@@ -149,46 +172,76 @@ export class DefaultQueryAnalyzer implements QueryAnalyzer {
       cascade: { budgets: { vague: 500, section: 800, precision: 1500 } },
       citations: { format: 'markdown', includeLineNumbers: true, includeTimestamps: true },
       prompts: {},
-      crossLingual: { enabled: true },
+      crossLingual: { enabled: true, translateQuery: 'llm', targetLanguages: ['en'] },
     };
     this.detector = deps.detector ?? createDetector(this.config.languageDetection.provider, this.config.languageDetection.confidenceThreshold);
     this.registry = deps.registry ?? new DefaultLanguagePackRegistry();
     this.llmProvider = deps.llmProvider;
+    this.translator = deps.translator ?? this.makeDefaultTranslator();
   }
 
-  async analyze(query: string, sessionContext?: SessionContext): Promise<AnalyzedQuery> {
+  private makeDefaultTranslator(): QueryTranslator {
+    const crossLingual = this.config.crossLingual;
+    if (!crossLingual?.enabled) return new NoOpQueryTranslator();
+    if (crossLingual.translateQuery === 'none') return new NoOpQueryTranslator();
+    if (this.llmProvider) return new LLMQueryTranslator(this.llmProvider);
+    return new NoOpQueryTranslator();
+  }
+
+  async analyze(query: string, sessionContext?: SessionContext, options?: AnalyzeOptions): Promise<AnalyzedQuery> {
     // 1. Language detection
     const detected = await this.detector.detect(query);
     let language = detected.code;
     let confidence = detected.confidence;
-    if (confidence < this.config.languageDetection.confidenceThreshold) {
+    // Trust non-Latin script detection even when confidence is below the threshold.
+    // Short queries in Cyrillic/CJK/Arabic/etc. are unambiguous by script.
+    const isNonLatinScript = detected.script !== 'latin' && detected.script !== 'unknown' && detected.script !== '';
+    if (confidence < this.config.languageDetection.confidenceThreshold && !isNonLatinScript) {
       language = this.config.defaultLanguage;
       confidence = 0.5;
     }
 
-    // 2. Intent classification (rule-based fast path)
-    let intent: QueryIntent = ruleBasedIntent(query) ?? 'vague';
+    // 2. Intent classification (explicit override > language pack > fallback English rules > LLM)
+    let intent: QueryIntent;
+    if (options?.intent) {
+      intent = options.intent;
+    } else {
+      const packIntent = detectIntentWithPack(query, language, this.registry);
+      const fallbackIntent = packIntent ?? ruleBasedIntent(query);
+      intent = fallbackIntent ?? 'vague';
 
-    // 3. LLM fallback for ambiguous queries
-    if (!ruleBasedIntent(query) && this.llmProvider) {
-      const promptTemplate =
-        this.config.prompts.intentClassification ??
-        this.registry.resolvePrompt(language, 'intentClassification') ??
-        this.registry.resolvePrompt('en', 'intentClassification')!;
-      try {
-        const prompt = buildPrompt(promptTemplate, { query, language });
-        const raw = await this.llmProvider.generate(prompt, { jsonMode: true, temperature: 0.1, maxTokens: 256 });
-        const parsed = JSON.parse(raw.trim().replace(/^```json\s*|\s*```$/g, ''));
-        if (parsed.intent === 'vague' || parsed.intent === 'section' || parsed.intent === 'precision') {
-          intent = parsed.intent;
+      // 3. LLM fallback for ambiguous queries
+      if (!fallbackIntent && this.llmProvider) {
+        const promptTemplate =
+          this.config.prompts.intentClassification ??
+          this.registry.resolvePrompt(language, 'intentClassification') ??
+          this.registry.resolvePrompt('en', 'intentClassification')!;
+        try {
+          const prompt = buildPrompt(promptTemplate, { query, language });
+          const raw = await this.llmProvider.generate(prompt, { jsonMode: true, temperature: 0.1, maxTokens: 256 });
+          const parsed = JSON.parse(raw.trim().replace(/^```json\s*|\s*```$/g, ''));
+          if (parsed.intent === 'vague' || parsed.intent === 'section' || parsed.intent === 'precision') {
+            intent = parsed.intent;
+          }
+        } catch {
+          // keep rule-based intent
         }
-      } catch {
-        // keep rule-based intent
       }
     }
 
     // 4. Entity extraction
     let entities = extractEntities(query);
+
+    // Fallback for non-English keyword-style queries: if no capitalized words
+    // or quoted phrases were found, treat the meaningful words themselves as
+    // entities so they can be translated into English for cross-lingual BM25.
+    if (entities.length === 0 && language !== 'en') {
+      entities = query
+        .toLowerCase()
+        .split(/\s+/)
+        .map((w) => w.replace(/[^a-z0-9\u0400-\u04FF\u4E00-\u9FFF]/g, ''))
+        .filter((w) => w.length > 2);
+    }
     if (this.llmProvider) {
       const promptTemplate =
         this.config.prompts.entityExtraction ??
@@ -206,13 +259,27 @@ export class DefaultQueryAnalyzer implements QueryAnalyzer {
       }
     }
 
-    // 5. Query enrichment (pronoun resolution + entity injection)
+    // 5. Cross-lingual query translation (append English equivalents for BM25)
+    let englishEntities: string[] = [];
+    if (language !== 'en' && entities.length > 0) {
+      try {
+        const translated = await this.translator.translate(entities, language);
+        englishEntities = translated.english.filter((t) => t.length > 0);
+      } catch {
+        // ignore translation failures
+      }
+    }
+
+    // 6. Query enrichment (pronoun resolution + entity injection + English terms)
     let enrichedQuery = resolvePronouns(query, sessionContext);
     if (entities.length > 0) {
       enrichedQuery += ` [entities: ${entities.join(', ')}]`;
     }
+    if (englishEntities.length > 0) {
+      enrichedQuery += ` [en: ${englishEntities.join(', ')}]`;
+    }
 
-    // 6. Signals
+    // 7. Signals
     const signals = extractSignals(enrichedQuery);
 
     return {

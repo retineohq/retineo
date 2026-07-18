@@ -4,6 +4,8 @@
  * Splits content into sections (headings) and chunks.
  */
 
+import { computeHash } from '../storage/cas.js';
+
 export interface Section {
   level: number;
   title: string;
@@ -19,6 +21,7 @@ export interface Chunk {
   charStart: number;
   charEnd: number;
   heading?: string;
+  contentHash?: string;
 }
 
 export interface L1Index {
@@ -32,8 +35,13 @@ export interface L1Result {
   index: L1Index;
 }
 
+export interface L1SourceContext {
+  uri: string;
+  mimeType: string;
+}
+
 export interface L1Generator {
-  generate(content: string): Promise<L1Result>;
+  generate(content: string, context?: L1SourceContext): Promise<L1Result>;
 }
 
 export interface L1GeneratorOptions {
@@ -49,6 +57,40 @@ const DEFAULT_OPTIONS: Required<L1GeneratorOptions> = {
 };
 
 const HEADING_RE = /^(#{1,6})\s+(.+)$/;
+
+function basenameFromUri(uri: string): string {
+  try {
+    const url = new URL(uri);
+    const pathname = url.pathname;
+    return pathname.split('/').pop() ?? uri;
+  } catch {
+    return uri.split('/').pop() ?? uri;
+  }
+}
+
+function humanizeFilename(name: string): string {
+  const withoutExt = name.replace(/\.[^.]+$/, '');
+  return withoutExt
+    .replace(/[-_]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function extractTitle(lines: string[], context?: L1SourceContext): string {
+  const firstHeading = parseHeadings(lines)[0];
+  if (firstHeading) {
+    return firstHeading.title;
+  }
+  const firstNonEmpty = lines.find((l) => l.trim().length > 0);
+  if (firstNonEmpty) {
+    return firstNonEmpty.trim();
+  }
+  if (context?.uri) {
+    const name = basenameFromUri(context.uri);
+    if (name) return humanizeFilename(name);
+  }
+  return 'Untitled Document';
+}
 
 function parseHeadings(lines: string[]): Array<{ level: number; title: string; lineIndex: number }> {
   const headings: Array<{ level: number; title: string; lineIndex: number }> = [];
@@ -110,96 +152,147 @@ function buildSectionTree(
   return root;
 }
 
+const BOUNDARY_RES = [
+  /^\d{4}-\d{2}-\d{2}/, // ISO date at line start
+  /^ECHO .+ COMPLETE/i,
+  /^STATUS:/i,
+  /^\*\*STATUS:\*\*/i,
+];
+
+function isBoundaryLine(line: string): boolean {
+  const trimmed = line.trim();
+  if (trimmed.length === 0) return false;
+  return BOUNDARY_RES.some((re) => re.test(trimmed));
+}
+
+function shouldSegmentPlainText(lines: string[]): boolean {
+  const nonEmpty = lines.filter((l) => l.trim().length > 0).length;
+  const markerCount = lines.filter(isBoundaryLine).length;
+  return markerCount >= 3 && markerCount / Math.max(nonEmpty, 1) >= 0.2;
+}
+
+function segmentPlainText(
+  lines: string[]
+): Array<{ level: number; title: string; lineIndex: number }> {
+  const headings: Array<{ level: number; title: string; lineIndex: number }> = [];
+  let prevBlank = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    const blank = trimmed.length === 0;
+    const boundary = isBoundaryLine(line);
+    const doubleBlank = blank && prevBlank;
+
+    if (boundary || doubleBlank) {
+      const title = boundary ? trimmed : `Segment ${headings.length + 1}`;
+      headings.push({ level: 2, title, lineIndex: i });
+    }
+
+    prevBlank = blank;
+  }
+
+  return headings;
+}
+
+function splitRangeIntoChunks(
+  lines: string[],
+  startLine: number,
+  endLine: number,
+  maxLinesPerChunk: number,
+  heading?: string,
+  idOffset = 1
+): Chunk[] {
+  const chunks: Chunk[] = [];
+  let chunkId = idOffset;
+  let currentStart = startLine;
+  let currentLineCount = 0;
+  let inCodeBlock = false;
+
+  for (let li = startLine; li < endLine; li++) {
+    const line = lines[li];
+    if (line.startsWith('```')) {
+      inCodeBlock = !inCodeBlock;
+    }
+
+    currentLineCount++;
+
+    const atEnd = li === endLine - 1;
+    const shouldSplit = currentLineCount >= maxLinesPerChunk && !inCodeBlock;
+
+    if (shouldSplit || atEnd) {
+      const chunkEnd = atEnd ? endLine : li + 1;
+      const text = lines.slice(currentStart, chunkEnd).join('\n');
+      chunks.push({
+        id: `chunk-${String(chunkId++).padStart(3, '0')}`,
+        lineStart: currentStart,
+        lineEnd: chunkEnd - 1,
+        charStart: lines.slice(0, currentStart).join('\n').length + (currentStart > 0 ? 1 : 0),
+        charEnd: lines.slice(0, chunkEnd).join('\n').length + (chunkEnd > 0 ? 1 : 0) - 1,
+        heading,
+        contentHash: computeHash(text),
+      });
+      currentStart = chunkEnd;
+      currentLineCount = 0;
+    }
+  }
+
+  return chunks;
+}
+
 function buildChunks(
   lines: string[],
   headings: Array<{ level: number; title: string; lineIndex: number }>,
   maxLinesPerChunk: number
 ): Chunk[] {
-  const chunks: Chunk[] = [];
+  if (lines.length === 0) return [];
 
+  // No headings: chunk the whole text by size.
   if (headings.length === 0) {
-    const text = lines.join('\n');
-    chunks.push({
-      id: 'chunk-001',
-      lineStart: 0,
-      lineEnd: lines.length - 1,
-      charStart: 0,
-      charEnd: text.length,
-    });
-    return chunks;
+    return splitRangeIntoChunks(lines, 0, lines.length, maxLinesPerChunk);
+  }
+
+  const chunks: Chunk[] = [];
+  const titleIsRoot = headings[0].level === 1;
+
+  // Single H1: chunk body after the title. The chunk starts at the H1 line so
+  // the marker is rendered right after the title in the L1 markdown.
+  if (titleIsRoot && headings.length === 1) {
+    const h = headings[0];
+    const bodyStart = h.lineIndex + 1;
+    if (bodyStart < lines.length) {
+      return splitRangeIntoChunks(lines, h.lineIndex, lines.length, maxLinesPerChunk, h.title);
+    }
+    return [];
   }
 
   let chunkId = 1;
-  let inCodeBlock = false;
-  const titleIsRoot = headings[0].level === 1;
 
-  // Chunk intro text before first non-title heading
+  // Intro text before the first non-title heading.
   if (titleIsRoot && headings.length > 1) {
     const introStart = 0;
     const introEnd = headings[1].lineIndex;
     if (introEnd > introStart) {
-      const text = lines.slice(introStart, introEnd).join('\n');
-      chunks.push({
-        id: `chunk-${String(chunkId++).padStart(3, '0')}`,
-        lineStart: introStart,
-        lineEnd: introEnd - 1,
-        charStart: 0,
-        charEnd: text.length,
-      });
+      const introChunks = splitRangeIntoChunks(lines, introStart, introEnd, maxLinesPerChunk);
+      for (const c of introChunks) {
+        c.id = `chunk-${String(chunkId++).padStart(3, '0')}`;
+      }
+      chunks.push(...introChunks);
     }
   }
 
   for (let hi = 0; hi < headings.length; hi++) {
     const h = headings[hi];
-    // Skip level-1 title chunk
+    // Skip the document title itself; its body is covered by the intro chunk.
     if (titleIsRoot && h.level === 1 && hi === 0) continue;
 
     const startLine = h.lineIndex;
     const endLine = headings[hi + 1]?.lineIndex ?? lines.length;
-    const sectionLines = endLine - startLine;
-
-    if (sectionLines <= maxLinesPerChunk) {
-      const text = lines.slice(startLine, endLine).join('\n');
-      chunks.push({
-        id: `chunk-${String(chunkId++).padStart(3, '0')}`,
-        lineStart: startLine,
-        lineEnd: endLine - 1,
-        charStart: lines.slice(0, startLine).join('\n').length + (startLine > 0 ? 1 : 0),
-        charEnd: lines.slice(0, endLine).join('\n').length + (endLine > 0 ? 1 : 0) - 1,
-        heading: h.title,
-      });
-    } else {
-      // Split long section into multiple chunks, respecting code blocks
-      let currentStart = startLine;
-      let currentLineCount = 0;
-
-      for (let li = startLine; li < endLine; li++) {
-        const line = lines[li];
-        if (line.startsWith('```')) {
-          inCodeBlock = !inCodeBlock;
-        }
-
-        currentLineCount++;
-
-        const atEnd = li === endLine - 1;
-        const shouldSplit = currentLineCount >= maxLinesPerChunk && !inCodeBlock;
-
-        if (shouldSplit || atEnd) {
-          const chunkEnd = atEnd ? endLine : li + 1;
-          const text = lines.slice(currentStart, chunkEnd).join('\n');
-          chunks.push({
-            id: `chunk-${String(chunkId++).padStart(3, '0')}`,
-            lineStart: currentStart,
-            lineEnd: chunkEnd - 1,
-            charStart: lines.slice(0, currentStart).join('\n').length + (currentStart > 0 ? 1 : 0),
-            charEnd: lines.slice(0, chunkEnd).join('\n').length + (chunkEnd > 0 ? 1 : 0) - 1,
-            heading: h.title,
-          });
-          currentStart = chunkEnd;
-          currentLineCount = 0;
-        }
-      }
+    const sectionChunks = splitRangeIntoChunks(lines, startLine, endLine, maxLinesPerChunk, h.title, chunkId);
+    for (const c of sectionChunks) {
+      c.id = `chunk-${String(chunkId++).padStart(3, '0')}`;
     }
+    chunks.push(...sectionChunks);
   }
 
   return chunks;
@@ -209,9 +302,9 @@ function buildL1Markdown(
   lines: string[],
   headings: Array<{ level: number; title: string; lineIndex: number }>,
   chunks: Chunk[],
+  title: string,
   opts: Required<L1GeneratorOptions>
 ): string {
-  const title = headings[0]?.title ?? 'Untitled Document';
   const parts: string[] = [
     '---',
     `generator: "${opts.generatorId}"`,
@@ -225,8 +318,14 @@ function buildL1Markdown(
   if (headings.length === 0) {
     parts.push('# ' + title);
     parts.push('');
-    parts.push('<!-- chunk: chunk-001 -->');
-    parts.push(lines.join('\n'));
+    let chunkIndex = 0;
+    for (let li = 0; li < lines.length; li++) {
+      if (chunkIndex < chunks.length && chunks[chunkIndex].lineStart === li) {
+        parts.push(`<!-- chunk: ${chunks[chunkIndex].id} -->`);
+        chunkIndex++;
+      }
+      parts.push(lines[li]);
+    }
     return parts.join('\n');
   }
 
@@ -263,17 +362,47 @@ export class DefaultL1Generator implements L1Generator {
     this.opts = { ...DEFAULT_OPTIONS, ...options };
   }
 
-  async generate(content: string): Promise<L1Result> {
+  async generate(content: string, context?: L1SourceContext): Promise<L1Result> {
+    const trimmed = content.trim();
+    if (trimmed.length === 0) {
+      const title = context?.uri ? humanizeFilename(basenameFromUri(context.uri)) : 'Untitled Document';
+      return {
+        markdown: [
+          '---',
+          `generator: "${this.opts.generatorId}"`,
+          `version: "${this.opts.version}"`,
+          'sectionCount: 0',
+          'chunkCount: 0',
+          'isEmpty: true',
+          '---',
+          '',
+          '# ' + title,
+        ].join('\n'),
+        index: {
+          title,
+          sections: [],
+          chunks: [],
+        },
+      };
+    }
+
     const lines = content.split('\n');
-    const headings = parseHeadings(lines);
+    let headings = parseHeadings(lines);
+
+    // For plain-text logs without markdown headings, try heuristic segmentation.
+    if (headings.length === 0 && shouldSegmentPlainText(lines)) {
+      headings = segmentPlainText(lines);
+    }
+
+    const title = extractTitle(lines, context);
     const sections = buildSectionTree(headings, lines.length);
     const chunks = buildChunks(lines, headings, this.opts.maxLinesPerChunk);
-    const markdown = buildL1Markdown(lines, headings, chunks, this.opts);
+    const markdown = buildL1Markdown(lines, headings, chunks, title, this.opts);
 
     return {
       markdown,
       index: {
-        title: headings[0]?.title,
+        title,
         sections,
         chunks,
       },

@@ -3,10 +3,7 @@
  * List, recover, and purge orphaned objects.
  */
 
-import { writeFile, mkdir } from 'fs/promises';
-import { existsSync } from 'fs';
-import path from 'path';
-import type { Hash, ContextNode } from '../domain/types.js';
+import type { Hash } from '../domain/types.js';
 import type { Registry, OrphanRecord } from '../storage/registry.js';
 import type { CASStorage } from '../storage/cas.js';
 import type { Logger } from '../utils/logger.js';
@@ -33,30 +30,18 @@ export class DefaultGhostRecoveryService implements GhostRecoveryService {
     return this.registry.listOrphans();
   }
 
-  async recover(hash: Hash, targetPath?: string): Promise<void> {
+  async recover(hash: Hash, _targetPath?: string): Promise<void> {
     const orphan = this.registry.getOrphan(hash);
     if (!orphan) {
       throw new Error(`No orphan found for hash ${hash}`);
     }
 
-    let nodeData: { node: ContextNode; artifacts: { content: string; meta: any } };
-    try {
-      nodeData = await this.cas.readObject(hash);
-    } catch {
-      throw new Error(`CAS object ${hash} not found — cannot recover`);
-    }
-    const destPath = targetPath ?? orphan.l2Path ?? orphan.originalSourceId;
-
-    // Ensure parent directory exists
-    const destDir = path.dirname(destPath);
-    if (!existsSync(destDir)) {
-      await mkdir(destDir, { recursive: true });
-    }
-
-    // Write recovered content
-    await writeFile(destPath, nodeData.artifacts.content, 'utf-8');
     this.registry.recoverOrphan(hash);
-    this.logger.info('ghost.recover.success', { hash, targetPath: destPath });
+    this.registry.updateSource(orphan.sourceId, orphan.externalId, {
+      status: 'active',
+      deletedAt: null,
+    });
+    this.logger.info('ghost.recover.success', { hash, sourceId: orphan.sourceId, externalId: orphan.externalId });
   }
 
   async purge(olderThanDays: number): Promise<number> {

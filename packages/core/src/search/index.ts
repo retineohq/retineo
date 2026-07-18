@@ -4,5 +4,7 @@
  */
 
 export * from './query-analyzer.js';
+export * from './query-translator.js';
 export * from './retrieval-service.js';
 export * from './context-assembler.js';
+export * from './similarity-service.js';

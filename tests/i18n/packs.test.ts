@@ -57,6 +57,13 @@ describe('DefaultLanguagePackRegistry', () => {
     expect(prompt).toContain('VAGUE');
   });
 
+  it('exposes intent patterns for built-in packs', () => {
+    expect(enPack.intentPatterns).toBeDefined();
+    expect(ruPack.intentPatterns).toBeDefined();
+    expect(zhPack.intentPatterns).toBeDefined();
+    expect(ruPack.intentPatterns!.vague!.length).toBeGreaterThan(0);
+  });
+
   it('returns undefined for unknown code', () => {
     expect(registry.get('ja')).toBeUndefined();
     expect(registry.resolvePrompt('ja', 'intentClassification')).toBeUndefined();

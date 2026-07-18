@@ -12,24 +12,14 @@ function makeDeps(): BridgeHandlersDeps {
     retrievalService: { search: async () => { throw new Error('not implemented'); } } as any,
     contextAssembler: { assemble: async () => { throw new Error('not implemented'); } } as any,
     ingestionService: {
-      async ingestFile(filePath: string) {
-        return {
-          node: {
-            id: 'abc123',
-            sourceRef: { protocol: 'file' as const, uri: filePath, mimeType: 'text/plain' },
-            childrenIds: [],
-            depth: 0,
-            artifacts: {},
-            build: { schemaVersion: 1, nodeVersion: 1, rawHash: 'mock', contentHash: 'mock', generators: { l1: { id: '', version: '' }, l2: { id: '', version: '' }, embedding: { id: '', version: '' } }, buildTimestamp: new Date().toISOString() },
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          },
-        };
+      async ingestFile() {
+        return { contentHash: 'abc123', action: 'created' as const };
       },
     },
     registry: { listSources: () => [], getPendingJobs: () => [] } as any,
     cas: { getObjectPath: () => '', exists: () => false } as any,
     configManager: { load: async () => ({} as any), save: async () => {} } as any,
+    auditService: { log: async () => {} } as any,
     version: '0.1.0',
     indexDir: '/tmp/index',
   };
@@ -68,6 +58,7 @@ describe('POST /v1/ingest', () => {
     });
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.rootHash).toBe('abc123');
+    expect(body.contentHash).toBe('abc123');
+    expect(body.action).toBe('created');
   });
 });

@@ -57,9 +57,23 @@ export const RETINEO_GET_NODE_TOOL: MCPTool = {
   },
 };
 
+export const RETINEO_FIND_SIMILAR_TOOL: MCPTool = {
+  name: 'retineo_find_similar',
+  description: 'Find documents semantically similar to a given document',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      hash: { type: 'string', description: 'Content hash of the source document' },
+      topK: { type: 'number', description: 'Number of results (default 5)' },
+    },
+    required: ['hash'],
+  },
+};
+
 export const ALL_TOOLS: MCPTool[] = [
   RETINEO_SEARCH_TOOL,
   RETINEO_INGEST_TOOL,
   RETINEO_STATUS_TOOL,
   RETINEO_GET_NODE_TOOL,
+  RETINEO_FIND_SIMILAR_TOOL,
 ];

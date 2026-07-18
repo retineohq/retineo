@@ -47,6 +47,7 @@ function makeDeps(): BridgeHandlersDeps {
     registry: { listSources: () => [], getPendingJobs: () => [] } as any,
     cas: { getObjectPath: () => '', exists: () => false } as any,
     configManager: { load: async () => ({} as any), save: async () => {} } as any,
+    auditService: { log: async () => {} } as any,
     version: '0.1.0',
     indexDir: '/tmp/index',
   };

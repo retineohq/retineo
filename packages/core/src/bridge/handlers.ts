@@ -16,15 +16,21 @@ import type {
 import type { QueryAnalyzer } from '../search/query-analyzer.js';
 import type { RetrievalService } from '../search/retrieval-service.js';
 import type { ContextAssembler } from '../search/context-assembler.js';
-import type { IngestionService } from '../adapters/ingestion.js';
+import type { IngestionService } from '../services/ingestion-service.js';
 import type { Registry } from '../storage/registry.js';
 import type { CASStorage } from '../storage/cas.js';
 import type { ConfigManager } from '../storage/config.js';
+import type { AuditService } from '../storage/audit.js';
 import type { JobRecord } from '../domain/types.js';
+import type { HealthAnalyzer } from '../health/health-analyzer.js';
+import type { HealthReport } from '../health/types.js';
+import type { SimilarityService } from '../search/similarity-service.js';
+import { BaseRetineoError } from '../utils/errors.js';
 import { createSSEStream } from './sse.js';
 import { readFile, existsSync } from 'fs';
 import { promisify } from 'util';
 import path from 'path';
+import crypto from 'crypto';
 
 const readFileAsync = promisify(readFile);
 
@@ -36,6 +42,9 @@ export interface BridgeHandlersDeps {
   registry: Registry;
   cas: CASStorage;
   configManager: ConfigManager;
+  auditService: AuditService;
+  healthAnalyzer?: HealthAnalyzer;
+  similarityService?: SimilarityService;
   version: string;
   indexDir: string;
 }
@@ -47,7 +56,46 @@ function errorReply(reply: FastifyReply, status: number, code: string, message: 
   return reply.status(status).send(body);
 }
 
+function handleKnownError(reply: FastifyReply, err: unknown) {
+  if (err instanceof BaseRetineoError) {
+    return reply.status(err.statusCode).send({
+      error: {
+        code: err.code,
+        message: err.message,
+        details: err.details,
+      },
+    });
+  }
+  const msg = err instanceof Error ? err.message : String(err);
+  return errorReply(reply, 500, 'INTERNAL_ERROR', msg);
+}
+
 export function createHandlers(deps: BridgeHandlersDeps) {
+  type HealthJob = {
+    status: 'pending' | 'running' | 'completed' | 'failed';
+    report?: HealthReport;
+    error?: string;
+  };
+  const healthJobs = new Map<string, HealthJob>();
+
+  async function runHealthJob(jobId: string, sourceId: string) {
+    const job = healthJobs.get(jobId);
+    if (!job) return;
+    job.status = 'running';
+    try {
+      await deps.ingestionService.syncSource(sourceId);
+      if (!deps.healthAnalyzer) {
+        throw new Error('Health analyzer is not configured');
+      }
+      const report = await deps.healthAnalyzer.analyze(sourceId);
+      job.report = report;
+      job.status = 'completed';
+    } catch (err) {
+      job.error = err instanceof Error ? err.message : String(err);
+      job.status = 'failed';
+    }
+  }
+
   return {
     async search(request: FastifyRequest<{ Body: SearchRequest }>, reply: FastifyReply) {
       const start = Date.now();
@@ -62,6 +110,11 @@ export function createHandlers(deps: BridgeHandlersDeps) {
           maxTokens: options?.maxTokens,
         });
         const durationMs = Date.now() - start;
+        await deps.auditService.log('search', undefined, undefined, {
+          query,
+          mode: options?.mode ?? 'semantic',
+          resultCount: results.selected.length,
+        });
         return reply.send({
           query,
           language: analyzed.language,
@@ -72,8 +125,7 @@ export function createHandlers(deps: BridgeHandlersDeps) {
           durationMs,
         });
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        return errorReply(reply, 500, 'SEARCH_FAILED', msg);
+        return handleKnownError(reply, err);
       }
     },
 
@@ -103,8 +155,12 @@ export function createHandlers(deps: BridgeHandlersDeps) {
         stream.write('complete', { event: 'complete', assembled });
         stream.close();
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        stream.write('error', { event: 'error', message: msg });
+        if (err instanceof BaseRetineoError) {
+          stream.write('error', { event: 'error', code: err.code, message: err.message });
+        } else {
+          const msg = err instanceof Error ? err.message : String(err);
+          stream.write('error', { event: 'error', message: msg });
+        }
         stream.close();
       }
     },
@@ -116,16 +172,20 @@ export function createHandlers(deps: BridgeHandlersDeps) {
       }
       try {
         const result = await deps.ingestionService.ingestFile(sourcePath);
-        const sourceId = result.node.sourceRef.uri; // simplistic mapping
-        const jobs: string[] = [];
-        // Jobs were queued inside ingestion service; we don't have IDs here in MVP
+        await deps.auditService.log('ingest', result.contentHash, undefined, { externalId: sourcePath });
+        const sourceId = 'filesystem';
         return reply.send({
           sourceId,
-          rootHash: result.node.id,
-          status: result.skipped ? 'skipped' : 'queued',
-          jobs,
+          contentHash: result.contentHash,
+          action: result.action,
+          status: result.action === 'unchanged' ? 'skipped' : 'queued',
         });
       } catch (err) {
+        if (err instanceof BaseRetineoError) {
+          return reply.status(err.statusCode).send({
+            error: { code: err.code, message: err.message, details: { ...err.details, sourcePath, adapterId } },
+          });
+        }
         const msg = err instanceof Error ? err.message : String(err);
         return errorReply(reply, 422, 'INGEST_FAILED', msg, { sourcePath, adapterId });
       }
@@ -169,8 +229,7 @@ export function createHandlers(deps: BridgeHandlersDeps) {
         };
         return reply.send(body);
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        return errorReply(reply, 500, 'INTERNAL_ERROR', msg);
+        return handleKnownError(reply, err);
       }
     },
 
@@ -191,45 +250,44 @@ export function createHandlers(deps: BridgeHandlersDeps) {
         const buildRaw = await readFileAsync(path.join(objPath, 'node.json'), 'utf-8');
         return reply.send({ node, artifacts, build: JSON.parse(buildRaw) });
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        return errorReply(reply, 500, 'INTERNAL_ERROR', msg);
+        return handleKnownError(reply, err);
       }
     },
 
     async listNodes(_request: FastifyRequest, reply: FastifyReply) {
       try {
         const sources = deps.registry.listSources();
-        const nodes: Array<{ hash: string; uri: string; lastSeenAt: string }> = [];
+        const nodes: Array<{ sourceId: string; externalId: string; contentHash: string; status: string; lastSeenAt: string }> = [];
         for (const src of sources) {
-          if (src.rootHash) {
-            nodes.push({
-              hash: src.rootHash,
-              uri: src.uri,
-              lastSeenAt: src.lastSeenAt,
-            });
-          }
+          nodes.push({
+            sourceId: src.sourceId,
+            externalId: src.externalId,
+            contentHash: src.contentHash,
+            status: src.status,
+            lastSeenAt: new Date(src.lastSeenAt).toISOString(),
+          });
         }
         return reply.send({ nodes, total: nodes.length });
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        return errorReply(reply, 500, 'INTERNAL_ERROR', msg);
+        return handleKnownError(reply, err);
       }
     },
 
     async getSource(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
       const { id } = request.params;
-      const source = deps.registry.getSource(id);
+      // PR1: filesystem-only mapping; PR3 will introduce composite source keys
+      const source = deps.registry.get('filesystem', id);
       if (!source) {
         return errorReply(reply, 404, 'NOT_FOUND', `Source not found: ${id}`);
       }
       const body: SourceResponse = {
-        id: source.id,
-        protocol: source.protocol,
-        uri: source.uri,
-        mimeType: source.mimeType,
-        adapterId: source.adapterId,
-        rootHash: source.rootHash,
-        lastSeenAt: source.lastSeenAt,
+        sourceId: source.sourceId,
+        externalId: source.externalId,
+        contentHash: source.contentHash,
+        etag: source.etag,
+        status: source.status,
+        deletedAt: source.deletedAt,
+        lastSeenAt: new Date(source.lastSeenAt).toISOString(),
       };
       return reply.send(body);
     },
@@ -252,6 +310,61 @@ export function createHandlers(deps: BridgeHandlersDeps) {
       return reply.send(body);
     },
 
+    async health(request: FastifyRequest<{ Body: { sourceId?: string; path?: string } }>, reply: FastifyReply) {
+      const { sourceId, path: sourcePath } = request.body ?? {};
+      if (!sourceId && !sourcePath) {
+        return errorReply(reply, 400, 'INVALID_REQUEST', 'sourceId or path is required');
+      }
+      if (!deps.healthAnalyzer) {
+        return errorReply(reply, 503, 'NOT_CONFIGURED', 'Health analyzer is not configured');
+      }
+
+      try {
+        const jobId = crypto.randomUUID();
+        healthJobs.set(jobId, { status: 'pending' });
+
+        let resolvedSourceId = sourceId;
+        if (!resolvedSourceId && sourcePath) {
+          const syncResult = await deps.ingestionService.syncDirectory(sourcePath);
+          resolvedSourceId = syncResult.sourceId;
+        }
+
+        if (!resolvedSourceId) {
+          healthJobs.delete(jobId);
+          return errorReply(reply, 400, 'INVALID_REQUEST', 'Could not resolve source id');
+        }
+
+        void runHealthJob(jobId, resolvedSourceId);
+        return reply.send({ jobId, status: 'pending' });
+      } catch (err) {
+        return handleKnownError(reply, err);
+      }
+    },
+
+    async getHealthJob(request: FastifyRequest<{ Params: { jobId: string } }>, reply: FastifyReply) {
+      const { jobId } = request.params;
+      const job = healthJobs.get(jobId);
+      if (!job) {
+        return errorReply(reply, 404, 'NOT_FOUND', `Health job not found: ${jobId}`);
+      }
+      return reply.send({ jobId, status: job.status });
+    },
+
+    async getReport(request: FastifyRequest<{ Params: { jobId: string } }>, reply: FastifyReply) {
+      const { jobId } = request.params;
+      const job = healthJobs.get(jobId);
+      if (!job) {
+        return errorReply(reply, 404, 'NOT_FOUND', `Health job not found: ${jobId}`);
+      }
+      if (job.status === 'pending' || job.status === 'running') {
+        return reply.status(202).send({ jobId, status: job.status });
+      }
+      if (job.status === 'failed') {
+        return errorReply(reply, 500, 'HEALTH_FAILED', job.error ?? 'Health analysis failed');
+      }
+      return reply.send({ jobId, status: job.status, report: job.report });
+    },
+
     async jobEvents(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
       const { id } = request.params;
       const stream = createSSEStream(reply);
@@ -259,6 +372,27 @@ export function createHandlers(deps: BridgeHandlersDeps) {
       stream.write('progress', { event: 'progress', jobId: id, percent: 100, stage: 'done' });
       stream.write('complete', { event: 'complete', jobId: id, result: {} });
       stream.close();
+    },
+
+    async similar(request: FastifyRequest<{ Body: import('./types.js').SimilarRequest }>, reply: FastifyReply) {
+      const { hash, topK, threshold, includeGhosts } = request.body;
+      if (!hash || typeof hash !== 'string') {
+        return errorReply(reply, 400, 'INVALID_REQUEST', 'hash is required');
+      }
+      if (!deps.similarityService) {
+        return errorReply(reply, 503, 'NOT_CONFIGURED', 'Similarity service is not configured');
+      }
+      try {
+        const results = await deps.similarityService.findSimilar(hash, {
+          topK,
+          threshold,
+          includeGhosts,
+        });
+        await deps.auditService.log('similar', hash, undefined, { resultCount: results.length });
+        return reply.send({ results });
+      } catch (err) {
+        return handleKnownError(reply, err);
+      }
     },
   };
 }

@@ -49,6 +49,7 @@ function makeDeps(): MCPHandlersDeps {
           node: {
             id: 'hash123',
             sourceRef: { protocol: 'file' as const, uri: filePath, mimeType: 'text/plain' },
+            sourcePath: filePath,
             childrenIds: [],
             depth: 0,
             artifacts: {},
