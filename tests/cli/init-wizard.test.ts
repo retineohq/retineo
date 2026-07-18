@@ -183,15 +183,21 @@ describe('init wizard — interactive exit', () => {
     const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
 
-    // Mock ask/choose/confirm to immediately return mock-mode selections
-    const promptMod = await import('../../packages/core/src/cli/prompt.js');
-    // ask needs to return '3' so choose picks the mock option (index 2)
-    const askSpy = vi.spyOn(promptMod, 'ask').mockResolvedValue('3');
-    const chooseSpy = vi.spyOn(promptMod, 'choose').mockResolvedValue('mock');
-    const confirmSpy = vi.spyOn(promptMod, 'confirm').mockResolvedValue(false);
-
     const testDir = path.join(os.tmpdir(), 'retineo-init-exit-' + Date.now());
     process.env.RETINEO_DATA_DIR = testDir;
+
+    // Mock ask/choose/confirm to immediately return mock-mode selections
+    const promptMod = await import('../../packages/core/src/cli/prompt.js');
+    // Route answers by question so the data directory is the temp dir, not '3'.
+    const askSpy = vi.spyOn(promptMod, 'ask').mockImplementation((options: { question?: string }) => {
+      const q = options.question ?? '';
+      if (q.includes('directory')) return Promise.resolve(testDir);
+      if (q.includes('port')) return Promise.resolve('37891');
+      if (q.includes('model')) return Promise.resolve('1');
+      return Promise.resolve('');
+    });
+    const chooseSpy = vi.spyOn(promptMod, 'choose').mockResolvedValue('mock');
+    const confirmSpy = vi.spyOn(promptMod, 'confirm').mockResolvedValue(false);
 
     const cmds = new CLICommands(makeDeps());
     // interactive init will use mocked prompts and hit process.exit(0) at end

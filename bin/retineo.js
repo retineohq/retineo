@@ -16,6 +16,7 @@ import { DefaultIngestionService } from '../dist/services/ingestion-service.js';
 import { DefaultQueryAnalyzer } from '../dist/search/query-analyzer.js';
 import { DefaultRetrievalService } from '../dist/search/retrieval-service.js';
 import { DefaultContextAssembler } from '../dist/search/context-assembler.js';
+import { createSimilarityService } from '../dist/search/similarity-service.js';
 import { DefaultLLMProviderFactory, DefaultEmbeddingProviderFactory } from '../dist/llm/factory.js';
 import { DefaultCompilationPipeline } from '../dist/layers/pipeline.js';
 import { DefaultHealthAnalyzer } from '../dist/health/health-analyzer.js';
@@ -203,6 +204,12 @@ async function main() {
     config: config.search,
     logger,
   });
+  const similarityService = createSimilarityService({
+    retrievalService,
+    registry,
+    indexDir: path.join(resolvedDataDir, 'index'),
+    logger,
+  });
   const contextAssembler = new DefaultContextAssembler({ config: config.search });
 
   // --- Pipeline ---
@@ -256,6 +263,7 @@ async function main() {
     cas,
     auditService: registry,
     healthAnalyzer,
+    similarityService,
   };
 
   const program = createCLI(deps);

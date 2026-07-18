@@ -6,3 +6,4 @@
 export * from './domain/types.js';
 export * from './domain/schemas.js';
 export * from './adapters/protocol.js';
+export * from './search/similarity-service.js';

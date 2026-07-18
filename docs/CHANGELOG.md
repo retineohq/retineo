@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.6.1] - 2026-07-17
+
+### Added
+- **Document similarity API:** `SimilarityService.findSimilar(contentHash)` returns the top-K semantically similar documents using the existing L3/HNSW index.
+  - `packages/core/src/search/similarity-service.ts` exposes `SimilarOptions`, `SimilarDocument`, and `createSimilarityService()`.
+  - Aggregates chunk-level hits into document-level scores (mean of top-3 chunk similarities), applies threshold filtering, and resolves `sourcePath` via the Registry.
+  - Unknown hashes return an empty array; ghosts are excluded by default.
+- **HTTP API:** `POST /v1/similar` accepts `hash`, optional `topK`, `threshold`, and `includeGhosts`, returns `{ results: SimilarDocument[] }`.
+- **MCP tool:** `retineo_find_similar` finds similar documents by content hash.
+- **CLI command:** `retineo similar <hash> [--top-k <n>] [--threshold <n>] [--json]` prints a table or raw JSON.
+
+### Tests
+- Added `tests/search/similarity-service.test.ts`, `tests/bridge/similarity-api.test.ts`, `tests/mcp/similarity-mcp.test.ts`, `tests/cli/similarity-cli.test.ts`.
+- 458 tests passing, 0 skipped.
+
+### Documentation
+- Updated `docs/API.md`, `docs/CLI.md`, and `README.md` with the new similarity capability.
+
 ## [0.6.0] - 2026-07-17
 
 ### Added

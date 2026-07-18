@@ -24,6 +24,7 @@ import type { AuditService } from '../storage/audit.js';
 import type { JobRecord } from '../domain/types.js';
 import type { HealthAnalyzer } from '../health/health-analyzer.js';
 import type { HealthReport } from '../health/types.js';
+import type { SimilarityService } from '../search/similarity-service.js';
 import { BaseRetineoError } from '../utils/errors.js';
 import { createSSEStream } from './sse.js';
 import { readFile, existsSync } from 'fs';
@@ -43,6 +44,7 @@ export interface BridgeHandlersDeps {
   configManager: ConfigManager;
   auditService: AuditService;
   healthAnalyzer?: HealthAnalyzer;
+  similarityService?: SimilarityService;
   version: string;
   indexDir: string;
 }
@@ -370,6 +372,27 @@ export function createHandlers(deps: BridgeHandlersDeps) {
       stream.write('progress', { event: 'progress', jobId: id, percent: 100, stage: 'done' });
       stream.write('complete', { event: 'complete', jobId: id, result: {} });
       stream.close();
+    },
+
+    async similar(request: FastifyRequest<{ Body: import('./types.js').SimilarRequest }>, reply: FastifyReply) {
+      const { hash, topK, threshold, includeGhosts } = request.body;
+      if (!hash || typeof hash !== 'string') {
+        return errorReply(reply, 400, 'INVALID_REQUEST', 'hash is required');
+      }
+      if (!deps.similarityService) {
+        return errorReply(reply, 503, 'NOT_CONFIGURED', 'Similarity service is not configured');
+      }
+      try {
+        const results = await deps.similarityService.findSimilar(hash, {
+          topK,
+          threshold,
+          includeGhosts,
+        });
+        await deps.auditService.log('similar', hash, undefined, { resultCount: results.length });
+        return reply.send({ results });
+      } catch (err) {
+        return handleKnownError(reply, err);
+      }
     },
   };
 }

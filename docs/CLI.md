@@ -86,6 +86,18 @@ retineo search "machine learning"
 retineo search "deep learning" --language en --mode hybrid --top-k 10 --json
 ```
 
+### `retineo similar <hash>`
+
+Find documents semantically similar to a given document.
+
+```bash
+retineo similar <hash>
+retineo similar <hash> --top-k 10 --threshold 0.8
+retineo similar <hash> --json
+```
+
+Default output is a table of `contentHash | similarity | sourcePath`. Use `--json` for raw `SimilarDocument[]`. Exit code is `0` for empty results, `1` if the index is empty (run `retineo ingest <path>` first).
+
 ### `retineo status`
 
 Show engine status.

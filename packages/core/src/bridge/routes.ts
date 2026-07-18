@@ -14,6 +14,7 @@ export async function registerRoutes(fastify: FastifyInstance, deps: BridgeHandl
 
   fastify.post('/v1/search', handlers.search);
   fastify.post('/v1/search/stream', handlers.searchStream);
+  fastify.post('/v1/similar', handlers.similar);
   fastify.post('/v1/ingest', handlers.ingest);
   fastify.post('/v1/health', handlers.health);
   fastify.get('/v1/health/:jobId', handlers.getHealthJob);

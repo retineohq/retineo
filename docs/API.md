@@ -34,6 +34,36 @@ Search the knowledge base.
 }
 ```
 
+### `POST /v1/similar`
+
+Find documents semantically similar to a given document by `contentHash`.
+
+**Request body:**
+```json
+{
+  "hash": "sha256 contentHash, required",
+  "topK": 5,
+  "threshold": 0.75,
+  "includeGhosts": false
+}
+```
+
+**Response:**
+```json
+{
+  "results": [
+    {
+      "contentHash": "sha256",
+      "sourcePath": "/path/to/doc.md",
+      "similarity": 0.9123,
+      "matchedChunks": 2
+    }
+  ]
+}
+```
+
+Returns `400` when `hash` is missing.
+
 ### `POST /v1/search/stream`
 
 Stream search assembly events via SSE.

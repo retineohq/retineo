@@ -16,6 +16,7 @@ import { DefaultIngestionService } from '../dist/adapters/ingestion.js';
 import { DefaultQueryAnalyzer } from '../dist/search/query-analyzer.js';
 import { DefaultRetrievalService } from '../dist/search/retrieval-service.js';
 import { DefaultContextAssembler } from '../dist/search/context-assembler.js';
+import { createSimilarityService } from '../dist/search/similarity-service.js';
 import { MockLLMProvider } from '../dist/llm/providers/mock.js';
 import { createLogger } from '../dist/utils/logger.js';
 import path from 'path';
@@ -86,6 +87,12 @@ async function main() {
     config: config.search,
     logger,
   });
+  const similarityService = createSimilarityService({
+    retrievalService,
+    registry,
+    indexDir: path.join(dataDir, 'index'),
+    logger,
+  });
 
   const contextAssembler = new DefaultContextAssembler({ config: config.search });
 
@@ -97,6 +104,7 @@ async function main() {
       ingestionService,
       registry,
       cas,
+      similarityService,
       version: VERSION,
     },
     logger,

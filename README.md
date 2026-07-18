@@ -4,9 +4,9 @@
 [![CI](https://github.com/retineohq/retineo/actions/workflows/ci.yml/badge.svg)](https://github.com/retineohq/retineo/actions)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-**Version:** 0.6.0  
+**Version:** 0.6.1  
 **License:** Apache 2.0  
-**Status:** Production-ready — 444 tests passing
+**Status:** Production-ready — 458 tests passing
 
 ## What is Retineo Core?
 
@@ -42,6 +42,7 @@ retineo init      # create ~/.retineo/ config
 retineo status    # check engine status
 retineo ingest ./my-document.pdf
 retineo search "semantic search query"
+retineo similar <contentHash>   # find semantically similar documents
 retineo health ./my-notes       # diagnostic memory health report
 ```
 

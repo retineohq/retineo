@@ -49,6 +49,16 @@ export function createCLI(deps: CLICommandsDeps): Command {
     });
 
   program
+    .command('similar <hash>')
+    .description('Find documents semantically similar to a given document')
+    .option('-k, --top-k <n>', 'Number of results', parseInt)
+    .option('--threshold <n>', 'Minimum similarity threshold', parseFloat)
+    .option('--json', 'Output raw JSON')
+    .action(async (hash: string, options: { topK?: number; threshold?: number; json?: boolean }) => {
+      await commands.similar(hash, options);
+    });
+
+  program
     .command('status')
     .description('Show engine status')
     .action(async () => {

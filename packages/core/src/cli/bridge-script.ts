@@ -16,6 +16,7 @@ import { DefaultIngestionService } from '../services/ingestion-service.js';
 import { DefaultQueryAnalyzer } from '../search/query-analyzer.js';
 import { DefaultRetrievalService } from '../search/retrieval-service.js';
 import { DefaultContextAssembler } from '../search/context-assembler.js';
+import { createSimilarityService } from '../search/similarity-service.js';
 import { DefaultLLMProviderFactory, DefaultEmbeddingProviderFactory } from '../llm/factory.js';
 import { FileSecretsManager } from '../storage/secrets.js';
 import { DefaultCompilationPipeline } from '../layers/pipeline.js';
@@ -83,6 +84,12 @@ export async function startBridgeServices(): Promise<RunningBridgeServices> {
     config: config.search,
     logger,
   });
+  const similarityService = createSimilarityService({
+    retrievalService,
+    registry,
+    indexDir,
+    logger,
+  });
   const contextAssembler = new DefaultContextAssembler({ config: config.search });
   const contextNodeRepository = new DefaultContextNodeRepository(cas, registry);
 
@@ -132,6 +139,7 @@ export async function startBridgeServices(): Promise<RunningBridgeServices> {
       version: '0.1.0',
       indexDir,
       healthAnalyzer,
+      similarityService,
     },
     healthDeps: {
       healthService: new DefaultHealthService({ registry, cas, llmProvider, indexDir, shutdownManager }),

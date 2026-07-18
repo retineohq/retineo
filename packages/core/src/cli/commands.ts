@@ -9,6 +9,7 @@ import type { IngestionService, IngestResult, SyncResult } from '../services/ing
 import type { RetrievalService } from '../search/retrieval-service.js';
 import type { QueryAnalyzer, QueryIntent } from '../search/query-analyzer.js';
 import type { ContextAssembler } from '../search/context-assembler.js';
+import type { SimilarityService } from '../search/similarity-service.js';
 import type { Registry } from '../storage/registry.js';
 import type { ConfigManager, RetineoConfig, ProviderConfigEntry } from '../storage/config.js';
 import type { CompilationPipeline } from '../layers/pipeline.js';
@@ -64,6 +65,12 @@ export interface SearchCLIOptions {
   intent?: QueryIntent;
 }
 
+export interface SimilarCLIOptions {
+  topK?: number;
+  threshold?: number;
+  json?: boolean;
+}
+
 export interface InitCLIOptions {
   nonInteractive?: boolean;
   llmModel?: string;
@@ -82,6 +89,7 @@ export interface CLICommandsDeps {
   cas: CASStorage;
   auditService: AuditService;
   healthAnalyzer?: HealthAnalyzer;
+  similarityService?: SimilarityService;
   version: string;
 }
 
@@ -279,6 +287,57 @@ export class CLICommands {
       documentHits: docHits,
     };
     console.log(formatSearchResult(payload, { json: options?.json }));
+  }
+
+  async similar(hash: string, options?: SimilarCLIOptions): Promise<void> {
+    if (!this.deps.similarityService) {
+      console.error('Similarity service is not configured.');
+      process.exitCode = 1;
+      return;
+    }
+
+    const cfg = await this.deps.configManager.load();
+    const { join } = await import('path');
+    const { existsSync, readFileSync } = await import('fs');
+    const embeddingsPath = join(cfg.dataDir, 'index', 'embeddings.jsonl');
+    let vectorCount = 0;
+    if (existsSync(embeddingsPath)) {
+      const raw = readFileSync(embeddingsPath, 'utf-8').trim();
+      if (raw) {
+        vectorCount = raw.split('\n').filter((l: string) => l.trim()).length;
+      }
+    }
+    if (vectorCount === 0) {
+      console.error('Index is empty. Run `retineo ingest <path>` first.');
+      process.exitCode = 1;
+      return;
+    }
+
+    const results = await this.deps.similarityService.findSimilar(hash, {
+      topK: options?.topK,
+      threshold: options?.threshold,
+    });
+
+    if (options?.json) {
+      console.log(JSON.stringify(results, null, 2));
+      return;
+    }
+
+    if (results.length === 0) {
+      console.log('No similar documents found.');
+      return;
+    }
+
+    const lines: string[] = [];
+    lines.push('contentHash                          | similarity | sourcePath');
+    lines.push('─────────────────────────────────────┬────────────┬───────────');
+    for (const doc of results) {
+      const hashCol = doc.contentHash.slice(0, 36).padEnd(36, ' ');
+      const simCol = doc.similarity.toFixed(4).padStart(10, ' ');
+      const pathCol = doc.sourcePath ?? '';
+      lines.push(`${hashCol} | ${simCol} | ${pathCol}`);
+    }
+    console.log(lines.join('\n'));
   }
 
   async status(): Promise<void> {

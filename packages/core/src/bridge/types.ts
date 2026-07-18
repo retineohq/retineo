@@ -107,6 +107,22 @@ export interface HealthRequest {
   path?: string;
 }
 
+export interface SimilarRequest {
+  hash: string;
+  topK?: number;
+  threshold?: number;
+  includeGhosts?: boolean;
+}
+
+export interface SimilarResponse {
+  results: Array<{
+    contentHash: string;
+    sourcePath?: string;
+    similarity: number;
+    matchedChunks: number;
+  }>;
+}
+
 export interface HealthJobResponse {
   jobId: string;
   status: 'pending' | 'running' | 'completed' | 'failed';
