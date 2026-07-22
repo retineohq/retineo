@@ -16,6 +16,7 @@ export interface SimilarOptions {
   topK?: number;          // default 5
   threshold?: number;     // default 0.75
   includeGhosts?: boolean; // default false
+  mode?: 'approx' | 'exact'; // default 'approx' — current HNSW behavior; 'exact' forces brute-force cosine for deterministic results
 }
 
 export interface SimilarDocument {
@@ -130,7 +131,8 @@ class DefaultSimilarityService implements SimilarityService {
 
     for (const queryChunk of queryChunks) {
       let hits: Array<{ hash: string; distance: number }>;
-      if (hnswIndex && hnswIndex.size() > 0) {
+      const useExact = options.mode === 'exact';
+      if (!useExact && hnswIndex && hnswIndex.size() > 0) {
         hits = hnswIndex.search(queryChunk.vector, topK * oversample);
       } else {
         hits = this.bruteForceSearch(queryChunk.vector, records, topK * oversample);

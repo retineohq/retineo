@@ -141,7 +141,7 @@ const core = await createCore({ dataDir: '/path/to/.retineo' });
 await core.ingest('/vault');                       // → IngestResult
 const report = await core.health();                // → HealthReport
 const docs = await core.listDocuments();           // → DocumentSummary[]
-const similar = await core.findSimilar(hash, { topK: 5, threshold: 0.8 }); // → SimilarDocument[]
+const similar = await core.findSimilar(hash, { topK: 5, threshold: 0.8, mode: 'exact' }); // → SimilarDocument[]
 const node = await core.getNode(hash);             // → NodeArtifacts | null
 await core.close();                                // release DB handles, workers, HNSW
 ```

@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.6.3] - 2026-07-22
+
+### Added
+- `findSimilar` / `SimilarOptions.mode` — new `mode: 'approx' | 'exact'` option. Default `'approx'` preserves current HNSW behavior. `'exact'` forces brute-force cosine similarity for fully deterministic, reproducible neighbor results.
+
+### Documentation
+- Added `mode` option reference to `docs/API.md`.
+
+### Tests
+- Added `tests/search/similarity-exact-mode.test.ts`: 7 new tests covering exact mode, determinism (including across index reload), tie-breaking, empty index, unknown hash, ghost filtering, and HNSW default.
+
+### Changed
+- Nothing. This release is purely additive.
+
+### Deprecated
+- Nothing.
+
 ## [0.6.2] - 2026-07-22
 
 ### Added

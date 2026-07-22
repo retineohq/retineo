@@ -319,6 +319,10 @@ interface NodeArtifacts {
 
 `HealthReport` is the same type used by `retineo health` and the `/v1/report/:jobId` endpoint. `SimilarOptions` and `SimilarDocument` match `SimilarityService`.
 
+`SimilarOptions` supports an optional `mode` field:
+- `'approx'` (default) — uses the HNSW approximate nearest-neighbor index. Fast on large corpora, but results may vary slightly between index rebuilds.
+- `'exact'` — uses brute-force cosine similarity (scan all vectors). Slower but fully deterministic: same embeddings always produce identical rankings. Recommended when reproducibility matters (diagnostics, test suites, small-to-medium corpora).
+
 ## Errors
 
 All errors return structured JSON:
