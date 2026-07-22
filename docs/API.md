@@ -246,6 +246,79 @@ Get job by ID.
 
 SSE stream of job progress.
 
+## Programmatic API
+
+You can embed Core directly in Node.js via `createCore` from `@retineo/core`.
+
+```ts
+import { createCore } from '@retineo/core';
+
+const core = await createCore({
+  dataDir: '/path/to/.retineo',
+  // optional config overrides (same shape as config.yaml)
+  config: { logging: { level: 'info' } },
+});
+
+const ingestResult = await core.ingest('/vault', { force: false });
+const report = await core.health();
+const docs = await core.listDocuments();
+const similar = await core.findSimilar(contentHash, { topK: 5, threshold: 0.8 });
+const node = await core.getNode(contentHash);
+await core.close();
+```
+
+### `createCore(options)`
+
+Returns a `Promise<CoreHandle>`.
+
+**Options:**
+
+| Field    | Type                 | Required | Description                                                              |
+|----------|----------------------|----------|--------------------------------------------------------------------------|
+| `dataDir`| `string`             | yes      | Path to the Retineo data directory (CAS, registry, indexes, config).     |
+| `config` | `Partial<RetineoConfig>` | no   | Config overrides merged with the existing `config.yaml` (or defaults).   |
+| `logger` | `Logger`             | no       | Pino-compatible logger. Defaults to a logger built from `config.logging`.|
+
+### `CoreHandle`
+
+| Method | Signature | Returns | Description |
+|--------|-----------|---------|-------------|
+| `ingest` | `ingest(path: string, opts?: { force?: boolean })` | `Promise<IngestResult>` | Syncs a file or directory and runs the L1→L2→L3 pipeline. Pending jobs are drained before returning. |
+| `health` | `health()` | `Promise<HealthReport>` | Runs the memory-health analyzer on the most recently ingested source. |
+| `findSimilar` | `findSimilar(contentHash: string, opts?: SimilarOptions)` | `Promise<SimilarDocument[]>` | Finds semantically similar documents using the L3/HNSW index. Unknown hashes return `[]`; ghosts excluded by default. |
+| `listDocuments` | `listDocuments(opts?: { includeGhosts?: boolean })` | `Promise<DocumentSummary[]>` | Enumerates documents from the Registry. Set `includeGhosts: true` to include deleted sources. |
+| `getNode` | `getNode(contentHash: string)` | `Promise<NodeArtifacts \| null>` | Loads L0/L1/L2 artifacts for a content hash. Returns `null` for unknown or unreadable hashes. |
+| `close` | `close()` | `Promise<void>` | Closes SQLite handles and releases resources. Idempotent. |
+
+### Types
+
+```ts
+interface IngestResult {
+  discovered: number;
+  ingested: number;
+  skipped: number;
+  failed: Array<{ path: string; error: string }>;
+}
+
+interface DocumentSummary {
+  contentHash: string;
+  sourcePath?: string;
+  status: 'active' | 'ghost';
+  createdAt?: string;
+  lastSeenAt?: string;
+}
+
+interface NodeArtifacts {
+  contentHash: string;
+  sourcePath?: string;
+  l0Excerpt?: string;   // first ~500 chars of L0 body
+  l1?: unknown;         // parsed L1 artifact if present
+  l2Summary?: string;   // L2 essence text if present
+}
+```
+
+`HealthReport` is the same type used by `retineo health` and the `/v1/report/:jobId` endpoint. `SimilarOptions` and `SimilarDocument` match `SimilarityService`.
+
 ## Errors
 
 All errors return structured JSON:

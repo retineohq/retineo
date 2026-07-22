@@ -21,6 +21,7 @@ retineo/
 │   ├── domain/          # Types, schemas, shared domain language
 │   ├── adapters/        # Adapter IPC protocol + SourceAdapter interface
 │   ├── services/        # IngestionService orchestration
+│   ├── runtime/         # Public programmatic runtime API (createCore / CoreHandle)
 │   ├── storage/         # CAS, Registry, Config, NodeBuilder
 │   ├── embeddings/      # Vector embedding generation, HNSW index, embedding store
 │   ├── search/          # Query analysis, retrieval (BM25/semantic/hybrid), context assembly, DocumentHit
@@ -52,6 +53,7 @@ retineo/
 │   ├── i18n/            # Language detector, pack registry tests
 │   ├── bridge/          # HTTP server, routes, SSE tests
 │   ├── cli/             # CLI command parsing and execution tests
+│   ├── runtime/         # Programmatic `createCore` API tests
 │   ├── health/          # Health analyzer, metrics, findings, report builder tests
 │   ├── mcp/             # MCP server initialization and tool tests
 │   └── integration/     # End-to-end: CLI → HTTP → MCP
@@ -124,6 +126,13 @@ retineo/
 | -------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
 | `ingestion-service.ts` | `IngestionService`, `DefaultIngestionService`, `IngestResult`, `SyncResult` | Source-agnostic ingestion orchestrator. Receives `(sourceId, externalId, body, etag, metadata?)`, computes `contentHash`, skips unchanged etags, runs the full L1→L2→L3 pipeline on change, and writes to `audit_log`. |
 | `index.ts`           | Barrel export of `ingestion-service.js`                            | Public services API entrypoint.                                                                                            |
+
+### `src/runtime/` — Programmatic Runtime API
+
+| File              | Exports                                                                                       | Description                                                                                                                    |
+| ----------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `core-handle.ts`  | `createCore`, `CoreHandle`, `CreateCoreOptions`, `DocumentSummary`, `NodeArtifacts`, `IngestResult` | Public facade that wires ingestion, health, similarity, registry, and CAS for embedded use. No separate worker process required. |
+| `index.ts`        | Barrel export of `core-handle.js`                                                             | Public runtime API entrypoint.                                                                                                 |
 
 ### `src/storage/` — Persistence Layer (Phase 1)
 
@@ -488,6 +497,7 @@ retineo/
 | **Get similar documents over HTTP**                     | `POST /v1/similar` handler                     | `src/bridge/handlers.ts`                            | `SimilarRequest`/`SimilarResponse` in `src/bridge/types.ts`; route in `src/bridge/routes.ts`. |
 | **Get similar documents via MCP**                       | `retineo_find_similar` tool                    | `src/mcp/handlers.ts`                               | Tool schema in `src/mcp/tools.ts`; input `hash`, optional `topK`. |
 | **Get similar documents via CLI**                       | `retineo similar <hash>`                       | `src/cli/commands.ts`, `src/cli/index.ts`           | `--top-k`, `--threshold`, `--json`; empty index message advises `retineo ingest first`. |
+| **Embed Core as a programmatic library**                | `createCore`                                   | `src/runtime/core-handle.ts`                        | Wires ingestion, health, similarity, registry, CAS. Auto-drains L1→L2→L3 jobs after `ingest()`. `close()` releases SQLite + worker resources. |
 | **Regenerate L1 artifacts for an existing collection**  | `CLICommands.compile` with `--rebuild-l1`      | `src/cli/commands.ts`                               | Deletes cached `L1.md` / `L1.index.json` and re-queues `GENERATE_L1`→`L2`→`L3` jobs. |
 | **Derive L1 title from content/filename**               | `DefaultL1Generator.generate`                  | `src/layers/l1-generator.ts`                        | Uses first H1, first non-empty line, or basename of `sourceRef.uri`; avoids `Untitled Document`. |
 | **Segment plain-text logs into L1 sections**            | `DefaultL1Generator` heuristic                   | `src/layers/l1-generator.ts`                        | Splits heading-less text by ISO dates, `ECHO … COMPLETE`, `STATUS:` and similar markers. |

@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.6.2] - 2026-07-22
+
+### Added
+- **Public programmatic runtime API:** `createCore({ dataDir, config?, logger? })` returns a `CoreHandle` that exposes the engine's runtime capabilities directly from `@retineo/core`.
+  - `packages/core/src/runtime/core-handle.ts` implements the facade, wiring together `IngestionService`, `HealthAnalyzer`, `SimilarityService`, `Registry`, and `CAS`.
+  - Methods: `ingest()`, `health()`, `findSimilar()`, `listDocuments()`, `getNode()`, and `close()`.
+  - `ingest()` auto-drains pending L1/L2/L3 jobs so callers get compiled artifacts immediately.
+  - `close()` deterministically releases SQLite handles and worker resources.
+  - Re-exported from `packages/core/src/index.ts`; the runtime result shape is available as `RuntimeIngestResult` to avoid colliding with the existing protocol `IngestResult`.
+- **New `runtime/` directory:** `packages/core/src/runtime/index.ts` barrel export for the programmatic API.
+
+### Documentation
+- Added "Programmatic API" section to `README.md`.
+- Added full `CoreHandle` reference to `docs/API.md`.
+- Updated `structure.md` with the new `runtime/` directory and public exports.
+
+### Tests
+- Added `tests/runtime/runtime-api.test.ts`: lifecycle, unknown hashes, ghosts, and error cases.
+- 462 tests passing, 0 skipped.
+
+### Changed
+- Nothing. This release is purely additive.
+
+### Deprecated
+- Nothing.
+
 ## [0.6.1] - 2026-07-17
 
 ### Added

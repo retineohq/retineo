@@ -12,8 +12,8 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue" alt="License"></a>
 </p>
 
-**Version:** 0.6.1  
-**Status:** Production-ready — 458 tests passing
+**Version:** 0.6.2  
+**Status:** Production-ready — 462 tests passing
 
 ---
 
@@ -126,6 +126,35 @@ retineo status
 The `retineo health` command syncs a directory, analyzes coverage, duplicates, orphans, ghosts, and knowledge age, then prints a JSON report with a 0–100 score and concrete findings referencing specific content hashes.
 
 See [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md) for the full walkthrough.
+
+---
+
+## Programmatic API
+
+You can also embed Core directly in a Node.js application instead of spawning CLI processes:
+
+```ts
+import { createCore } from '@retineo/core';
+
+const core = await createCore({ dataDir: '/path/to/.retineo' });
+
+await core.ingest('/vault');                       // → IngestResult
+const report = await core.health();                // → HealthReport
+const docs = await core.listDocuments();           // → DocumentSummary[]
+const similar = await core.findSimilar(hash, { topK: 5, threshold: 0.8 }); // → SimilarDocument[]
+const node = await core.getNode(hash);             // → NodeArtifacts | null
+await core.close();                                // release DB handles, workers, HNSW
+```
+
+`createCore` accepts:
+
+- `dataDir` — required path for CAS, SQLite registry, indexes, and config.
+- `config` — optional config overrides (same shape as `config.yaml`).
+- `logger` — optional Pino-compatible logger.
+
+The runtime API wires together the same internal services the CLI uses, so storage formats and behavior are identical. No separate worker process is required; pending L1/L2/L3 jobs are drained automatically after each `ingest` call.
+
+See [docs/API.md](docs/API.md#programmatic-api) for the full `CoreHandle` reference.
 
 ---
 
