@@ -71,11 +71,12 @@ retineo health /tmp/test-vault
 **Report fields:**
 - `score` — integer 0–100 (weighted UX score, not a scientific metric).
 - `strong` — list of healthy aspects (e.g., `good connectivity`, `few duplicates`).
-- `attention` — concrete findings with `type`, `severity`, `documents` (specific `contentHash` values), and `reason`.
-- `recommendations` — actionable next steps (e.g., `Merge these documents`).
+- `attention` — concrete findings with `type`, `severity`, `documents`, and `reason`.
+  - `documents` is an array of `{ "contentHash": "sha256", "sourcePath": "/path/to/doc.md" }` objects. `sourcePath` is omitted when the Registry cannot resolve one (e.g. unresolved ghosts).
+- `recommendations` — actionable next steps. Findings of the same type are grouped into one recommendation when there are more than 3 of that type; otherwise each finding gets its own recommendation using the readable `sourcePath`.
 - `advancedMetrics` — Pro/Enterprise metrics (`fragmentation`, `contradictions`, `topicDistribution`) not implemented in Core.
 
-The command first syncs the directory via `FileSystemSourceAdapter`, waits for pending jobs to drain, then runs `HealthAnalyzer.analyze(sourceId)`. Exit code is `1` if `score < 50` (useful for CI gates).
+The command first syncs the directory via `FileSystemSourceAdapter`, waits for pending jobs to drain, then runs `HealthAnalyzer.analyze(sourceId)`. Progress logging (`synced N changed, M ghosts`) is emitted on `stderr`; `stdout` is the JSON report only. Exit code is `1` if `score < 50` (useful for CI gates).
 
 ### `retineo search <query>`
 

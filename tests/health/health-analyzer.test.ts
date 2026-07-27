@@ -75,12 +75,14 @@ describe('DefaultHealthAnalyzer', () => {
       [h3]: { content: 'body three' },
     });
 
+    const entries = [
+      { sourceId: 'filesystem:/tmp', externalId: '/tmp/1.md', contentHash: h1, status: 'active' as const, lastSeenAt: Date.now(), createdAt: Date.now() - 10000, etag: '', deletedAt: null as number | null, retentionPolicy: 'standard', sensitivityLevel: 'none', encryptionKeyId: null as string | null },
+      { sourceId: 'filesystem:/tmp', externalId: '/tmp/2.md', contentHash: h2, status: 'active' as const, lastSeenAt: Date.now(), createdAt: Date.now() - 5000, etag: '', deletedAt: null as number | null, retentionPolicy: 'standard', sensitivityLevel: 'none', encryptionKeyId: null as string | null },
+      { sourceId: 'filesystem:/tmp', externalId: '/tmp/3.md', contentHash: h3, status: 'ghost' as const, lastSeenAt: Date.now(), createdAt: Date.now(), etag: '', deletedAt: null as number | null, retentionPolicy: 'standard', sensitivityLevel: 'none', encryptionKeyId: null as string | null },
+    ];
     const registry = {
-      listBySourceId: () => [
-        { sourceId: 'filesystem:/tmp', externalId: '/tmp/1.md', contentHash: h1, status: 'active' as const, lastSeenAt: Date.now(), createdAt: Date.now() - 10000 },
-        { sourceId: 'filesystem:/tmp', externalId: '/tmp/2.md', contentHash: h2, status: 'active' as const, lastSeenAt: Date.now(), createdAt: Date.now() - 5000 },
-        { sourceId: 'filesystem:/tmp', externalId: '/tmp/3.md', contentHash: h3, status: 'ghost' as const, lastSeenAt: Date.now(), createdAt: Date.now() },
-      ],
+      listBySourceId: () => entries,
+      listByContentHash: (hash: string) => entries.filter((e) => e.contentHash === hash),
       getChildSegments: () => [],
     };
 
@@ -97,6 +99,6 @@ describe('DefaultHealthAnalyzer', () => {
 
     const ghostFinding = report.attention.find((f) => f.type === 'ghost');
     expect(ghostFinding).toBeDefined();
-    expect(ghostFinding!.documents).toContain(h3);
+    expect(ghostFinding!.documents).toEqual([{ contentHash: h3, sourcePath: '/tmp/3.md' }]);
   });
 });

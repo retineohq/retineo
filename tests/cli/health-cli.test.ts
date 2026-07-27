@@ -9,15 +9,17 @@ import type { CLICommandsDeps } from '../../packages/core/src/cli/commands.js';
 
 describe('CLI health command', () => {
   let exitCode: number | undefined;
-  let logs: string[] = [];
+  let stdoutLogs: string[] = [];
+  let stderrLogs: string[] = [];
   const testDir = '/tmp/test-vault';
 
   beforeEach(() => {
     exitCode = undefined;
-    logs = [];
+    stdoutLogs = [];
+    stderrLogs = [];
     if (!existsSync(testDir)) mkdirSync(testDir, { recursive: true });
-    vi.spyOn(console, 'log').mockImplementation((msg: string) => logs.push(msg));
-    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'log').mockImplementation((msg: string) => stdoutLogs.push(msg));
+    vi.spyOn(console, 'error').mockImplementation((msg: string) => stderrLogs.push(msg));
   });
 
   afterEach(() => {
@@ -27,10 +29,6 @@ describe('CLI health command', () => {
     } catch {
       // ignore
     }
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
   });
 
   function makeDeps(): CLICommandsDeps {
@@ -71,7 +69,19 @@ describe('CLI health command', () => {
     const cmds = new CLICommands(deps);
     await cmds.health('/tmp/test-vault');
 
-    expect(logs.some((l) => typeof l === 'string' && l.includes('"score": 76'))).toBe(true);
+    expect(stdoutLogs.some((l) => typeof l === 'string' && l.includes('"score": 76'))).toBe(true);
     expect(process.exitCode).toBe(0);
+  });
+
+  it('emits sync log on stderr, parseable JSON on stdout', async () => {
+    const deps = makeDeps();
+    const cmds = new CLICommands(deps);
+    await cmds.health('/tmp/test-vault');
+
+    expect(stderrLogs.some((l) => typeof l === 'string' && l.includes('synced'))).toBe(true);
+    const jsonLog = stdoutLogs.find((l) => typeof l === 'string' && l.trim().startsWith('{'));
+    expect(jsonLog).toBeDefined();
+    const parsed = JSON.parse(jsonLog!);
+    expect(parsed.score).toBe(76);
   });
 });

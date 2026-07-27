@@ -35,8 +35,14 @@ export class DefaultHealthAnalyzer implements HealthAnalyzer {
     metrics.push(ghosts(uniqueEntries));
     metrics.push(knowledgeAge(uniqueEntries));
 
-    const findings = generateFindings(metrics);
+    const findings = generateFindings(metrics, (hash) => this.resolveSourcePath(hash));
     return buildReport(metrics, findings);
+  }
+
+  private resolveSourcePath(hash: Hash): string | undefined {
+    const entries = this.deps.registry.listByContentHash(hash);
+    const active = entries.find((e) => e.status === 'active');
+    return active?.externalId ?? entries[0]?.externalId;
   }
 }
 

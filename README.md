@@ -123,7 +123,7 @@ retineo health ./my-notes
 retineo status
 ```
 
-The `retineo health` command syncs a directory, analyzes coverage, duplicates, orphans, ghosts, and knowledge age, then prints a JSON report with a 0–100 score and concrete findings referencing specific content hashes.
+The `retineo health` command syncs a directory, analyzes coverage, duplicates, orphans, ghosts, and knowledge age, then prints a JSON report with a 0–100 score and concrete findings. Each finding document now includes both the `contentHash` and the resolved `sourcePath`, and recommendations are grouped by finding type.
 
 See [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md) for the full walkthrough.
 

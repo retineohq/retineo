@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.6.4] - 2026-07-27
+
+### Changed
+- **Health report findings now carry resolved `sourcePath`.** `Finding.documents` changed from `Hash[]` to `{ contentHash: Hash; sourcePath?: string }[]`. `sourcePath` is resolved from the Registry (active entry preferred; any entry fallback) and omitted entirely when no Registry entry exists (e.g. unresolved ghosts). This is an output-shape change — existing consumers that parsed `documents` as strings will need to read `contentHash`/`sourcePath`.
+- **Health recommendations are now grouped by finding type.** One recommendation is emitted per group when the group has more than 3 members (e.g. `11 documents have no links or references (orphans). Consider linking them into related topics or merging.`). Groups with 3 or fewer members still emit per-document recommendations using the readable `sourcePath` instead of the bare hash.
+- **`retineo health` sync log moved to stderr.** The `synced N changed, M ghosts (...)` progress line is now emitted on `stderr`, keeping `stdout` strictly parseable JSON.
+
+### Documentation
+- Updated `docs/CLI.md`, `docs/API.md`, and `README.md` health examples to show the new `documents` shape.
+- Updated `structure.md` health module descriptions.
+
+### Tests
+- Updated `tests/health/findings-engine.test.ts`, `tests/health/health-analyzer.test.ts`, and `tests/health/report-builder.test.ts` for the new `Finding` shape and grouped recommendations.
+- Added coverage for: resolved `sourcePath`, missing `sourcePath` omitted, 11 orphans → 1 grouped recommendation, 2 orphans → 2 per-document recommendations, recommendation cap at 10, and `retineo health` stderr/stdout separation.
+
 ## [0.6.3] - 2026-07-22
 
 ### Added

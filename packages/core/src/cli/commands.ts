@@ -190,7 +190,7 @@ export class CLICommands {
     }
 
     const { processed, ghosts, sourceId } = await this.deps.ingestionService.syncDirectory(absolutePath);
-    console.log(`  synced ${processed} changed, ${ghosts} ghosts (${sourceId})`);
+    console.error(`  synced ${processed} changed, ${ghosts} ghosts (${sourceId})`);
 
     if (!this.deps.healthAnalyzer) {
       console.error('Health analyzer is not configured.');
@@ -847,7 +847,7 @@ export class CLICommands {
       try {
         await this.workerStart();
       } catch (err) {
-        console.log(`⚠️  Worker failed to start: ${err instanceof Error ? err.message : String(err)}`);
+        console.error(`⚠️  Worker failed to start: ${err instanceof Error ? err.message : String(err)}`);
       }
     }
 
@@ -990,7 +990,7 @@ export class CLICommands {
     await ensureDataDirs();
     const existing = readPidFile(service);
     if (existing && isPidAlive(existing.pid)) {
-      console.log(`⚠️  ${service} is already running (PID ${existing.pid})`);
+      console.error(`⚠️  ${service} is already running (PID ${existing.pid})`);
       return;
     }
     if (existing) {
@@ -1045,8 +1045,8 @@ export class CLICommands {
       throw new Error(`${service} exited immediately. Check logs: ${logPath}`);
     }
 
-    console.log(`✅ ${service} started (PID ${pid})`);
-    console.log(`   Logs: ${logPath}`);
+    console.error(`✅ ${service} started (PID ${pid})`);
+    console.error(`   Logs: ${logPath}`);
   }
 
   private async stopService(service: 'worker' | 'bridge' | 'daemon'): Promise<void> {

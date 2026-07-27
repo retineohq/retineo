@@ -4,14 +4,20 @@
  */
 
 import type { Hash } from '../domain/types.js';
+import type { RegistryEntry } from '../storage/types.js';
 
 export type FindingType = 'duplicate' | 'ghost' | 'orphan';
 export type Severity = 'warning' | 'info';
 
+export interface FindingDocumentRef {
+  contentHash: Hash;
+  sourcePath?: string;
+}
+
 export interface Finding {
   type: FindingType;
   severity: Severity;
-  documents: Hash[];
+  documents: FindingDocumentRef[];
   reason: string;
 }
 
@@ -53,6 +59,7 @@ export interface HealthAnalyzerDeps {
   };
   registry: {
     listBySourceId(sourceId: string): Array<{ sourceId: string; externalId: string; contentHash: Hash; status: 'active' | 'ghost' | 'deleted'; lastSeenAt: number; createdAt: number }>;
+    listByContentHash(hash: Hash): RegistryEntry[];
     getChildSegments(parentHash: Hash): Array<{ hash: Hash }>;
   };
   indexDir: string;

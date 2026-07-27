@@ -30,17 +30,42 @@ export function buildReport(metrics: MetricResult<unknown>[], findings: Finding[
 
   if (strong.length === 0) strong.push('health check completed');
 
-  for (const finding of findings) {
-    if (finding.type === 'duplicate') {
-      recommendations.push(`Merge or deduplicate documents: ${finding.documents.join(', ')}`);
-    } else if (finding.type === 'ghost') {
-      recommendations.push(`Review or recover ghost document: ${finding.documents[0]}`);
-    } else if (finding.type === 'orphan') {
-      recommendations.push(`Add links or references to orphan document: ${finding.documents[0]}`);
+  const grouped = groupFindings(findings);
+  const typeOrder: Finding['type'][] = ['duplicate', 'ghost', 'orphan'];
+
+  for (const type of typeOrder) {
+    const group = grouped.get(type) ?? [];
+    if (group.length === 0) continue;
+
+    if (group.length <= 3) {
+      for (const finding of group) {
+        if (type === 'duplicate') {
+          const labels = finding.documents.map((d) => d.sourcePath ?? d.contentHash);
+          recommendations.push(`Merge or deduplicate documents: ${labels.join(', ')}`);
+        } else if (type === 'ghost') {
+          const d = finding.documents[0];
+          recommendations.push(`Review or recover ghost document: ${d?.sourcePath ?? d?.contentHash ?? 'unknown'}`);
+        } else if (type === 'orphan') {
+          const d = finding.documents[0];
+          recommendations.push(`Add links or references to orphan document: ${d?.sourcePath ?? d?.contentHash ?? 'unknown'}`);
+        }
+      }
+    } else {
+      if (type === 'duplicate') {
+        recommendations.push(`${group.length} duplicate document pairs detected. Merge or deduplicate them.`);
+      } else if (type === 'ghost') {
+        recommendations.push(`${group.length} ghost documents need review or recovery.`);
+      } else if (type === 'orphan') {
+        recommendations.push(`${group.length} documents have no links or references (orphans). Consider linking them into related topics or merging.`);
+      }
     }
   }
 
   if (recommendations.length === 0) recommendations.push('No action required');
+
+  if (recommendations.length > 10) {
+    recommendations.length = 10;
+  }
 
   return {
     score,
@@ -49,6 +74,16 @@ export function buildReport(metrics: MetricResult<unknown>[], findings: Finding[
     recommendations,
     advancedMetrics: ADVANCED_METRICS,
   };
+}
+
+function groupFindings(findings: Finding[]): Map<Finding['type'], Finding[]> {
+  const grouped = new Map<Finding['type'], Finding[]>();
+  for (const finding of findings) {
+    const list = grouped.get(finding.type) ?? [];
+    list.push(finding);
+    grouped.set(finding.type, list);
+  }
+  return grouped;
 }
 
 function getMetricValue<T>(metrics: MetricResult<unknown>[], name: string, fallback: T): T {

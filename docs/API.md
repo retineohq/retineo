@@ -196,11 +196,14 @@ Fetch the completed `HealthReport` for a job.
     {
       "type": "duplicate",
       "severity": "warning",
-      "documents": ["hashA", "hashB"],
+      "documents": [
+        { "contentHash": "hashA", "sourcePath": "/path/to/a.md" },
+        { "contentHash": "hashB", "sourcePath": "/path/to/b.md" }
+      ],
       "reason": "..."
     }
   ],
-  "recommendations": ["Merge these documents"],
+  "recommendations": ["Merge or deduplicate documents: /path/to/a.md, /path/to/b.md"],
   "advancedMetrics": [
     { "metric": "fragmentation", "availableIn": "pro" }
   ]
