@@ -71,6 +71,58 @@ function stripCodeFences(text: string): string {
   return trimmed;
 }
 
+/**
+ * Escape raw control characters that some local LLMs inject inside JSON string
+ * values (e.g. literal \n, \t, \r). JSON.parse rejects those with
+ * "Bad control character in string literal"; escaping them makes the response
+ * valid without a second model call.
+ */
+function sanitizeJsonControlChars(raw: string): string {
+  let out = '';
+  let inString = false;
+  let escaped = false;
+  for (const ch of raw) {
+    if (inString) {
+      if (escaped) {
+        out += ch;
+        escaped = false;
+        continue;
+      }
+      if (ch === '\\') {
+        out += ch;
+        escaped = true;
+        continue;
+      }
+      if (ch === '"') {
+        inString = false;
+        out += ch;
+        continue;
+      }
+      if (ch === '\n') {
+        out += '\\n';
+        continue;
+      }
+      if (ch === '\r') {
+        out += '\\r';
+        continue;
+      }
+      if (ch === '\t') {
+        out += '\\t';
+        continue;
+      }
+      if (ch.charCodeAt(0) < 0x20) {
+        out += `\\u${ch.charCodeAt(0).toString(16).padStart(4, '0')}`;
+        continue;
+      }
+      out += ch;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    out += ch;
+  }
+  return out;
+}
+
 function truncateMarkdown(l1Markdown: string, maxChars: number): string {
   if (l1Markdown.length <= maxChars) return l1Markdown;
   // Keep YAML frontmatter and headings, truncate body
@@ -119,7 +171,7 @@ export class DefaultL2Generator implements L2Generator {
         };
         const raw = await provider.generate(prompt, opts);
         const cleaned = stripCodeFences(raw);
-        const parsed = JSON.parse(cleaned);
+        const parsed = JSON.parse(sanitizeJsonControlChars(cleaned));
         // Some local LLMs omit empty arrays; fill required array fields so Zod passes.
         const withDefaults = {
           concepts: [],

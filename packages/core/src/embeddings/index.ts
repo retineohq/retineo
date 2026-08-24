@@ -5,3 +5,4 @@
 
 export * from './hnsw-index.js';
 export * from './parquet-store.js';
+export * from './embedding-records.js';

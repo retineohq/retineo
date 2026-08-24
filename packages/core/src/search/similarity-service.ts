@@ -3,12 +3,11 @@
  * Phase 8: Document-level semantic neighbors via the existing L3/HNSW index.
  */
 
-import { existsSync, readFileSync } from 'fs';
-import path from 'path';
 import type { Hash } from '../domain/types.js';
 import type { Registry } from '../storage/registry.js';
 import type { RetrievalService } from './retrieval-service.js';
 import type { HNSWIndex } from '../embeddings/hnsw-index.js';
+import { loadEmbeddingRecords, type IndexedEmbeddingRecord } from '../embeddings/index.js';
 import type { Logger } from '../utils/logger.js';
 import { getGlobalLogger } from '../utils/logger.js';
 
@@ -37,18 +36,6 @@ export interface SimilarityServiceDeps {
   logger?: Logger;
 }
 
-interface EmbeddingRecord {
-  hash: string;
-  vector: number[];
-  parentId?: string;
-  rootHash?: string;
-  chunkId?: string;
-  lineStart?: number;
-  lineEnd?: number;
-  charStart?: number;
-  charEnd?: number;
-}
-
 interface ChunkToSource {
   rootHash: Hash;
   chunkId?: string;
@@ -70,28 +57,6 @@ function cosineSimilarity(a: number[], b: number[]): number {
   return dot / (Math.sqrt(normA) * Math.sqrt(normB) || 1);
 }
 
-function loadEmbeddingRecords(indexDir: string): EmbeddingRecord[] {
-  const embeddingsPath = path.join(indexDir, 'embeddings.jsonl');
-  if (!existsSync(embeddingsPath)) return [];
-  try {
-    const raw = readFileSync(embeddingsPath, 'utf-8');
-    const lines = raw.trim().split('\n');
-    const out: EmbeddingRecord[] = [];
-    for (const line of lines) {
-      if (!line.trim()) continue;
-      try {
-        const rec = JSON.parse(line) as EmbeddingRecord;
-        out.push(rec);
-      } catch {
-        // skip malformed
-      }
-    }
-    return out;
-  } catch {
-    return [];
-  }
-}
-
 class DefaultSimilarityService implements SimilarityService {
   private retrievalService: RetrievalService;
   private registry: Registry;
@@ -111,14 +76,19 @@ class DefaultSimilarityService implements SimilarityService {
     const includeGhosts = options.includeGhosts ?? false;
     const oversample = 3;
 
-    // Ensure the shared HNSW index is loaded (private API of DefaultRetrievalService).
-    await (this.retrievalService as unknown as { ensureHNSW: () => Promise<void> }).ensureHNSW?.();
-
-    const hnswIndex = (this.retrievalService as unknown as { hnswIndex: HNSWIndex | null }).hnswIndex;
-    const chunkToSource = (this.retrievalService as unknown as { chunkToSource: Map<Hash, ChunkToSource> | undefined }).chunkToSource;
-
     const records = loadEmbeddingRecords(this.indexDir);
     if (records.length === 0) return [];
+
+    const useExact = options.mode === 'exact';
+    // Exact mode never needs the HNSW index — building it on small corpora is pure waste.
+    if (!useExact) {
+      await (this.retrievalService as unknown as { ensureHNSW: () => Promise<void> }).ensureHNSW?.();
+    }
+
+    const hnswIndex = useExact ? null : (this.retrievalService as unknown as { hnswIndex: HNSWIndex | null }).hnswIndex;
+    const chunkToSource = (this.retrievalService as unknown as { chunkToSource: Map<Hash, ChunkToSource> | undefined }).chunkToSource;
+    const recordsByHash = new Map<string, IndexedEmbeddingRecord>();
+    for (const rec of records) recordsByHash.set(rec.hash, rec);
 
     const queryChunks = records.filter((rec) => {
       const info = chunkToSource?.get(rec.hash);
@@ -131,7 +101,6 @@ class DefaultSimilarityService implements SimilarityService {
 
     for (const queryChunk of queryChunks) {
       let hits: Array<{ hash: string; distance: number }>;
-      const useExact = options.mode === 'exact';
       if (!useExact && hnswIndex && hnswIndex.size() > 0) {
         hits = hnswIndex.search(queryChunk.vector, topK * oversample);
       } else {
@@ -144,7 +113,7 @@ class DefaultSimilarityService implements SimilarityService {
         if (similarity < threshold) continue;
 
         const hitInfo = chunkToSource?.get(hit.hash);
-        const hitRootHash = hitInfo?.rootHash ?? (records.find((r) => r.hash === hit.hash)?.rootHash) ?? hit.hash;
+        const hitRootHash = hitInfo?.rootHash ?? recordsByHash.get(hit.hash)?.rootHash ?? hit.hash;
         if (hitRootHash === contentHash) continue;
 
         let entry = docScores.get(hitRootHash);
@@ -189,7 +158,7 @@ class DefaultSimilarityService implements SimilarityService {
 
   private bruteForceSearch(
     query: number[],
-    records: EmbeddingRecord[],
+    records: IndexedEmbeddingRecord[],
     k: number
   ): Array<{ hash: string; distance: number }> {
     const scored = records.map((rec) => ({

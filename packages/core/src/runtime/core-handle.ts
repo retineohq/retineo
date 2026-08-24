@@ -155,7 +155,21 @@ async function loadAdapterManager(dataDir: string, logger: Logger): Promise<Defa
   }
 }
 
-async function drainJobs(registry: Registry, pipeline: CompilationPipeline, logger: Logger): Promise<void> {
+export interface DrainJobsOptions {
+  /** Hard cap for the whole drain. Default: 30 minutes. */
+  timeoutMs?: number;
+  /** Progress log cadence. Default: 5 seconds. */
+  progressEveryMs?: number;
+}
+
+async function drainJobs(
+  registry: Registry,
+  pipeline: CompilationPipeline,
+  logger: Logger,
+  options: DrainJobsOptions = {}
+): Promise<void> {
+  const timeoutMs = options.timeoutMs ?? 30 * 60 * 1000;
+  const progressEveryMs = options.progressEveryMs ?? 5000;
   const worker = new DefaultQueueWorker({
     workerId: `runtime-${Date.now()}`,
     registry,
@@ -163,15 +177,38 @@ async function drainJobs(registry: Registry, pipeline: CompilationPipeline, logg
     logger,
     pollIntervalMs: 10,
   });
+  const start = Date.now();
+  let processed = 0;
+  let lastProgressAt = 0;
   try {
     // Process every pending job once. processNext returns false when the queue is empty.
     let safety = 0;
     const maxIterations = 10000;
     while (safety < maxIterations) {
-      const processed = await worker.processNext();
-      if (!processed) break;
+      if (Date.now() - start > timeoutMs) {
+        const counts = registry.getJobCounts();
+        logger.error('drainJobs.timeout', {
+          timeoutMs,
+          processed,
+          remaining: counts.pending + counts.running,
+        });
+        return;
+      }
+      const didProcess = await worker.processNext();
+      if (!didProcess) break;
       safety++;
+      processed++;
+      if (Date.now() - lastProgressAt >= progressEveryMs) {
+        lastProgressAt = Date.now();
+        const counts = registry.getJobCounts();
+        const remaining = counts.pending + counts.running;
+        logger.info('drainJobs.progress', {
+          processed: `${processed}/${processed + remaining}`,
+          remaining,
+        });
+      }
     }
+    logger.info('drainJobs.complete', { processed, durationMs: Date.now() - start });
   } finally {
     await worker.stop();
   }

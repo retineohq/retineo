@@ -9,6 +9,7 @@ import path from 'path';
 import type { EmbeddingProvider } from '../llm/provider.js';
 import type { HNSWManifest } from '../domain/types.js';
 import { computeHash } from '../storage/cas.js';
+import { invalidateEmbeddingRecords } from '../embeddings/embedding-records.js';
 import type { Chunk } from './l1-generator.js';
 
 export interface L3Chunk {
@@ -174,6 +175,7 @@ export class DefaultL3Generator implements L3Generator {
     });
     filtered.push(...newLines);
     await writeFile(embeddingsPath, filtered.join('\n') + '\n');
+    invalidateEmbeddingRecords(indexDir);
 
     // Update BM25 inverted index from L0 chunk bodies
     const bm25Path = path.join(indexDir, 'bm25.json');

@@ -101,4 +101,55 @@ describe('DefaultHealthAnalyzer', () => {
     expect(ghostFinding).toBeDefined();
     expect(ghostFinding!.documents).toEqual([{ contentHash: h3, sourcePath: '/tmp/3.md' }]);
   });
+
+  it('attaches L2 degradation diagnostics from the registry', async () => {
+    const h1 = 'a'.repeat(64);
+    const h2 = 'b'.repeat(64);
+    const cas = makeCAS({
+      [h1]: { content: 'body one' },
+      [h2]: { content: 'body two' },
+    });
+    const entries = [
+      { sourceId: 'filesystem:/tmp', externalId: '/tmp/1.md', contentHash: h1, status: 'active' as const, lastSeenAt: Date.now(), createdAt: Date.now() - 10000, etag: '', deletedAt: null as number | null, retentionPolicy: 'standard', sensitivityLevel: 'none', encryptionKeyId: null as string | null },
+      { sourceId: 'filesystem:/tmp', externalId: '/tmp/2.md', contentHash: h2, status: 'active' as const, lastSeenAt: Date.now(), createdAt: Date.now() - 5000, etag: '', deletedAt: null as number | null, retentionPolicy: 'standard', sensitivityLevel: 'none', encryptionKeyId: null as string | null },
+    ];
+    const registry = {
+      listBySourceId: () => entries,
+      listByContentHash: (hash: string) => entries.filter((e) => e.contentHash === hash),
+      getChildSegments: () => [],
+      getL2Status: () => ({ ready: 1, pending: 0, failed: 1, total: 2 }),
+      getFailedJobs: () => [
+        { id: 'job-1', type: 'GENERATE_L2', payload: JSON.stringify({ nodeId: h2 }), status: 'FAILED' },
+      ],
+    };
+
+    const analyzer = new DefaultHealthAnalyzer({ cas, registry, indexDir });
+    const report = await analyzer.analyze('filesystem:/tmp');
+
+    expect(report.l2FailedNodes).toBe(1);
+    expect(report.l2Pending).toBe(0);
+    expect(report.l2Status).toEqual({ ready: 1, pending: 0, failed: 1, total: 2 });
+    expect(report.failedJobs).toEqual([
+      { jobId: 'job-1', type: 'GENERATE_L2', nodeHash: h2, status: 'FAILED' },
+    ]);
+  });
+
+  it('reuses the cached report while sources and job state are unchanged', async () => {
+    const h1 = 'a'.repeat(64);
+    const cas = makeCAS({ [h1]: { content: 'body one' } });
+    const entries = [
+      { sourceId: 'filesystem:/tmp', externalId: '/tmp/1.md', contentHash: h1, status: 'active' as const, lastSeenAt: Date.now(), createdAt: Date.now() - 10000, etag: '', deletedAt: null as number | null, retentionPolicy: 'standard', sensitivityLevel: 'none', encryptionKeyId: null as string | null },
+    ];
+    const registry = {
+      listBySourceId: () => entries,
+      listByContentHash: (hash: string) => entries.filter((e) => e.contentHash === hash),
+      getChildSegments: () => [],
+      getL2Status: () => ({ ready: 1, pending: 0, failed: 0, total: 1 }),
+    };
+
+    const analyzer = new DefaultHealthAnalyzer({ cas, registry, indexDir });
+    const first = await analyzer.analyze('filesystem:/tmp');
+    const second = await analyzer.analyze('filesystem:/tmp');
+    expect(second).toBe(first);
+  });
 });

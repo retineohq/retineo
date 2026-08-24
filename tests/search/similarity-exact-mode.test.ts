@@ -150,6 +150,36 @@ describe('findSimilar — mode: exact', () => {
     expect(aIdx).toBeLessThan(fIdx);
   });
 
+  it('mode: exact does not build or ensure the HNSW index', async () => {
+    const lines = [record('z1', [1, 0, 0], 'doc-z'), record('a1', [0.9, 0.1, 0], 'doc-a')];
+    writeFileSync(path.join(indexDir, 'embeddings.jsonl'), lines.join('\n') + '\n', 'utf-8');
+
+    const chunkToSource = new Map<Hash, { rootHash: Hash }>();
+    for (const l of lines) {
+      const rec = JSON.parse(l) as { hash: string; rootHash: string };
+      chunkToSource.set(rec.hash, { rootHash: rec.rootHash });
+    }
+
+    let ensureCalls = 0;
+    const retrievalService = {
+      async ensureHNSW() {
+        ensureCalls++;
+      },
+      hnswIndex: null,
+      chunkToSource,
+    } as unknown as import('../../packages/core/src/search/retrieval-service.js').RetrievalService;
+
+    const service = createSimilarityService({
+      retrievalService,
+      registry: makeRegistry(allDocEntries()),
+      indexDir,
+    });
+
+    const results = await service.findSimilar('doc-z', { topK: 5, threshold: 0.5, mode: 'exact' });
+    expect(results.length).toBeGreaterThan(0);
+    expect(ensureCalls).toBe(0);
+  });
+
   it('mode: exact is deterministic — same results twice in a row', async () => {
     const lines = buildTenDocFixture();
     writeFileSync(path.join(indexDir, 'embeddings.jsonl'), lines.join('\n') + '\n', 'utf-8');

@@ -20,6 +20,13 @@ export interface OrphanRecord {
   scheduledPurgeAt: string | null;
 }
 
+export interface L2Status {
+  ready: number;
+  pending: number;
+  failed: number;
+  total: number;
+}
+
 export interface Registry extends RegistryStore {
   insertSource(entry: RegistryEntry): void;
   updateSource(
@@ -46,8 +53,10 @@ export interface Registry extends RegistryStore {
   getRunningJobs(workerId: string): JobRecord[];
   getPendingJobs(limit: number): JobRecord[];
   getDeadJobs(limit: number): JobRecord[];
+  getFailedJobs(limit: number): JobRecord[];
   getJobsBySource(contentHash: string): JobRecord[];
   getJob(jobId: string): JobRecord | null;
+  getL2Status(): L2Status;
   getJobCounts(): { pending: number; running: number; completed: number; failed: number; dead: number };
   getLastHeartbeat(workerId: string): string | null;
   getRunningWorkerIds(): string[];
@@ -434,8 +443,11 @@ export class SQLiteRegistry implements Registry, AuditService {
   failJob(jobId: string, error: string): void {
     const job = this.getJobInternal(jobId);
     if (!job) return;
-    const newStatus: JobStatus = job.attempts >= job.maxAttempts ? 'DEAD' : 'PENDING';
-    const completedAt = newStatus === 'DEAD' ? new Date().toISOString() : null;
+    // After max attempts the job is terminal but NOT lost: status FAILED lets
+    // consumers re-run it via `compile`/`rebuild` instead of silently dropping
+    // the document from the pipeline.
+    const newStatus: JobStatus = job.attempts >= job.maxAttempts ? 'FAILED' : 'PENDING';
+    const completedAt = newStatus === 'FAILED' ? new Date().toISOString() : null;
     this.db.prepare(
       `UPDATE jobs SET status = ?, completed_at = ?, lease_until = NULL, worker_id = NULL WHERE id = ?`
     ).run(newStatus, completedAt, jobId);
@@ -494,6 +506,13 @@ export class SQLiteRegistry implements Registry, AuditService {
     return rows.map(rowToJob);
   }
 
+  getFailedJobs(limit: number): JobRecord[] {
+    const rows = this.db.prepare(
+      `SELECT * FROM jobs WHERE status IN ('FAILED', 'DEAD') ORDER BY created_at ASC LIMIT ?`
+    ).all(limit) as Record<string, unknown>[];
+    return rows.map(rowToJob);
+  }
+
   getJobsBySource(contentHash: string): JobRecord[] {
     const rows = this.db.prepare(
       `SELECT * FROM jobs WHERE json_extract(payload, '$.nodeId') = ? ORDER BY created_at ASC`
@@ -507,6 +526,23 @@ export class SQLiteRegistry implements Registry, AuditService {
 
   jobsByNodeHash(nodeHash: string): JobRecord[] {
     return this.getJobsBySource(nodeHash);
+  }
+
+  getL2Status(): L2Status {
+    const row = this.db.prepare(
+      `SELECT
+         COUNT(DISTINCT CASE WHEN status = 'COMPLETED' THEN json_extract(payload, '$.nodeId') END) AS ready,
+         COUNT(DISTINCT CASE WHEN status IN ('PENDING', 'RUNNING') THEN json_extract(payload, '$.nodeId') END) AS pending,
+         COUNT(DISTINCT CASE WHEN status IN ('FAILED', 'DEAD') THEN json_extract(payload, '$.nodeId') END) AS failed,
+         COUNT(DISTINCT json_extract(payload, '$.nodeId')) AS total
+       FROM jobs WHERE type = 'GENERATE_L2'`
+    ).get() as Record<string, unknown> | undefined;
+    return {
+      ready: (row?.ready as number | null) ?? 0,
+      pending: (row?.pending as number | null) ?? 0,
+      failed: (row?.failed as number | null) ?? 0,
+      total: (row?.total as number | null) ?? 0,
+    };
   }
 
   getJobCounts(): { pending: number; running: number; completed: number; failed: number; dead: number } {

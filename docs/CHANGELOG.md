@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.6.5] - 2026-08-24
+
+### Fixed
+- **Orphan detection now recognizes text references.** The `orphans` metric parses `[[wikilinks]]`, `[text](path)`, and bare "см. `file.md`" references from L0/L1 and resolves them to graph edges by basename. Inbound connectivity also includes basename mentions of a document in other documents' L2 summaries, so documents with real text links are no longer flagged orphan.
+- **L2 generation survives invalid JSON.** Raw control characters inside JSON string values (`\n`/`\t`/`\r`) are escaped before `JSON.parse`, recovering model responses that previously failed every retry. After `maxAttempts` is exhausted the job is now terminal `FAILED` (previously `DEAD`/silently lost) and can be re-queued with `retineo compile`; `job.fail`/`job.complete` logs now include `nodeHash`.
+- **`findSimilar` with `mode: 'exact'` no longer builds the HNSW index.** The brute-force path skips `ensureHNSW` entirely, avoiding wasted index builds on small corpora.
+
+### Added
+- **Health report L2 diagnostics:** `l2FailedNodes`, `l2Pending`, `failedJobs`, and `l2Status` (backed by the new `Registry.getL2Status()` → `{ ready, pending, failed, total }`). `retineo health` prints a warning on stderr when L2 nodes failed.
+- **`Registry.getFailedJobs(limit)`** — lists terminal `FAILED`/`DEAD` jobs for re-queueing and diagnostics; `retineo compile` re-queues all failed job types instead of only dead L3 jobs.
+- **Cached embedding-record loader** (`loadEmbeddingRecords`/`invalidateEmbeddingRecords` in `src/embeddings/embedding-records.ts`): `embeddings.jsonl` is re-read only when mtime/size changes, shared by retrieval and similarity services.
+- **Health report process-lifetime cache:** `DefaultHealthAnalyzer` reuses the last report while source entries and job state are unchanged.
+
+### Changed
+- `drainJobs` in the programmatic runtime (`createCore`) now has a watchdog timeout (default 30 minutes, overridable via options) and progress logs (`drainJobs processed N/M, remaining X`).
+
+### Documentation
+- Updated `structure.md` (new module, new public exports, test tables, functional cross-reference index).
+
+### Tests
+- Added `tests/health/orphans.test.ts` (text-reference connectivity).
+- Extended `tests/health/health-analyzer.test.ts` (L2 diagnostics, report cache), `tests/layers/l2-generator.test.ts` (control-character sanitization), `tests/storage/registry.test.ts` (`FAILED` terminal status, `getFailedJobs`, `getL2Status`), and `tests/search/similarity-exact-mode.test.ts` (exact mode skips HNSW build).
+
 ## [0.6.4] - 2026-07-27
 
 ### Changed

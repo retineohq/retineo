@@ -209,6 +209,9 @@ export class CLICommands {
 
     const report = await this.deps.healthAnalyzer.analyze(sourceId);
     console.log(JSON.stringify(report, null, 2));
+    if ((report.l2FailedNodes ?? 0) > 0) {
+      console.error(`⚠️  ${report.l2FailedNodes} node(s) failed L2 generation — run "retineo compile" to retry`);
+    }
     process.exitCode = report.score < 50 ? 1 : 0;
   }
 
@@ -506,15 +509,25 @@ export class CLICommands {
       const pending = this.deps.registry.getPendingJobs(100);
       console.log(`Compiling ${pending.length} pending jobs...`);
 
-      // Recover DEAD L3 jobs (e.g. after Ollama outage)
-      const dead = this.deps.registry.getDeadJobs(100);
-      const deadL3 = dead.filter((j) => j.type === 'GENERATE_L3');
-      for (const job of deadL3) {
+      // Recover terminally failed jobs (L1/L2/L3) so documents are never lost:
+      // `compile` re-queues them; `rebuild` wipes and re-syncs from scratch.
+      const failed = this.deps.registry.getFailedJobs?.(100) ?? [];
+      let recovered = 0;
+      for (const job of failed) {
         const payload = JSON.parse(job.payload) as { nodeId: string };
-        this.deps.pipeline.enqueueL3(payload.nodeId);
+        if (job.type === 'GENERATE_L1') {
+          this.deps.pipeline.enqueueL1(payload.nodeId);
+          recovered++;
+        } else if (job.type === 'GENERATE_L2') {
+          this.deps.pipeline.enqueueL2(payload.nodeId);
+          recovered++;
+        } else if (job.type === 'GENERATE_L3') {
+          this.deps.pipeline.enqueueL3(payload.nodeId);
+          recovered++;
+        }
       }
-      if (deadL3.length > 0) {
-        console.log(`Recovered ${deadL3.length} dead L3 job(s)`);
+      if (recovered > 0) {
+        console.log(`Recovered ${recovered} failed job(s)`);
       }
 
       // Find nodes with L2 complete but no L3 job at all

@@ -188,13 +188,45 @@ describe('Jobs', () => {
     expect(pending.find(j => j.id === 'j4')).not.toBeUndefined();
   });
 
-  it('fails job to dead after max attempts', () => {
+  it('fails job to FAILED after max attempts (re-runnable, not lost)', () => {
     const job: JobRecord = { ...makeJob('j5'), attempts: 2, maxAttempts: 3 };
     registry.insertJob(job);
     registry.acquireLease('w1', 5000); // attempts -> 3
     registry.failJob('j5', 'boom');
     const pending = registry.getPendingJobs(10);
     expect(pending.find(j => j.id === 'j5')).toBeUndefined();
+    const failed = registry.getFailedJobs(10);
+    expect(failed.find(j => j.id === 'j5')?.status).toBe('FAILED');
+    // FAILED is terminal — it must not be re-acquired automatically.
+    expect(registry.acquireLease('w1', 5000)).toBeNull();
+  });
+
+  it('lists FAILED and DEAD jobs via getFailedJobs', () => {
+    registry.insertJob({ ...makeJob('f1'), status: 'FAILED' });
+    registry.insertJob({ ...makeJob('f2'), status: 'DEAD' });
+    registry.insertJob(makeJob('f3'));
+    const failed = registry.getFailedJobs(10);
+    expect(failed.map(j => j.id).sort()).toEqual(['f1', 'f2']);
+  });
+
+  it('reports node-level L2 status', () => {
+    const l2Job = (id: string, nodeId: string, status: JobRecord['status']) => ({
+      ...makeJob(id),
+      type: 'GENERATE_L2' as const,
+      payload: JSON.stringify({ nodeId }),
+      status,
+    });
+    registry.insertJob(l2Job('l2-1', 'node-a', 'COMPLETED'));
+    registry.insertJob(l2Job('l2-2', 'node-b', 'PENDING'));
+    registry.insertJob(l2Job('l2-3', 'node-c', 'FAILED'));
+    registry.insertJob(l2Job('l2-4', 'node-c', 'DEAD'));
+    registry.insertJob(l2Job('l2-5', 'node-d', 'RUNNING'));
+
+    const status = registry.getL2Status();
+    expect(status.ready).toBe(1);
+    expect(status.pending).toBe(2); // node-b pending + node-d running
+    expect(status.failed).toBe(1);  // node-c counted once despite two failed jobs
+    expect(status.total).toBe(4);
   });
 
   it('releases expired leases', () => {

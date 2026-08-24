@@ -57,6 +57,23 @@ describe('DefaultL2Generator', () => {
     expect(calls).toBeGreaterThan(1);
   });
 
+  it('sanitizes raw control characters inside JSON strings without retry', async () => {
+    let calls = 0;
+    const rawControlProvider = new MockLLMProvider({ id: 'mock', type: 'mock', model: 'test' });
+    rawControlProvider.generate = async () => {
+      calls++;
+      // Raw newline and tab inside string literals — JSON.parse rejects these
+      // with "Bad control character in string literal" until sanitized.
+      return '{\n  "summary": "First line\nSecond line",\n  "language": "en",\n  "concepts": ["tab\there"]\n}\n';
+    };
+
+    const l1 = '# Title\n\nContent.';
+    const l2 = await gen.generate(l1, rawControlProvider);
+    expect(calls).toBe(1);
+    expect(l2.summary).toBe('First line\nSecond line');
+    expect(l2.concepts).toEqual(['tab\there']);
+  });
+
   it('retries on Zod validation failure then succeeds', async () => {
     let calls = 0;
     const flakyProvider = new MockLLMProvider({ id: 'mock', type: 'mock', model: 'test' });

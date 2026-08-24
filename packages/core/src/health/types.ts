@@ -5,6 +5,8 @@
 
 import type { Hash } from '../domain/types.js';
 import type { RegistryEntry } from '../storage/types.js';
+import type { JobStatus } from '../domain/types.js';
+import type { L2Status } from '../storage/registry.js';
 
 export type FindingType = 'duplicate' | 'ghost' | 'orphan';
 export type Severity = 'warning' | 'info';
@@ -36,6 +38,19 @@ export interface HealthReport {
   attention: Finding[];
   recommendations: string[];
   advancedMetrics: AdvancedMetricHint[];
+  /** Number of distinct nodes whose L2 generation terminally failed. */
+  l2FailedNodes?: number;
+  /** Number of distinct nodes with L2 still pending or running. */
+  l2Pending?: number;
+  /** Terminally failed pipeline jobs (FAILED/DEAD), newest first, capped. */
+  failedJobs?: Array<{
+    jobId: string;
+    type: string;
+    nodeHash: string;
+    status: JobStatus;
+  }>;
+  /** Node-level L2 readiness snapshot from the registry. */
+  l2Status?: L2Status;
 }
 
 export interface MetricDetail {
@@ -61,6 +76,8 @@ export interface HealthAnalyzerDeps {
     listBySourceId(sourceId: string): Array<{ sourceId: string; externalId: string; contentHash: Hash; status: 'active' | 'ghost' | 'deleted'; lastSeenAt: number; createdAt: number }>;
     listByContentHash(hash: Hash): RegistryEntry[];
     getChildSegments(parentHash: Hash): Array<{ hash: Hash }>;
+    getL2Status?(): L2Status;
+    getFailedJobs?(limit: number): Array<{ id: string; type: string; payload: string; status: JobStatus }>;
   };
   indexDir: string;
 }

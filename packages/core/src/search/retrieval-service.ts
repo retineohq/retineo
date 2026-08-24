@@ -3,7 +3,7 @@
  * Phase 7: L3 semantic search → L2 rerank → L1/L0 cascade with LRU cache.
  */
 
-import { readFile, readFileSync, existsSync } from 'fs';
+import { readFile, existsSync } from 'fs';
 import { promisify } from 'util';
 import path from 'path';
 import type { EmbeddingProvider } from '../llm/provider.js';
@@ -20,6 +20,7 @@ import { SimpleLRUCache } from '../utils/cache.js';
 import { OkapiBM25, tokenize } from './bm25.js';
 import { HeuristicDetector } from '../i18n/detector.js';
 import { loadOrBuildHNSW, type HNSWIndex } from '../embeddings/hnsw-index.js';
+import { loadEmbeddingRecords } from '../embeddings/index.js';
 import type { L3Chunk } from '../layers/l3-generator.js';
 
 const readFileAsync = promisify(readFile);
@@ -224,41 +225,6 @@ function cosineSimilarity(a: number[], b: number[]): number {
     normB += b[i] * b[i];
   }
   return dot / (Math.sqrt(normA) * Math.sqrt(normB) || 1);
-}
-
-interface EmbeddingRecord {
-  hash: string;
-  vector: number[];
-  parentId?: string;
-  rootHash?: string;
-  chunkId?: string;
-  lineStart?: number;
-  lineEnd?: number;
-  charStart?: number;
-  charEnd?: number;
-}
-
-/** Load embedding metadata (hash → sourcePath/rootHash) from jsonl. */
-function loadEmbeddingRecords(indexDir: string): EmbeddingRecord[] {
-  const embeddingsPath = path.join(indexDir, 'embeddings.jsonl');
-  if (!existsSync(embeddingsPath)) return [];
-  try {
-    const raw = readFileSync(embeddingsPath, 'utf-8');
-    const lines = raw.trim().split('\n');
-    const out: EmbeddingRecord[] = [];
-    for (const line of lines) {
-      if (!line.trim()) continue;
-      try {
-        const rec = JSON.parse(line) as EmbeddingRecord;
-        out.push(rec);
-      } catch {
-        // skip malformed
-      }
-    }
-    return out;
-  } catch {
-    return [];
-  }
 }
 
 /** Load BM25 data and build OkapiBM25 index. */

@@ -88,10 +88,10 @@ export class DefaultQueueWorker implements QueueWorker {
     try {
       await this.opts.pipeline.processJob(job);
       this.opts.registry.completeJob(job.id);
-      this.opts.logger.info('job.complete', { jobId: job.id, type: job.type });
+      this.opts.logger.info('job.complete', { jobId: job.id, type: job.type, nodeHash: nodeHashOf(job) });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      this.opts.logger.error('job.fail', { jobId: job.id, type: job.type, error: msg });
+      this.opts.logger.error('job.fail', { jobId: job.id, type: job.type, nodeHash: nodeHashOf(job), error: msg });
       this.opts.registry.failJob(job.id, msg);
       // Graceful retry delay for L3 to give embedding provider time to warm up
       if (job.type === 'GENERATE_L3') {
@@ -112,5 +112,14 @@ export class DefaultQueueWorker implements QueueWorker {
     } catch {
       // ignore heartbeat failures; lease will expire and job will retry
     }
+  }
+}
+
+function nodeHashOf(job: { type: string; payload: string }): string | undefined {
+  try {
+    const payload = JSON.parse(job.payload) as { nodeId?: string };
+    return payload.nodeId;
+  } catch {
+    return undefined;
   }
 }
