@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.6.5] - 2026-08-24
+## [0.6.7] - 2026-09-11
 
 ### Fixed
 - **Orphan detection now recognizes text references.** The `orphans` metric parses `[[wikilinks]]`, `[text](path)`, and bare "см. `file.md`" references from L0/L1 and resolves them to graph edges by basename. Inbound connectivity also includes basename mentions of a document in other documents' L2 summaries, so documents with real text links are no longer flagged orphan.

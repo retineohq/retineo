@@ -2,7 +2,7 @@
 
 ## Overview
 
-Phase 7 adds production-ready observability: liveness/readiness probes, operational metrics, and Prometheus-compatible export.
+Phase 7 adds operational observability: liveness/readiness probes, metrics, and Prometheus-compatible export.
 
 ## Endpoints
 

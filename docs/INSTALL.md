@@ -169,7 +169,7 @@ Expected output:
 
 ```json
 {
-  "version": "0.5.3",
+  "version": "0.6.7",
   "nodeCount": 0,
   "sourceCount": 0,
   "jobCount": {"pending": 0, "running": 0, "completed": 0, "failed": 0},

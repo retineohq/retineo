@@ -25,6 +25,7 @@
 
 ## Reference
 - [Multilingual Support](MULTILINGUAL.md) — Language packs, detection, cross-lingual search
+- [Experiments & Research](EXPERIMENTS.md) — Relationship model, similarity vs. typed links, open questions
 - [Domain Types](../packages/core/src/domain/types.ts) — TypeScript interfaces
 - [Storage Schema](../packages/core/src/storage/schema.sql) — SQLite DDL
 - [Repository Structure](../structure.md) — Codebase navigation

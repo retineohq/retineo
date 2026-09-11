@@ -294,6 +294,30 @@ data/
 | `mcp/` | Model Context Protocol server (stdio transport) |
 | `utils/` | Shared helpers, logger, shutdown manager, errors, error handler, LRU cache |
 
+## Relationship and Similarity Status
+
+Retineo Core today is primarily a compilation and retrieval engine. It has
+several relationship-oriented primitives, but it is not yet a complete graph
+engine:
+
+- `ContextNode` has structural `parentHash` / `childrenIds` links and an
+  optional `semanticLinks` array. Core creates structural links and initializes
+  the semantic-link field, but does not automatically populate semantic links.
+- `L2Artifact.relations` may contain concept-level relations returned by the
+  configured LLM. Core validates and stores these values, but does not curate
+  or use them for graph traversal.
+- `findSimilar`, `POST /v1/similar`, and `retineo similar` provide document
+  similarity in semantic and exact modes. Similarity is neighbour scoring, not
+  typed relationship classification.
+- The health analyzer uses explicit links, text references, child segments,
+  and basename mentions to identify connected and orphaned documents.
+
+Consequently, the accurate current statement is that Retineo contains a data
+model and early analysis paths for document relationships, while general typed
+relationship discovery remains a research direction. See
+[EXPERIMENTS.md](EXPERIMENTS.md) for the boundary between implemented
+foundations and open work.
+
 ## User Interface Layer (Phase 5)
 
 ```

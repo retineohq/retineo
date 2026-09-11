@@ -21,11 +21,11 @@ We ship each layer when it is solid — not before. The timeline below reflects 
 
 | Layer | Status | Where |
 |---|---|---|
-| **L0** Content Ingestion | ✅ Production | Retineo Core + Obsidian Plugin |
-| **L1** Structural Outline | ✅ Production | Retineo Core + Obsidian Plugin |
-| **L2** Semantic Essence | ✅ Production | Retineo Core + Obsidian Plugin |
-| **L3** Semantic Search | ✅ Production | Retineo Core + Obsidian Plugin (Pro trial) |
-| **L4** Semantic Links | ✅ Production | Retineo for Obsidian (Pro) |
+| **L0** Content Ingestion | ✅ Implemented | Retineo Core + Obsidian Plugin |
+| **L1** Structural Outline | ✅ Implemented | Retineo Core + Obsidian Plugin |
+| **L2** Semantic Essence | ✅ Implemented | Retineo Core + Obsidian Plugin |
+| **L3** Semantic Search | ✅ Implemented | Retineo Core + Obsidian Plugin (Pro trial) |
+| **L4** Semantic Links | ✅ Implemented in Obsidian Plugin | Retineo for Obsidian (Pro) |
 | **L5** Curated Themes | 🚧 In Development | Retineo for Obsidian (Pro) / Team |
 | **L6** Organizational Patterns | 🚧 In Development | Retineo Team |
 | **L7** Derived Philosophy | 📋 Planned | Retineo Team / Enterprise |
@@ -47,7 +47,7 @@ We ship each layer when it is solid — not before. The timeline below reflects 
 - ✅ L3 hybrid search: HNSW vector index + BM25 keyword index
 - ✅ CLI: `retineo init`, `ingest`, `search`, `status`, `recover`
 - ✅ HTTP API + MCP tools (`echo_search`, `echo_add_note`, `echo_inspect`)
-- ✅ 408 tests passing, production-ready
+- ✅ Extensive test suite present at time of release
 
 ### Phase 2 — Chat & Conversational Memory
 
@@ -142,6 +142,13 @@ We ship each layer when it is solid — not before. The timeline below reflects 
 
 We build in public — but we prioritize based on real user needs, not feature requests alone.
 
+> **Note:** Retineo Core currently implements the L0–L3 foundations described
+> in [README.md](README.md), including the relationship primitives and
+> similarity/health analysis documented in
+> [docs/EXPERIMENTS.md](docs/EXPERIMENTS.md). L4–L9 capabilities, multi-user
+> products, and commercial tiers below are ecosystem plans, not features of the
+> open-source Core.
+
 ### Ways to contribute:
 
 1. **Use it.** Install Retineo Core or the Obsidian Plugin. Report what works and what doesn't.
@@ -164,7 +171,7 @@ We build in public — but we prioritize based on real user needs, not feature r
 |---|---|
 | 2026-03 | L0–L2 generation pipeline complete |
 | 2026-04 | Chat UI with citations and ghost system |
-| 2026-05 | L3 hybrid search production-ready |
+| 2026-05 | L3 hybrid search implemented |
 | 2026-06 | Retineo Core 0.2.0 published, 408 tests, Apache 2.0 |
 | 2026-06 | Retineo for Obsidian plugin public release |
 | 2026-Q3 | L4–L6 semantic graph and curation (target) |
