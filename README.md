@@ -19,7 +19,7 @@ and searchable first.
 ## What Retineo does
 
 Retineo is not merely a semantic search front end. It compiles each source into
-layered artifacts and maintains hierarchical links between document segments:
+layered artifacts with structural links between document segments:
 
 | Area | Current implementation |
 |---|---|
@@ -39,21 +39,18 @@ video adapters have additional optional external dependencies.
 
 ## A small example
 
-**Conceptual example — not current CLI output.**
-
 ```text
-meeting-2024-05.md
-  ↓ proposes price change
-pricing-analysis.md
-  ↓ identifies risk
-support-report-2024-06.md
+report.pdf
+  → L0 normalized text
+  → L1 heading and chunk outline
+  → L2 summary, concepts, claims
+  → L3 vector + keyword index
+  → searchable result with citation
 ```
 
-Semantic search can retrieve each document independently. A relationship layer
-could expose the connection between them: proposal → risk analysis → observed
-effect. Retineo has early data-model and health-analysis foundations for this
-direction, but automatic typed cross-document relationship discovery is not yet
-implemented. See [docs/EXPERIMENTS.md](docs/EXPERIMENTS.md).
+The layers preserve structure and provenance instead of reducing the document
+to a flat text blob. This makes chunk-level citations, navigation, similarity
+search, and health analysis possible.
 
 ## Current implementation
 
@@ -112,12 +109,7 @@ Detailed setup is in [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md) and
 
 ## Architecture
 
-Retineo organizes work in layers: adapters convert sources into L0; L1 creates
-structure; L2 creates a semantic essence; L3 creates indexes. CAS stores
-immutable artifacts by content hash, while SQLite tracks sources, jobs, and
-health state.
-
-The detailed pipeline, storage layout, retrieval design, and module map are in
+The full pipeline, storage layout, retrieval design, and module map are in
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Experiments / Research
