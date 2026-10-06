@@ -584,3 +584,215 @@ describe('Segments + agent access', () => {
     expect(segment.expiresAt).not.toBe(null);
   });
 });
+
+describe('Invariant coverage — remaining 12 invariants', () => {
+  function buildEvidence(core: MemoryCore, id: string) {
+    core.createEvidence({
+      id,
+      sourceVersionId: createId('sv', id) as any,
+      segmentRef: null,
+      contentHash: `hash-${id}`,
+      state: 'available',
+    });
+  }
+
+  it('M2: evidence is immutable (no mutation method exists, state change goes through explicit operation)', () => {
+    const core = buildCore();
+    const e1 = createId('ev', 'e1') as any;
+    buildEvidence(core, e1);
+    const before = core.getEvidence(e1);
+    // Only allowed state transition:
+    core.markEvidenceUnavailable(e1, 'test');
+    const after = core.getEvidence(e1);
+    expect(before.createdAt).toBe(after.createdAt);
+    expect(before.contentHash).toBe(after.contentHash);
+    expect(before.sourceVersionId).toBe(after.sourceVersionId);
+    expect(after.state).toBe('unavailable');
+  });
+
+  it('M3: SourceVersion is immutable (stored once, no update path)', () => {
+    const core = buildCore();
+    const e1 = createId('ev', 'e1') as any;
+    buildEvidence(core, e1);
+    const ev = core.getEvidence(e1);
+    expect(ev.sourceVersionId).toBe(createId('sv', e1) as any);
+    // Domain has no updateSourceVersion operation; evidence references stay valid
+    const claims = core as any;
+    expect(claims.deps.evidence.get(e1)).toBeDefined();
+  });
+
+  it('M6: context membership never copies object (two contexts share same object)', () => {
+    const core = buildCore();
+    const ctx1 = core.createContext({ type: 'project', name: 'A', actor: 'test' });
+    const ctx2 = core.createContext({ type: 'project', name: 'B', actor: 'test' });
+    const obj = core.createObject({ type: 'technology', name: 'PostgreSQL', actor: 'test' });
+    core.addMembership({ contextId: ctx1.id, memberType: 'object', memberId: obj.id, mode: 'explicit', actor: 'test' });
+    core.addMembership({ contextId: ctx2.id, memberType: 'object', memberId: obj.id, mode: 'explicit', actor: 'test' });
+    // Mutate object once
+    (core as any).deps.objects.save({ ...obj, name: 'PostgreSQL 16' });
+    // Both memberships resolve to same (mutated) object — reference semantics
+    const pkg1 = core.getAgentContext({ contextId: ctx1.id });
+    const pkg2 = core.getAgentContext({ contextId: ctx2.id });
+    expect(pkg1!.objects[0].name).toBe('PostgreSQL 16');
+    expect(pkg2!.objects[0].name).toBe('PostgreSQL 16');
+  });
+
+  it('M7: contradiction never destroys a claim', () => {
+    const core = buildCore();
+    const e1 = createId('ev', 'e1') as any;
+    buildEvidence(core, e1);
+    const obj = core.createObject({ type: 'technology', name: 'X', actor: 'test' });
+    const claim1 = core.createClaim({
+      subjectId: obj.id,
+      predicate: 'has_role',
+      objectOrValue: 'Primary',
+      evidenceRefs: [e1],
+      actor: 'test',
+    });
+    const claim2 = core.createClaim({
+      subjectId: obj.id,
+      predicate: 'has_role',
+      objectOrValue: 'Deprecated',
+      evidenceRefs: [e1],
+      actor: 'test',
+    });
+    core.createRelationship({
+      sourceObject: obj.id,
+      relationType: 'contradicts',
+      targetObject: obj.id,
+      evidenceRefs: [e1],
+      actor: 'test',
+    });
+    // Both claims still exist and are active
+    expect(core.getClaim(claim1.id).lifecycleState).toBe('active');
+    expect(core.getClaim(claim2.id).lifecycleState).toBe('active');
+  });
+
+  it('M11: policy does not alter epistemic results (decision unchanged after policy)', () => {
+    const core = buildCore();
+    const e1 = createId('ev', 'e1') as any;
+    buildEvidence(core, e1);
+    const candidate = core.proposeCandidate({
+      type: 'ClaimCandidate',
+      payload: {},
+      evidenceRefs: [e1],
+      extractor: 'test',
+      extractorVersion: '1.0.0',
+      actor: 'test',
+    });
+    const decision = core.decide(candidate.id, 'test');
+    core.applyPolicy(decision.id, 'test');
+    const after = core.getDecision(decision.id);
+    expect(after.verdict).toBe(decision.verdict);
+    expect(after.reasoning).toBe(decision.reasoning);
+  });
+
+  it('M12: Decision Layer has no ACL authority (DecisionModel interface has no ACL output)', () => {
+    const core = buildCore();
+    const e1 = createId('ev', 'e1') as any;
+    buildEvidence(core, e1);
+    const candidate = core.proposeCandidate({
+      type: 'ClaimCandidate',
+      payload: {},
+      evidenceRefs: [e1],
+      extractor: 'test',
+      extractorVersion: '1.0.0',
+      actor: 'test',
+    });
+    const decision = core.decide(candidate.id, 'test');
+    // Decision has no ACL fields; only Policy does
+    expect((decision as any).aclRef).toBeUndefined();
+    const policy = core.applyPolicy(decision.id, 'test');
+    expect(policy).toHaveProperty('aclRef');
+  });
+
+  it('M13: LLM-like provider cannot mutate memory directly (only via Candidate pipeline)', () => {
+    const core = buildCore();
+    const e1 = createId('ev', 'e1') as any;
+    buildEvidence(core, e1);
+    const obj = core.createObject({ type: 'technology', name: 'X', actor: 'test' });
+    const objectsBefore = (core as any).deps.objects.all().length;
+    const claimsBefore = (core as any).deps.claims.all().length;
+    // "LLM" proposes candidate — memory unchanged
+    const candidate = core.proposeCandidate({
+      type: 'ClaimCandidate',
+      payload: { subject: obj.id, predicate: 'has_role', value: 'Injected' },
+      evidenceRefs: [e1],
+      extractor: 'llm-provider',
+      extractorVersion: '1.0.0',
+      actor: 'llm',
+    });
+    expect((core as any).deps.claims.all().length).toBe(claimsBefore);
+    // Full pipeline required to mutate
+    const decision = core.decide(candidate.id, 'test');
+    core.applyPolicy(decision.id, 'test');
+    expect((core as any).deps.claims.all().length).toBe(claimsBefore);
+    expect((core as any).deps.objects.all().length).toBe(objectsBefore);
+  });
+
+  it('M15: every memory mutation has a journal event', () => {
+    const core = buildCore();
+    const e1 = createId('ev', 'e1') as any;
+    buildEvidence(core, e1);
+    const journalBefore = core.getJournal().length;
+    const obj = core.createObject({ type: 'technology', name: 'X', actor: 'test' });
+    expect(core.getJournal().length).toBe(journalBefore + 1);
+    core.createClaim({ subjectId: obj.id, predicate: 'has_role', objectOrValue: 'Y', evidenceRefs: [e1], actor: 'test' });
+    expect(core.getJournal().length).toBe(journalBefore + 2);
+  });
+
+  it('M16: failed mutation leaves no journal event (atomic rollback)', () => {
+    const core = buildCore();
+    const journalBefore = core.getJournal().length;
+    expect(() => core.createObject({ type: 'technology', name: 'PostgreSQL', actor: 'test' })).not.toThrow();
+    const after = core.getJournal().length;
+    expect(() => core.createObject({ type: 'technology', name: 'PostgreSQL', actor: 'test' })).toThrow('M4 violated');
+    expect(core.getJournal().length).toBe(after);
+  });
+
+  it('M17: historical state reconstructable from journal', () => {
+    const core = buildCore();
+    const e1 = createId('ev', 'e1') as any;
+    buildEvidence(core, e1);
+    const obj = core.createObject({ type: 'technology', name: 'X', actor: 'test' });
+    core.createClaim({ subjectId: obj.id, predicate: 'has_role', objectOrValue: 'Y', evidenceRefs: [e1], actor: 'test' });
+    const journal = core.getJournal();
+    const createEvents = journal.filter((event) => event.operation === 'create');
+    expect(createEvents.length).toBeGreaterThanOrEqual(3);
+    expect(journal[0].operation).toBe('create');
+    expect(journal[0].entityType).toBe('evidence');
+  });
+
+  it('M18: unknown states explicit (KnowledgeGap is valid state representation)', () => {
+    const core = buildCore();
+    const gap = core.createKnowledgeGap({
+      type: 'UnknownDependency',
+      description: 'We do not know if service X depends on service Y',
+      actor: 'test',
+    });
+    expect(gap.lifecycleState).toBe('open');
+    const resolved = core.resolveKnowledgeGap(gap.id, 'test');
+    expect(resolved.lifecycleState).toBe('resolved');
+    expect(resolved.resolvedAt).not.toBe(null);
+  });
+
+  it('M20: core independent of concrete technology (custom DecisionModel swap works)', () => {
+    const core = buildCore();
+    const e1 = createId('ev', 'e1') as any;
+    buildEvidence(core, e1);
+    (core as any).deps.decisionModel = {
+      evaluate: () => ({ verdict: 'Escalate', reasoning: 'custom model' }),
+    };
+    const candidate = core.proposeCandidate({
+      type: 'ClaimCandidate',
+      payload: {},
+      evidenceRefs: [e1],
+      extractor: 'test',
+      extractorVersion: '1.0.0',
+      actor: 'test',
+    });
+    const decision = core.decide(candidate.id, 'test');
+    expect(decision.verdict).toBe('Escalate');
+    expect(decision.reasoning).toBe('custom model');
+  });
+});

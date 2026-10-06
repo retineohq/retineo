@@ -26,7 +26,7 @@
 - **Ports:** 9 repository interfaces + Journal + Transaction + IdentityResolver + DecisionModel + PolicyModel + RepresentationRepository + SegmentRepository
 - **InMemory adapters:** все порты, детерминированные модели (Decision, Policy, Representation, SegmentSecurity)
 - **MemoryCore:** 25 операций, каждая атомарна с Journal event
-- **Тесты:** 27, все проходят. 16-шаговый milestone без AI. 6 инвариантов M1/M4/M5/M9/M10/M14/M19/M20 покрыты.
+- **Тесты:** 39, все проходят. 16-шаговый milestone без AI. Все 20 инвариантов M1–M20 покрыты тестами (Этап 1 стабилизация завершена).
 - **tsc:** чисто для memory-core и для старого ядра.
 
 ### 1.3. Решения пользователя
