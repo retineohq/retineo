@@ -17,6 +17,13 @@
 
 ```
 retineo/
+├── packages/memory-core/   # NEW: Persistent epistemic memory core (clean rewrite per HANDOFF Phase 7)
+│   ├── src/
+│   │   ├── domain/         # Typed entities, value objects, IDs (17 entities, M1–M20 invariants)
+│   │   ├── ports/          # Repository/Journal/Transaction/Identity/Decision/Policy/Representation/Segment interfaces
+│   │   ├── adapters/       # InMemory adapters (repositories, journal, transaction, identity, lifecycle, representation, segment)
+│   │   └── core/           # MemoryCore service (25 operations, atomic mutations, journal)
+│   └── tests/              # 27 deterministic tests, no AI/DB/network
 ├── packages/core/src/
 │   ├── domain/          # Types, schemas, shared domain language
 │   ├── adapters/        # Adapter IPC protocol + SourceAdapter interface
@@ -79,6 +86,13 @@ retineo/
 │   ├── TROUBLESHOOTING.md # Common issues & fixes
 │   ├── CHANGELOG.md     # Version history
 │   └── CAPABILITIES_AUDIT.md # Full capabilities inventory & gap analysis
+│   ├── semantic-model/    # NEW: Phase 1–6 experiment artifacts + Phase 4–5 experiments
+│   │   ├── HANDOFF_Q.md                            # Concrete Semantic Model v0.1 (doc A)
+│   │   ├── RETINEO-MEMORY-CORE-DOMAIN-SPEC-v0.1.md # Concrete Semantic Model v0.1 (doc B)
+│   │   ├── RETINEO-MEMORY-CORE-TECHNICAL-SPEC-v0.2.md # Concrete Semantic Model v0.1 (doc C)
+│   │   ├── phase4-retrieval-experiment.md           # Phase 4: chunk vs essence vs knowledge vs context retrieval
+│   │   ├── phase5-compression-experiment.md         # Phase 5: compression ratio vs semantic/relationship recall
+│   │   └── phase6-domain-model.md                   # Phase 6: minimal domain model definition
 ├── .github/
 │   ├── workflows/
 │   │   ├── ci.yml       # CI: test on PR/push (Node 20, 22, pnpm)
@@ -437,6 +451,22 @@ retineo/
 ## Functional Cross-Reference Index
 
 > Lookup: "I want to do X" → start here.
+
+### Memory Core (new package — persistent epistemic memory)
+
+| Task                                                    | Primary Module                                 | Import Path                                         | Related                                                          |
+| ------------------------------------------------------- | ---------------------------------------------- | --------------------------------------------------- | ---------------------------------------------------------------- |
+| **Build typed domain entity**                            | `domain/entities.ts`                            | `packages/memory-core/src/domain/entities.ts`       | `ids.ts`, `value-objects.ts`, 17 typed entities                  |
+| **Create memory objects/claims/relationships atomically**| `MemoryCore`                                    | `packages/memory-core/src/core/memory-core.ts`      | 25 operations, every mutation journaled                          |
+| **Propose candidate → decide → apply policy**           | `MemoryCore.proposeCandidate/decide/applyPolicy`| `packages/memory-core/src/core/memory-core.ts`      | `DecisionModel`, `PolicyModel` — replaceable providers           |
+| **Generate semantic representation (summary/essence)**  | `MemoryCore.createSemanticRepresentation`       | `packages/memory-core/src/core/memory-core.ts`      | `RepresentationModel` port, rebuildable, not memory              |
+| **Traverse relationships (multi-hop context)**          | `MemoryCore.traverseRelationships`              | `packages/memory-core/src/core/memory-core.ts`      | Depth limit, skips superseded, identity-aware                    |
+| **Export/verify portable memory segment**               | `MemoryCore.exportSegment/verifySegment`        | `packages/memory-core/src/core/memory-core.ts`      | `SegmentSecurityModel`, hash + signature                         |
+| **Get agent context package**                            | `MemoryCore.getAgentContext`                    | `packages/memory-core/src/core/memory-core.ts`      | objects/claims/relationships/evidence/knownGaps                  |
+| **Merge objects preserving history**                    | `MemoryCore.mergeObjects`                       | `packages/memory-core/src/core/memory-core.ts`      | Tombstone + redirect, M5 invariant                               |
+| **Resolve identity redirects**                          | `InMemoryIdentityResolver`                      | `packages/memory-core/src/adapters/inmemory/identity-resolver.ts` | Circular redirect detection                        |
+| **Run deterministic in-memory core**                    | `InMemory*` adapters                            | `packages/memory-core/src/adapters/inmemory/`       | Reference adapter, test fixture                                  |
+| **Verify memory invariants M1–M20**                     | `packages/memory-core/tests/`                   | `packages/memory-core/tests/memory-core.test.ts`    | 27 tests, no AI/DB/network                                       |
 
 | Task                                                    | Primary Module                                 | Import Path                                         | Related                                                          |
 | ------------------------------------------------------- | ---------------------------------------------- | --------------------------------------------------- | ---------------------------------------------------------------- |
