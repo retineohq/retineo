@@ -26,7 +26,8 @@
 - **Ports:** 9 repository interfaces + Journal + Transaction + IdentityResolver + DecisionModel + PolicyModel + RepresentationRepository + SegmentRepository
 - **InMemory adapters:** все порты, детерминированные модели (Decision, Policy, Representation, SegmentSecurity)
 - **MemoryCore:** 25 операций, каждая атомарна с Journal event
-- **Тесты:** 39, все проходят. 16-шаговый milestone без AI. Все 20 инвариантов M1–M20 покрыты тестами (Этап 1 стабилизация завершена).
+- **Тесты:** 42, все проходят. 16-шаговый milestone без AI. Все 20 инвариантов M1–M20 покрыты тестами (Этап 1 завершён).
+- **SQLite adapter (Этап 2):** полный набор репозиториев, Journal с auto-increment, Transaction с BEGIN/COMMIT, IdentityResolver через redirect. Persistence тест: close + reopen — память переживает перезапуск.
 - **tsc:** чисто для memory-core и для старого ядра.
 
 ### 1.3. Решения пользователя

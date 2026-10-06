@@ -39,10 +39,10 @@ Sources → Evidence → Candidate → Decision → Policy → MEMORY CORE
 
 ### Этап 2 — Persistent adapter (SQLite)
 
-- SQLite реализация всех 9 портов
+- SQLite реализация всех 9 портов — **выполнено** (objects, claims, relationships, contexts, memberships, gaps, evidence, provenance, journal)
 - Тот же набор тестов против SQLite
-- Journal с настоящей атомарностью (BEGIN/COMMIT)
-- Выход: память переживает перезапуск процесса
+- Journal с настоящей атомарностью (BEGIN IMMEDIATE/COMMIT/ROLLBACK) — **выполнено**
+- Persistence тест: close + reopen — память переживает перезапуск — **выполнено**
 
 ### Этап 3 — Evidence ingestion
 

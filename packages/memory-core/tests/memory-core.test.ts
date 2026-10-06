@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import {
   MemoryCore,
   InMemoryObjectRepository,
@@ -794,5 +794,153 @@ describe('Invariant coverage — remaining 12 invariants', () => {
     const decision = core.decide(candidate.id, 'test');
     expect(decision.verdict).toBe('Escalate');
     expect(decision.reasoning).toBe('custom model');
+  });
+});
+
+describe('SQLite persistent adapter (Stage 2)', () => {
+  // imports lazy, since vitest with better-sqlite3 native module
+  let sqlite: typeof import('../src/adapters/sqlite/index.js');
+  let mkdtemp: typeof import('node:fs').mkdtempSync;
+  let rmSync: typeof import('node:fs').rmSync;
+  let tmpDir: string;
+
+  beforeAll(async () => {
+    sqlite = await import('../src/adapters/sqlite/index.js');
+    mkdtemp = (await import('node:fs')).mkdtempSync;
+    rmSync = (await import('node:fs')).rmSync;
+    tmpDir = mkdtemp('/tmp/retineo-mc-test-');
+  });
+
+  afterAll(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  function buildSqliteCore(dbFile: string): { core: MemoryCore; close: () => void } {
+    const db = new sqlite.SqliteDatabase(dbFile);
+    const core = new MemoryCore({
+      objects: new sqlite.SqliteObjectRepository(db),
+      claims: new sqlite.SqliteClaimRepository(db),
+      relationships: new sqlite.SqliteRelationshipRepository(db),
+      contexts: new sqlite.SqliteContextRepository(db),
+      memberships: new sqlite.SqliteMembershipRepository(db),
+      gaps: new sqlite.SqliteGapRepository(db),
+      evidence: new sqlite.SqliteEvidenceRepository(db),
+      provenance: new sqlite.SqliteProvenanceRepository(db),
+      journal: new sqlite.SqliteJournal(db),
+      transaction: new sqlite.SqliteTransaction(db),
+      identity: new sqlite.SqliteIdentityResolver(db),
+      candidates: new InMemoryCandidateRepository(),
+      decisions: new InMemoryDecisionRepository(),
+      policies: new InMemoryPolicyRepository(),
+      decisionModel: new DeterministicDecisionModel(),
+      policyModel: new PermissivePolicyModel(),
+      representations: new InMemoryRepresentationRepository(),
+      representationModel: new TrivialRepresentationModel(),
+      segments: new InMemorySegmentRepository(),
+      segmentSecurity: new TrivialSegmentSecurityModel(),
+      _db: db,
+    } as any);
+    return { core, close: () => db.close() };
+  }
+
+  it('persistence: memory survives process restart (close + reopen)', () => {
+    const dbFile = `${tmpDir}/test1.db`;
+    const evidenceId = createId('ev', 'e1') as any;
+
+    // "First run"
+    {
+      const { core, close } = buildSqliteCore(dbFile);
+      core.createEvidence({
+        id: evidenceId,
+        sourceVersionId: createId('sv', 'sv-1') as any,
+        segmentRef: null,
+        contentHash: 'hash-1',
+        state: 'available',
+      });
+      const obj = core.createObject({ type: 'technology', name: 'PostgreSQL', actor: 'test' });
+      core.createClaim({
+        subjectId: obj.id,
+        predicate: 'has_role',
+        objectOrValue: 'Primary',
+        evidenceRefs: [evidenceId],
+        validFrom: '2022-01-01',
+        actor: 'test',
+      });
+      const ctx = core.createContext({ type: 'project', name: 'DB Decision', actor: 'test' });
+      core.addMembership({ contextId: ctx.id, memberType: 'object', memberId: obj.id, mode: 'explicit', actor: 'test' });
+      close();
+    }
+
+    // "Second run" — reopen same file
+    {
+      const db = new sqlite.SqliteDatabase(dbFile);
+      const core = new MemoryCore({
+        objects: new sqlite.SqliteObjectRepository(db),
+        claims: new sqlite.SqliteClaimRepository(db),
+        relationships: new sqlite.SqliteRelationshipRepository(db),
+        contexts: new sqlite.SqliteContextRepository(db),
+        memberships: new sqlite.SqliteMembershipRepository(db),
+        gaps: new sqlite.SqliteGapRepository(db),
+        evidence: new sqlite.SqliteEvidenceRepository(db),
+        provenance: new sqlite.SqliteProvenanceRepository(db),
+        journal: new sqlite.SqliteJournal(db),
+        transaction: new sqlite.SqliteTransaction(db),
+        identity: new sqlite.SqliteIdentityResolver(db),
+        candidates: new InMemoryCandidateRepository(),
+        decisions: new InMemoryDecisionRepository(),
+        policies: new InMemoryPolicyRepository(),
+        decisionModel: new DeterministicDecisionModel(),
+        policyModel: new PermissivePolicyModel(),
+        representations: new InMemoryRepresentationRepository(),
+        representationModel: new TrivialRepresentationModel(),
+        segments: new InMemorySegmentRepository(),
+        segmentSecurity: new TrivialSegmentSecurityModel(),
+      });
+      // Data survived
+      const obj = core.getObject('obj:postgresql');
+      expect(obj.lifecycleState).toBe('active');
+      const claims = (core as any).deps.claims.bySubject('obj:postgresql');
+      expect(claims.length).toBe(1);
+      expect(claims[0].temporalState.validFrom).toBe('2022-01-01');
+      const provenance = core.getProvenance(claims[0].id);
+      expect(provenance.length).toBe(1);
+      const journal = core.getJournal();
+      expect(journal.length).toBeGreaterThanOrEqual(4);
+      const pkg = core.getAgentContext({ contextId: 'ctx:db-decision' });
+      expect(pkg!.objects.length).toBe(1);
+      db.close();
+    }
+  });
+
+  it('M16 SQLite: failed mutation rolls back atomically', () => {
+    const dbFile = `${tmpDir}/test2.db`;
+    const { core, close } = buildSqliteCore(dbFile);
+    core.createObject({ type: 'technology', name: 'X', actor: 'test' });
+    const journalBefore = core.getJournal().length;
+    expect(() => core.createObject({ type: 'technology', name: 'X', actor: 'test' })).toThrow('M4 violated');
+    expect(core.getJournal().length).toBe(journalBefore);
+    expect((core as any).deps.objects.all().length).toBe(1);
+    close();
+  });
+
+  it('M15 SQLite: every mutation has journal event with auto-increment sequence', () => {
+    const dbFile = `${tmpDir}/test3.db`;
+    const { core, close } = buildSqliteCore(dbFile);
+    const e1 = createId('ev', 'e1') as any;
+    core.createEvidence({
+      id: e1,
+      sourceVersionId: createId('sv', 'sv-1') as any,
+      segmentRef: null,
+      contentHash: 'h',
+      state: 'available',
+    });
+    const obj = core.createObject({ type: 'technology', name: 'X', actor: 'test' });
+    core.createClaim({ subjectId: obj.id, predicate: 'has_role', objectOrValue: 'Y', evidenceRefs: [e1], actor: 'test' });
+    const journal = core.getJournal();
+    expect(journal.length).toBe(3);
+    expect(journal[0].sequence).toBe(1);
+    expect(journal[1].sequence).toBe(2);
+    expect(journal[2].sequence).toBe(3);
+    close();
   });
 });
