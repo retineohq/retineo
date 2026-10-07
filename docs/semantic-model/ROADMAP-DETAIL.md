@@ -78,7 +78,7 @@ Sources → Evidence → Candidate → Decision → Policy → MEMORY CORE
 
 ### Этап 7 — Интеграция и замена старого ядра
 
-- CLI на новых портах (не через packages/core) — в работе
+- CLI на новых портах (не через packages/core) — **выполнено** (`memory-core` binary)
 - HTTP bridge на новых портах — **выполнено** (Fastify, 13 endpoints)
 - MCP server на новых портах
 - Программная валидация Phase 4–5 экспериментов (реальные embeddings, не аналитика)

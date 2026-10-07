@@ -5,6 +5,9 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "bin": {
+    "memory-core": "bin/memory-core.js"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "vitest --run"

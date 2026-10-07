@@ -53,6 +53,9 @@ import type {
   ProvenanceRepository,
   TransactionPort,
   IdentityResolver,
+  SourceRepository,
+  SourceItemRepository,
+  SourceVersionRepository,
 } from '../ports/repositories.js';
 import type {
   CandidateRepository,
@@ -97,6 +100,9 @@ export interface MemoryCoreDeps {
   segments: SegmentRepository;
   segmentSecurity: SegmentSecurityModel;
   extractionModel: ExtractionModel;
+  sources: SourceRepository;
+  sourceItems: SourceItemRepository;
+  sourceVersions: SourceVersionRepository;
 }
 
 interface CreateObjectInput {
@@ -1018,5 +1024,36 @@ export class MemoryCore {
     }
 
     return { candidatesCreated, accepted, quarantined, rejected };
+  }
+
+  ingestDirectory(input: {
+    dir: string;
+    sourceName: string;
+    trustProfile: 'trusted' | 'untrusted' | 'sandboxed';
+    actor: string;
+  }): any {
+    throw new Error('ingestDirectory requires async context — use ingestDirectoryAsync');
+  }
+
+  async ingestDirectoryAsync(input: {
+    dir: string;
+    sourceName: string;
+    trustProfile: 'trusted' | 'untrusted' | 'sandboxed';
+    actor: string;
+  }): Promise<any> {
+    const { FilesystemSourceAdapter } = await import('../adapters/ingestion/index.js');
+    const adapter = new FilesystemSourceAdapter(
+      this.deps.sources,
+      this.deps.sourceItems,
+      this.deps.sourceVersions,
+      this.deps.evidence,
+    );
+    const result = adapter.ingest(input.dir, {
+      sourceName: input.sourceName,
+      trustProfile: input.trustProfile,
+      actor: input.actor,
+    });
+    this.journal('ingest', 'source', result.sourceId, input.actor);
+    return result;
   }
 }
