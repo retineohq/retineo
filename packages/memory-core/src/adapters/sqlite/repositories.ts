@@ -3,6 +3,9 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import type {
+  Source,
+  SourceItem,
+  SourceVersion,
   Object,
   Claim,
   Relationship,
@@ -12,6 +15,7 @@ import type {
   Evidence,
   Provenance,
 } from '../../domain/entities.js';
+import type { SourceId, SourceItemId, SourceVersionId } from '../../domain/ids.js';
 import type {
   ObjectId,
   ClaimId,
@@ -31,6 +35,11 @@ import type {
   GapRepository,
   EvidenceRepository,
   ProvenanceRepository,
+} from '../../ports/repositories.js';
+import type {
+  SourceRepository,
+  SourceItemRepository,
+  SourceVersionRepository,
 } from '../../ports/repositories.js';
 
 const schemaPath = join(dirname(fileURLToPath(import.meta.url)), 'schema.sql');
@@ -91,6 +100,113 @@ export class SqliteObjectRepository implements ObjectRepository {
       id: row.id, type: row.type, name: row.name,
       aliases: JSON.parse(row.aliases), lifecycleState: row.lifecycle_state,
       redirectTo: row.redirect_to, createdAt: row.created_at, updatedAt: row.updated_at,
+    }));
+  }
+}
+
+export class SqliteSourceRepository implements SourceRepository {
+  constructor(private db: SqliteDatabase) {}
+
+  save(source: Source): void {
+    this.db.db.prepare(
+      `INSERT INTO sources (id, type, name, trust_profile, state, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         type = excluded.type, name = excluded.name, trust_profile = excluded.trust_profile,
+         state = excluded.state, updated_at = excluded.updated_at`,
+    ).run(source.id, source.type, source.name, source.trustProfile, source.state, source.createdAt, source.updatedAt);
+  }
+
+  get(id: SourceId): Source | undefined {
+    const row = this.db.db.prepare('SELECT * FROM sources WHERE id = ?').get(id) as any;
+    if (!row) return undefined;
+    return {
+      id: row.id, type: row.type, name: row.name, trustProfile: row.trust_profile,
+      state: row.state, createdAt: row.created_at, updatedAt: row.updated_at,
+    };
+  }
+
+  all(): Source[] {
+    return (this.db.db.prepare('SELECT * FROM sources').all() as any[]).map((row) => ({
+      id: row.id, type: row.type, name: row.name, trustProfile: row.trust_profile,
+      state: row.state, createdAt: row.created_at, updatedAt: row.updated_at,
+    }));
+  }
+}
+
+export class SqliteSourceItemRepository implements SourceItemRepository {
+  constructor(private db: SqliteDatabase) {}
+
+  save(item: SourceItem): void {
+    this.db.db.prepare(
+      `INSERT INTO source_items (id, source_id, external_id, locator, state, current_version_id, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         state = excluded.state, current_version_id = excluded.current_version_id, updated_at = excluded.updated_at`,
+    ).run(item.id, item.sourceId, item.externalId, item.locator, item.state, item.currentVersionId, item.createdAt, item.updatedAt);
+  }
+
+  get(id: SourceItemId): SourceItem | undefined {
+    const row = this.db.db.prepare('SELECT * FROM source_items WHERE id = ?').get(id) as any;
+    if (!row) return undefined;
+    return {
+      id: row.id, sourceId: row.source_id, externalId: row.external_id, locator: row.locator,
+      state: row.state, currentVersionId: row.current_version_id,
+      createdAt: row.created_at, updatedAt: row.updated_at,
+    };
+  }
+
+  all(): SourceItem[] {
+    return (this.db.db.prepare('SELECT * FROM source_items').all() as any[]).map((row) => ({
+      id: row.id, sourceId: row.source_id, externalId: row.external_id, locator: row.locator,
+      state: row.state, currentVersionId: row.current_version_id,
+      createdAt: row.created_at, updatedAt: row.updated_at,
+    }));
+  }
+
+  bySource(sourceId: SourceId): SourceItem[] {
+    return (this.db.db.prepare('SELECT * FROM source_items WHERE source_id = ?').all(sourceId) as any[]).map((row) => ({
+      id: row.id, sourceId: row.source_id, externalId: row.external_id, locator: row.locator,
+      state: row.state, currentVersionId: row.current_version_id,
+      createdAt: row.created_at, updatedAt: row.updated_at,
+    }));
+  }
+}
+
+export class SqliteSourceVersionRepository implements SourceVersionRepository {
+  constructor(private db: SqliteDatabase) {}
+
+  save(version: SourceVersion): void {
+    this.db.db.prepare(
+      `INSERT INTO source_versions (id, source_item_id, content_hash, captured_at, source_time, content_ref, metadata)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO NOTHING`,
+    ).run(version.id, version.sourceItemId, version.contentHash, version.capturedAt, version.sourceTime, version.contentRef, JSON.stringify(version.metadata));
+  }
+
+  get(id: SourceVersionId): SourceVersion | undefined {
+    const row = this.db.db.prepare('SELECT * FROM source_versions WHERE id = ?').get(id) as any;
+    if (!row) return undefined;
+    return {
+      id: row.id, sourceItemId: row.source_item_id, contentHash: row.content_hash,
+      capturedAt: row.captured_at, sourceTime: row.source_time,
+      contentRef: row.content_ref, metadata: JSON.parse(row.metadata),
+    };
+  }
+
+  all(): SourceVersion[] {
+    return (this.db.db.prepare('SELECT * FROM source_versions').all() as any[]).map((row) => ({
+      id: row.id, sourceItemId: row.source_item_id, contentHash: row.content_hash,
+      capturedAt: row.captured_at, sourceTime: row.source_time,
+      contentRef: row.content_ref, metadata: JSON.parse(row.metadata),
+    }));
+  }
+
+  byItem(itemId: SourceItemId): SourceVersion[] {
+    return (this.db.db.prepare('SELECT * FROM source_versions WHERE source_item_id = ?').all(itemId) as any[]).map((row) => ({
+      id: row.id, sourceItemId: row.source_item_id, contentHash: row.content_hash,
+      capturedAt: row.captured_at, sourceTime: row.source_time,
+      contentRef: row.content_ref, metadata: JSON.parse(row.metadata),
     }));
   }
 }

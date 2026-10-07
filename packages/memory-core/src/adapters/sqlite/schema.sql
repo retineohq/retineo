@@ -1,3 +1,38 @@
+CREATE TABLE IF NOT EXISTS sources (
+  id TEXT PRIMARY KEY,
+  type TEXT NOT NULL,
+  name TEXT NOT NULL,
+  trust_profile TEXT NOT NULL,
+  state TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS source_items (
+  id TEXT PRIMARY KEY,
+  source_id TEXT NOT NULL,
+  external_id TEXT NOT NULL,
+  locator TEXT NOT NULL,
+  state TEXT NOT NULL,
+  current_version_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_source_item_source ON source_items(source_id);
+
+CREATE TABLE IF NOT EXISTS source_versions (
+  id TEXT PRIMARY KEY,
+  source_item_id TEXT NOT NULL,
+  content_hash TEXT NOT NULL,
+  captured_at TEXT NOT NULL,
+  source_time TEXT,
+  content_ref TEXT NOT NULL,
+  metadata TEXT NOT NULL DEFAULT '{}'
+);
+
+CREATE INDEX IF NOT EXISTS idx_source_version_item ON source_versions(source_item_id);
+
 CREATE TABLE IF NOT EXISTS objects (
   id TEXT PRIMARY KEY,
   type TEXT NOT NULL,

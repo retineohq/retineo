@@ -1,4 +1,7 @@
 import type {
+  Source,
+  SourceItem,
+  SourceVersion,
   Object,
   Claim,
   Relationship,
@@ -8,12 +11,32 @@ import type {
   Evidence,
   Provenance,
 } from '../domain/entities.js';
-import type { ObjectId, ClaimId, RelationshipId, ContextId, MembershipId, GapId, EvidenceId } from '../domain/ids.js';
+import type { ObjectId, ClaimId, RelationshipId, ContextId, MembershipId, GapId, EvidenceId, SourceId, SourceItemId, SourceVersionId } from '../domain/ids.js';
 
 export interface ObjectRepository {
   save(object: Object): void;
   get(id: ObjectId): Object | undefined;
   all(): Object[];
+}
+
+export interface SourceRepository {
+  save(source: Source): void;
+  get(id: SourceId): Source | undefined;
+  all(): Source[];
+}
+
+export interface SourceItemRepository {
+  save(item: SourceItem): void;
+  get(id: SourceItemId): SourceItem | undefined;
+  all(): SourceItem[];
+  bySource(sourceId: SourceId): SourceItem[];
+}
+
+export interface SourceVersionRepository {
+  save(version: SourceVersion): void;
+  get(id: SourceVersionId): SourceVersion | undefined;
+  all(): SourceVersion[];
+  byItem(itemId: SourceItemId): SourceVersion[];
 }
 
 export interface ClaimRepository {

@@ -46,8 +46,8 @@ Sources → Evidence → Candidate → Decision → Policy → MEMORY CORE
 
 ### Этап 3 — Evidence ingestion
 
-- Source adapters (filesystem первый, потом API/Git)
-- Конвертация внешнего материала → immutable Evidence
+- Source adapters (filesystem первый, потом API/Git) — **filesystem выполнен**
+- Конвертация внешнего материала → immutable Evidence — **выполнено**
 - Sandboxing untrusted sources (handoff #40)
 - Выход: реальные документы попадают в память
 

@@ -1,4 +1,7 @@
 import type {
+  Source,
+  SourceItem,
+  SourceVersion,
   Object,
   Claim,
   Relationship,
@@ -8,7 +11,7 @@ import type {
   Evidence,
   Provenance,
 } from '../../domain/entities.js';
-import type { ObjectId, ClaimId, RelationshipId, ContextId, MembershipId, GapId, ProvenanceId, EvidenceId } from '../../domain/ids.js';
+import type { ObjectId, ClaimId, RelationshipId, ContextId, MembershipId, GapId, ProvenanceId, EvidenceId, SourceId, SourceItemId, SourceVersionId } from '../../domain/ids.js';
 import type {
   ObjectRepository,
   ClaimRepository,
@@ -18,6 +21,11 @@ import type {
   GapRepository,
   EvidenceRepository,
   ProvenanceRepository,
+} from '../../ports/repositories.js';
+import type {
+  SourceRepository,
+  SourceItemRepository,
+  SourceVersionRepository,
 } from '../../ports/repositories.js';
 
 export class InMemoryObjectRepository implements ObjectRepository {
@@ -33,6 +41,62 @@ export class InMemoryObjectRepository implements ObjectRepository {
 
   all(): Object[] {
     return Array.from(this.store.values());
+  }
+}
+
+export class InMemorySourceRepository implements SourceRepository {
+  private store = new Map<SourceId, Source>();
+
+  save(source: Source): void {
+    this.store.set(source.id, { ...source });
+  }
+
+  get(id: SourceId): Source | undefined {
+    return this.store.get(id);
+  }
+
+  all(): Source[] {
+    return Array.from(this.store.values());
+  }
+}
+
+export class InMemorySourceItemRepository implements SourceItemRepository {
+  private store = new Map<SourceItemId, SourceItem>();
+
+  save(item: SourceItem): void {
+    this.store.set(item.id, { ...item });
+  }
+
+  get(id: SourceItemId): SourceItem | undefined {
+    return this.store.get(id);
+  }
+
+  all(): SourceItem[] {
+    return Array.from(this.store.values());
+  }
+
+  bySource(sourceId: SourceId): SourceItem[] {
+    return this.all().filter((item) => item.sourceId === sourceId);
+  }
+}
+
+export class InMemorySourceVersionRepository implements SourceVersionRepository {
+  private store = new Map<SourceVersionId, SourceVersion>();
+
+  save(version: SourceVersion): void {
+    this.store.set(version.id, { ...version });
+  }
+
+  get(id: SourceVersionId): SourceVersion | undefined {
+    return this.store.get(id);
+  }
+
+  all(): SourceVersion[] {
+    return Array.from(this.store.values());
+  }
+
+  byItem(itemId: SourceItemId): SourceVersion[] {
+    return this.all().filter((version) => version.sourceItemId === itemId);
   }
 }
 

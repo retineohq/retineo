@@ -16,6 +16,9 @@ import {
   TrivialRepresentationModel,
   InMemorySegmentRepository,
   TrivialSegmentSecurityModel,
+  InMemorySourceRepository,
+  InMemorySourceItemRepository,
+  InMemorySourceVersionRepository,
 } from '../src/index.js';
 import {
   InMemoryCandidateRepository,
@@ -942,5 +945,137 @@ describe('SQLite persistent adapter (Stage 2)', () => {
     expect(journal[1].sequence).toBe(2);
     expect(journal[2].sequence).toBe(3);
     close();
+  });
+});
+
+describe('Filesystem ingestion (Stage 3)', () => {
+  let fs: typeof import('node:fs');
+  let path: typeof import('node:path');
+  let os: typeof import('node:os');
+  let ingestion: typeof import('../src/adapters/ingestion/index.js');
+  let testDir: string;
+
+  beforeAll(async () => {
+    fs = await import('node:fs');
+    path = await import('node:path');
+    os = await import('node:os');
+    ingestion = await import('../src/adapters/ingestion/index.js');
+  });
+
+  function buildIngestion() {
+    const sources = new InMemorySourceRepository();
+    const items = new InMemorySourceItemRepository();
+    const versions = new InMemorySourceVersionRepository();
+    const evidence = new InMemoryEvidenceRepository();
+    const adapter = new ingestion.FilesystemSourceAdapter(sources, items, versions, evidence);
+    return { adapter, sources, items, versions, evidence };
+  }
+
+  it('ingest text files: creates source, items, versions, evidence', () => {
+    testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'retineo-ingest-'));
+    fs.writeFileSync(path.join(testDir, 'adr-001.md'), '# ADR-001: Use PostgreSQL\n\nDecision: PostgreSQL is primary database.');
+    fs.writeFileSync(path.join(testDir, 'adr-002.md'), '# ADR-002: Migrate to CockroachDB\n\nSupersedes ADR-001.');
+    fs.writeFileSync(path.join(testDir, 'notes.txt'), 'Meeting notes: migration discussed.');
+    fs.writeFileSync(path.join(testDir, 'image.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+
+    const { adapter, sources, items, versions, evidence } = buildIngestion();
+    const result = adapter.ingest(testDir, {
+      sourceName: 'Test Project Docs',
+      trustProfile: 'trusted',
+      actor: 'test',
+    });
+
+    expect(result.itemsIngested).toBe(3);
+    expect(result.versionsCreated).toBe(3);
+    expect(result.evidenceCreated).toBe(3);
+    expect(result.skipped).toBe(0);
+
+    expect(sources.all().length).toBe(1);
+    expect(sources.all()[0].type).toBe('filesystem');
+    expect(items.all().length).toBe(3);
+    expect(versions.all().length).toBe(3);
+    expect(evidence.all().length).toBe(3);
+  });
+
+  });
+
+describe('Filesystem ingestion lifecycle (single test, shared state)', () => {
+  let fs: typeof import('node:fs');
+  let path: typeof import('node:path');
+  let os: typeof import('node:os');
+  let ingestion: typeof import('../src/adapters/ingestion/index.js');
+  let testDir: string;
+  let adapter: any;
+  let sources: any;
+  let items: any;
+  let versions: any;
+  let evidence: any;
+
+  beforeAll(async () => {
+    fs = await import('node:fs');
+    path = await import('node:path');
+    os = await import('node:os');
+    ingestion = await import('../src/adapters/ingestion/index.js');
+    sources = new InMemorySourceRepository();
+    items = new InMemorySourceItemRepository();
+    versions = new InMemorySourceVersionRepository();
+    evidence = new InMemoryEvidenceRepository();
+    adapter = new ingestion.FilesystemSourceAdapter(sources, items, versions, evidence);
+  });
+
+  it('full lifecycle: ingest → skip → change → re-ingest → verify hash', () => {
+    testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'retineo-ingest2-'));
+    fs.writeFileSync(path.join(testDir, 'adr-001.md'), '# ADR-001: Use PostgreSQL\n\nDecision: PostgreSQL is primary.');
+    fs.writeFileSync(path.join(testDir, 'adr-002.md'), '# ADR-002: Migrate to CockroachDB\n\nSupersedes ADR-001.');
+    fs.writeFileSync(path.join(testDir, 'notes.txt'), 'Meeting notes: migration discussed.');
+
+    // Step 1: initial ingest
+    const result1 = adapter.ingest(testDir, { sourceName: 'Test Project Docs', trustProfile: 'trusted', actor: 'test' });
+    expect(result1.itemsIngested).toBe(3);
+    expect(result1.versionsCreated).toBe(3);
+    expect(result1.evidenceCreated).toBe(3);
+    expect(result1.skipped).toBe(0);
+    expect(sources.all().length).toBe(1);
+    expect(sources.all()[0].type).toBe('filesystem');
+    expect(items.all().length).toBe(3);
+    expect(versions.all().length).toBe(3);
+    expect(evidence.all().length).toBe(3);
+
+    // Step 2: re-ingest unchanged — skip
+    const result2 = adapter.ingest(testDir, { sourceName: 'Test Project Docs', trustProfile: 'trusted', actor: 'test' });
+    expect(result2.skipped).toBe(3);
+    expect(result2.itemsIngested).toBe(0);
+    expect(result2.versionsCreated).toBe(0);
+    expect(result2.evidenceCreated).toBe(0);
+    expect(items.all().length).toBe(3);
+    expect(versions.all().length).toBe(3);
+    expect(evidence.all().length).toBe(3);
+
+    // Step 3: change one file, add one
+    fs.writeFileSync(path.join(testDir, 'adr-001.md'), '# ADR-001 v2: Updated decision.');
+    fs.writeFileSync(path.join(testDir, 'adr-003.md'), '# ADR-003: Rollback to PostgreSQL\n\nSupersedes ADR-002.');
+    const result3 = adapter.ingest(testDir, { sourceName: 'Test Project Docs', trustProfile: 'trusted', actor: 'test' });
+    expect(result3.versionsCreated).toBe(2);
+    expect(result3.evidenceCreated).toBe(2);
+    expect(result3.skipped).toBe(2);
+    expect(items.all().length).toBe(4);
+    expect(versions.all().length).toBe(5);
+    expect(evidence.all().length).toBe(5);
+
+    // Item points to new version
+    const item = items.all().find((item) => item.externalId === 'adr-001.md');
+    const oldVersion = versions.all()[0];
+    expect(item!.currentVersionId).not.toBe(oldVersion.id);
+
+    // M3: old version still exists (immutable, append-only)
+    expect(versions.all().length).toBe(5);
+
+    // M2: evidence content hash matches
+    const crypto = require('node:crypto');
+    const content = fs.readFileSync(path.join(testDir, 'adr-002.md'), 'utf8');
+    const expectedHash = crypto.createHash('sha256').update(content).digest('hex');
+    const ev = evidence.all().find((evidence) => evidence.contentHash === expectedHash);
+    expect(ev).toBeDefined();
+    expect(ev!.state).toBe('available');
   });
 });
