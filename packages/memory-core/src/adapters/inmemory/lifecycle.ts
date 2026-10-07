@@ -86,7 +86,7 @@ export class DeterministicDecisionModel implements DecisionModel {
     if (candidate.evidenceRefs.length >= 2) {
       return { verdict: 'Accept', reasoning: `${candidate.evidenceRefs.length} evidence refs` };
     }
-    if (context.existingClaimsCount > 0) {
+    if (candidate.type === 'ClaimCandidate' && context.existingClaimsCount > 0) {
       return { verdict: 'Escalate', reasoning: 'Single evidence with existing claims — needs review' };
     }
     return { verdict: 'Accept', reasoning: 'Single evidence, no conflicts' };
@@ -183,4 +183,3 @@ export class TrivialRepresentationModel {
     };
   }
 }
-

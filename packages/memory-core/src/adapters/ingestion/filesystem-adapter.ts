@@ -20,6 +20,7 @@ export interface IngestResult {
   versionsCreated: number;
   evidenceCreated: number;
   skipped: number;
+  quarantined: boolean;
 }
 
 export class FilesystemSourceAdapter {
@@ -139,13 +140,16 @@ export class FilesystemSourceAdapter {
           sourceVersionId: versionId,
           segmentRef: null,
           contentHash,
-          state: 'available',
+          state: options.trustProfile === 'trusted' ? 'available' : 'unavailable',
           createdAt: now,
         });
         evidenceCreated++;
       }
     }
 
-    return { sourceId, itemsIngested, versionsCreated, evidenceCreated, skipped };
+    return {
+      sourceId, itemsIngested, versionsCreated, evidenceCreated, skipped,
+      quarantined: options.trustProfile !== 'trusted',
+    };
   }
 }

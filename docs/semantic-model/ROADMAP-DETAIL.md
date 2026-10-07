@@ -53,7 +53,7 @@ Sources → Evidence → Candidate → Decision → Policy → MEMORY CORE
 
 ### Этап 4 — Candidate extraction
 
-- Extraction layer: LLM/rules → Candidate (не memory!)
+- Extraction layer: LLM/rules → Candidate (не memory!) — **выполнено** (RegexExtractionModel, replaceable)
 - Decision Model через порт (LLM заменим, M13)
 - Policy Model через порт
 - Выход: AI работает, но не имеет прямого мутационного доступа

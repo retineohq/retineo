@@ -29,6 +29,8 @@
 - **Тесты:** 42, все проходят. 16-шаговый milestone без AI. Все 20 инвариантов M1–M20 покрыты тестами (Этап 1 завершён).
 - **SQLite adapter (Этап 2):** полный набор репозиториев, Journal с auto-increment, Transaction с BEGIN/COMMIT, IdentityResolver через redirect. Persistence тест: close + reopen — память переживает перезапуск.
 - **Filesystem ingestion (Этап 3):** SourceAdapter → Source → SourceItem → SourceVersion → Evidence. Повторный ingest unchanged = skip. Изменённый файл = новая SourceVersion (M3 append-only). Content hash проверен (M2). Репозитории Source/SourceItem/SourceVersion добавлены в оба adapter'а.
+- **Sandboxing (Этап 3):** untrusted/sandboxed → Evidence state=unavailable. `requireEvidence` блокирует quarantined evidence в claims (handoff #40).
+- **Candidate extraction (Этап 4):** ExtractionModel port + RegexExtractionModel (детерминированный). `extractFromEvidence`: Evidence → extraction → Candidate → Decision → Policy → Memory (Object + Claim/Relationship). Полный pipeline работает без AI.
 - **tsc:** чисто для memory-core и для старого ядра.
 
 ### 1.3. Решения пользователя

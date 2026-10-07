@@ -19,6 +19,7 @@ import {
   InMemorySourceRepository,
   InMemorySourceItemRepository,
   InMemorySourceVersionRepository,
+  RegexExtractionModel,
 } from '../src/index.js';
 import {
   InMemoryCandidateRepository,
@@ -51,6 +52,7 @@ function buildCore(): MemoryCore {
     representationModel: new TrivialRepresentationModel(),
     segments: new InMemorySegmentRepository(),
     segmentSecurity: new TrivialSegmentSecurityModel(),
+    extractionModel: new RegexExtractionModel(),
   });
 }
 
@@ -1077,5 +1079,166 @@ describe('Filesystem ingestion lifecycle (single test, shared state)', () => {
     const ev = evidence.all().find((evidence) => evidence.contentHash === expectedHash);
     expect(ev).toBeDefined();
     expect(ev!.state).toBe('available');
+  });
+});
+
+describe('Sandboxing untrusted sources (handoff #40)', () => {
+  let fs: typeof import('node:fs');
+  let path: typeof import('node:path');
+  let os: typeof import('node:os');
+  let ingestion: typeof import('../src/adapters/ingestion/index.js');
+
+  beforeAll(async () => {
+    fs = await import('node:fs');
+    path = await import('node:path');
+    os = await import('node:os');
+    ingestion = await import('../src/adapters/ingestion/index.js');
+  });
+
+  it('untrusted source → evidence quarantined (unavailable), cannot be used in claims', () => {
+    const core = buildCore();
+    const sources = new InMemorySourceRepository();
+    const items = new InMemorySourceItemRepository();
+    const versions = new InMemorySourceVersionRepository();
+    const adapter = new ingestion.FilesystemSourceAdapter(sources, items, versions, (core as any).deps.evidence);
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'retineo-untrusted-'));
+    fs.writeFileSync(path.join(dir, 'external.md'), '# External report\n\nUntrusted content.');
+
+    const result = adapter.ingest(dir, { sourceName: 'External', trustProfile: 'untrusted', actor: 'test' });
+    expect(result.quarantined).toBe(true);
+    expect(result.evidenceCreated).toBe(1);
+
+    const ev = (core as any).deps.evidence.all()[0];
+    expect(ev.state).toBe('unavailable');
+
+    const obj = core.createObject({ type: 'report', name: 'External', actor: 'test' });
+    expect(() => core.createClaim({
+      subjectId: obj.id,
+      predicate: 'has_role',
+      objectOrValue: 'X',
+      evidenceRefs: [ev.id],
+      actor: 'test',
+    })).toThrow('quarantined');
+  });
+
+  it('trusted source → evidence available, usable in claims', () => {
+    const core = buildCore();
+    const sources = new InMemorySourceRepository();
+    const items = new InMemorySourceItemRepository();
+    const versions = new InMemorySourceVersionRepository();
+    const adapter = new ingestion.FilesystemSourceAdapter(sources, items, versions, (core as any).deps.evidence);
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'retineo-trusted-'));
+    fs.writeFileSync(path.join(dir, 'adr.md'), '# ADR\n\nDecision.');
+
+    const result = adapter.ingest(dir, { sourceName: 'Internal', trustProfile: 'trusted', actor: 'test' });
+    expect(result.quarantined).toBe(false);
+    const ev = (core as any).deps.evidence.all()[0];
+    expect(ev.state).toBe('available');
+
+    const obj = core.createObject({ type: 'technology', name: 'X', actor: 'test' });
+    const claim = core.createClaim({
+      subjectId: obj.id,
+      predicate: 'has_role',
+      objectOrValue: 'Primary',
+      evidenceRefs: [ev.id],
+      actor: 'test',
+    });
+    expect(claim.lifecycleState).toBe('active');
+  });
+});
+
+describe('Candidate extraction pipeline (Stage 4)', () => {
+  it('Evidence → extraction → candidates → decisions → memory (full pipeline)', () => {
+    const core = buildCore();
+    const e1 = createId('ev', 'e1') as any;
+    core.createEvidence({
+      id: e1,
+      sourceVersionId: createId('sv', 'sv-1') as any,
+      segmentRef: null,
+      contentHash: 'h1',
+      state: 'available',
+    });
+
+    const content = `
+      We chose PostgreSQL as the primary database.
+      The migration failure caused by bad configuration.
+      ADR-002 supersedes ADR-001.
+    `;
+    const result = core.extractFromEvidence({ evidenceId: e1, content, actor: 'test' });
+
+    expect(result.candidatesCreated).toBeGreaterThan(0);
+    expect(result.accepted).toBeGreaterThan(0);
+    expect(result.quarantined + result.accepted + result.rejected).toBe(result.candidatesCreated);
+
+    // Objects created from extracted subjects
+    const objects = (core as any).deps.objects.all();
+    expect(objects.length).toBeGreaterThan(0);
+
+    // Claims created
+    const claims = (core as any).deps.claims.all();
+    expect(claims.length).toBeGreaterThan(0);
+    expect(claims.every((claim: any) => claim.evidenceRefs.includes(e1))).toBe(true);
+
+    // Relationships created
+    const relationships = (core as any).deps.relationships.all();
+    expect(relationships.length).toBeGreaterThan(0);
+  });
+
+  it('single evidence with existing claims → Escalate → Quarantine', () => {
+    const core = buildCore();
+    const e1 = createId('ev', 'e1') as any;
+    core.createEvidence({
+      id: e1,
+      sourceVersionId: createId('sv', 'sv-1') as any,
+      segmentRef: null,
+      contentHash: 'h1',
+      state: 'available',
+    });
+    // Create existing claim manually to trigger Escalate on next single-evidence candidate
+    const obj = core.createObject({ type: 'technology', name: 'X', actor: 'test' });
+    core.createClaim({
+      subjectId: obj.id,
+      predicate: 'has_role',
+      objectOrValue: 'Y',
+      evidenceRefs: [e1],
+      actor: 'test',
+    });
+
+    const content = 'We chose PostgreSQL.';
+    const result = core.extractFromEvidence({ evidenceId: e1, content, actor: 'test' });
+    expect(result.candidatesCreated).toBeGreaterThan(0);
+    // First extraction gets Escalate (1 evidence + existing claims) → Quarantine
+    expect(result.quarantined).toBeGreaterThan(0);
+  });
+
+  it('quarantined evidence cannot be extracted', () => {
+    const core = buildCore();
+    const e1 = createId('ev', 'q1') as any;
+    core.createEvidence({
+      id: e1,
+      sourceVersionId: createId('sv', 'sv-1') as any,
+      segmentRef: null,
+      contentHash: 'h',
+      state: 'unavailable',
+    });
+    expect(() => core.extractFromEvidence({
+      evidenceId: e1,
+      content: 'test',
+      actor: 'test',
+    })).toThrow('quarantined');
+  });
+
+  it('extraction with empty content produces no candidates', () => {
+    const core = buildCore();
+    const e1 = createId('ev', 'e1') as any;
+    core.createEvidence({
+      id: e1,
+      sourceVersionId: createId('sv', 'sv-1') as any,
+      segmentRef: null,
+      contentHash: 'h',
+      state: 'available',
+    });
+    const result = core.extractFromEvidence({ evidenceId: e1, content: '', actor: 'test' });
+    expect(result.candidatesCreated).toBe(0);
   });
 });

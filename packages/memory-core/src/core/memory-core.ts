@@ -62,6 +62,9 @@ import type {
   PolicyModel,
 } from '../ports/lifecycle.js';
 import type {
+  ExtractionModel,
+} from '../ports/extraction.js';
+import type {
   RepresentationRepository,
   RepresentationModel,
 } from '../ports/representation.js';
@@ -93,6 +96,7 @@ export interface MemoryCoreDeps {
   representationModel: RepresentationModel;
   segments: SegmentRepository;
   segmentSecurity: SegmentSecurityModel;
+  extractionModel: ExtractionModel;
 }
 
 interface CreateObjectInput {
@@ -155,6 +159,7 @@ interface CreateGapInput {
 
 export class MemoryCore {
   private representationCounter = 0;
+  private candidateCounter = 0;
 
   constructor(private readonly deps: MemoryCoreDeps) {}
 
@@ -175,8 +180,12 @@ export class MemoryCore {
 
   private requireEvidence(evidenceRefs: EvidenceId[]): void {
     for (const ref of evidenceRefs) {
-      if (!this.deps.evidence.get(ref)) {
+      const evidence = this.deps.evidence.get(ref);
+      if (!evidence) {
         throw new Error(`Unknown evidence: ${ref}`);
+      }
+      if (evidence.state === 'unavailable') {
+        throw new Error(`Evidence unavailable (quarantined): ${ref}`);
       }
     }
   }
@@ -555,7 +564,7 @@ export class MemoryCore {
     try {
       this.requireEvidence(input.evidenceRefs);
       const candidate: Candidate = {
-        id: createId('cand', `${input.type}:${Date.now()}`),
+        id: createId('cand', `${input.type}:${Date.now()}:${this.candidateCounter++}`),
         type: input.type,
         payload: input.payload,
         evidenceRefs: input.evidenceRefs,
@@ -860,5 +869,103 @@ export class MemoryCore {
       }
     }
     return { objects, relationships, claims, evidence: evidenceItems, knownGaps };
+  }
+
+  extractFromEvidence(input: {
+    evidenceId: EvidenceId;
+    content: string;
+    actor: string;
+  }): { candidatesCreated: number; accepted: number; quarantined: number; rejected: number } {
+    const evidence = this.deps.evidence.get(input.evidenceId);
+    if (!evidence) {
+      throw new Error(`Evidence not found: ${input.evidenceId}`);
+    }
+    if (evidence.state === 'unavailable') {
+      throw new Error(`Evidence quarantined: ${input.evidenceId}`);
+    }
+
+    const result = this.deps.extractionModel.extract(evidence, input.content);
+    let candidatesCreated = 0;
+    let accepted = 0;
+    let quarantined = 0;
+    let rejected = 0;
+
+    for (const extracted of result.claims) {
+      const candidate = this.proposeCandidate({
+        type: 'ClaimCandidate',
+        payload: { ...extracted },
+        evidenceRefs: [input.evidenceId],
+        extractor: 'regex-extraction',
+        extractorVersion: '1.0.0',
+        actor: input.actor,
+      });
+      candidatesCreated++;
+      const decision = this.decide(candidate.id, input.actor);
+      const policy = this.applyPolicy(decision.id, input.actor);
+      if (policy.action === 'Allow') {
+        // Create or resolve subject object
+        const subjectName = extracted.subjectName;
+        let subject = this.deps.objects.all().find((obj) => obj.name === subjectName);
+        if (!subject) {
+          subject = this.createObject({ type: 'entity', name: subjectName, actor: input.actor });
+        }
+        const subjectId = this.deps.identity.resolve(subject.id);
+        this.createClaim({
+          subjectId,
+          predicate: extracted.predicate,
+          objectOrValue: extracted.objectOrValue,
+          evidenceRefs: [input.evidenceId],
+          observedAt: extracted.observedAt ?? null,
+          validFrom: extracted.validFrom ?? null,
+          validTo: extracted.validTo ?? null,
+          confidence: extracted.confidence,
+          actor: input.actor,
+        });
+        accepted++;
+      } else if (policy.action === 'Quarantine') {
+        quarantined++;
+      } else {
+        rejected++;
+      }
+    }
+
+    for (const extracted of result.relationships) {
+      const candidate = this.proposeCandidate({
+        type: 'RelationshipCandidate',
+        payload: { ...extracted },
+        evidenceRefs: [input.evidenceId],
+        extractor: 'regex-extraction',
+        extractorVersion: '1.0.0',
+        actor: input.actor,
+      });
+      candidatesCreated++;
+      const decision = this.decide(candidate.id, input.actor);
+      const policy = this.applyPolicy(decision.id, input.actor);
+      if (policy.action === 'Allow') {
+        let source = this.deps.objects.all().find((obj) => obj.name === extracted.sourceName);
+        if (!source) {
+          source = this.createObject({ type: 'entity', name: extracted.sourceName, actor: input.actor });
+        }
+        let target = this.deps.objects.all().find((obj) => obj.name === extracted.targetName);
+        if (!target) {
+          target = this.createObject({ type: 'entity', name: extracted.targetName, actor: input.actor });
+        }
+        this.createRelationship({
+          sourceObject: this.deps.identity.resolve(source.id),
+          relationType: extracted.relationType,
+          targetObject: this.deps.identity.resolve(target.id),
+          evidenceRefs: [input.evidenceId],
+          confidence: extracted.confidence,
+          actor: input.actor,
+        });
+        accepted++;
+      } else if (policy.action === 'Quarantine') {
+        quarantined++;
+      } else {
+        rejected++;
+      }
+    }
+
+    return { candidatesCreated, accepted, quarantined, rejected };
   }
 }
