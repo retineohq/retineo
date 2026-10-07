@@ -829,6 +829,57 @@ export class MemoryCore {
     return segment;
   }
 
+  importSegment(input: {
+    segment: Segment;
+    actor: string;
+    autoApply: boolean;
+  }): { verified: boolean; applied: boolean } {
+    const { segment, actor, autoApply } = input;
+    this.deps.transaction.begin();
+    try {
+      const verified = this.deps.segmentSecurity.verify(segment);
+      if (!verified) {
+        this.journal('import_rejected', 'segment', segment.id, actor);
+        this.deps.transaction.commit();
+        return { verified: false, applied: false };
+      }
+      if (segment.expiresAt && new Date(segment.expiresAt) < new Date()) {
+        throw new Error(`Segment expired: ${segment.id}`);
+      }
+      this.journal('import_verified', 'segment', segment.id, actor);
+      if (!autoApply) {
+        this.deps.transaction.commit();
+        return { verified: true, applied: false };
+      }
+      for (const objectId of segment.includedObjects) {
+        if (!this.deps.objects.get(objectId)) {
+          throw new Error(`Import: object not found locally: ${objectId}`);
+        }
+      }
+      for (const claimId of segment.includedClaims) {
+        if (!this.deps.claims.get(claimId)) {
+          throw new Error(`Import: claim not found locally: ${claimId}`);
+        }
+      }
+      for (const relationshipId of segment.includedRelationships) {
+        if (!this.deps.relationships.get(relationshipId)) {
+          throw new Error(`Import: relationship not found locally: ${relationshipId}`);
+        }
+      }
+      for (const evidenceId of segment.includedEvidence) {
+        if (!this.deps.evidence.get(evidenceId)) {
+          throw new Error(`Import: evidence not found locally: ${evidenceId}`);
+        }
+      }
+      this.journal('import_applied', 'segment', segment.id, actor);
+      this.deps.transaction.commit();
+      return { verified: true, applied: true };
+    } catch (error) {
+      this.deps.transaction.rollback();
+      throw error;
+    }
+  }
+
   getAgentContext(input: {
     contextId: ContextId;
     maxSensitivity?: string;

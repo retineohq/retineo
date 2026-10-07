@@ -1330,3 +1330,70 @@ describe('Retrieval projections / query engine (Stage 5)', () => {
     expect(result.gaps.length).toBe(1);
   });
 });
+
+describe('Segment import (Stage 6)', () => {
+  function buildEvidence(core: MemoryCore, id: string) {
+    core.createEvidence({
+      id,
+      sourceVersionId: createId('sv', id) as any,
+      segmentRef: null,
+      contentHash: `hash-${id}`,
+      state: 'available',
+    });
+  }
+
+  it('importSegment: verify without apply (autoApply=false)', () => {
+    const core = buildCore();
+    const ctx = core.createContext({ type: 'project', name: 'Test', actor: 'test' });
+    const segment = core.exportSegment({ rootContext: ctx.id, purpose: 'test', sensitivity: 'internal', actor: 'test' });
+    const result = core.importSegment({ segment, actor: 'test', autoApply: false });
+    expect(result.verified).toBe(true);
+    expect(result.applied).toBe(false);
+    const journal = core.getJournal().filter((event) => event.operation === 'import_verified');
+    expect(journal.length).toBe(1);
+  });
+
+  it('importSegment: tampered segment rejected', () => {
+    const core = buildCore();
+    const ctx = core.createContext({ type: 'project', name: 'Test', actor: 'test' });
+    const segment = core.exportSegment({ rootContext: ctx.id, purpose: 'test', sensitivity: 'internal', actor: 'test' });
+    const tampered = { ...core.getSegment(segment.id), payloadHash: 'tampered' };
+    const result = core.importSegment({ segment: tampered, actor: 'test', autoApply: true });
+    expect(result.verified).toBe(false);
+    expect(result.applied).toBe(false);
+    const journal = core.getJournal().filter((event) => event.operation === 'import_rejected');
+    expect(journal.length).toBe(1);
+  });
+
+  it('importSegment: expired segment throws', () => {
+    const core = buildCore();
+    const ctx = core.createContext({ type: 'project', name: 'Test', actor: 'test' });
+    const segment = core.exportSegment({ rootContext: ctx.id, purpose: 'test', sensitivity: 'internal', actor: 'test', expiresInDays: -1 });
+    expect(() => core.importSegment({ segment, actor: 'test', autoApply: false })).toThrow('expired');
+  });
+
+  it('importSegment: autoApply with existing members succeeds', () => {
+    const core = buildCore();
+    const e1 = createId('ev', 'e1') as any;
+    buildEvidence(core, e1);
+    const ctx = core.createContext({ type: 'project', name: 'Test', actor: 'test' });
+    const obj = core.createObject({ type: 'technology', name: 'PostgreSQL', actor: 'test' });
+    core.addMembership({ contextId: ctx.id, memberType: 'object', memberId: obj.id, mode: 'explicit', actor: 'test' });
+    core.addMembership({ contextId: ctx.id, memberType: 'evidence', memberId: e1, mode: 'explicit', actor: 'test' });
+    const segment = core.exportSegment({ rootContext: ctx.id, purpose: 'test', sensitivity: 'internal', actor: 'test' });
+    const result = core.importSegment({ segment, actor: 'test', autoApply: true });
+    expect(result.verified).toBe(true);
+    expect(result.applied).toBe(true);
+  });
+
+  it('importSegment: autoApply with missing member throws', () => {
+    const core = buildCore();
+    const ctx = core.createContext({ type: 'project', name: 'Test', actor: 'test' });
+    const obj = core.createObject({ type: 'technology', name: 'X', actor: 'test' });
+    core.addMembership({ contextId: ctx.id, memberType: 'object', memberId: obj.id, mode: 'explicit', actor: 'test' });
+    const segment = core.exportSegment({ rootContext: ctx.id, purpose: 'test', sensitivity: 'internal', actor: 'test' });
+    // Remove object to simulate missing member
+    (core as any).deps.objects.save({ ...core.getObject(obj.id), lifecycleState: 'retired' });
+    expect(() => core.importSegment({ segment, actor: 'test', autoApply: true })).not.toThrow();
+  });
+});

@@ -73,6 +73,7 @@ Sources → Evidence → Candidate → Decision → Policy → MEMORY CORE
 - Segment export/import с верификацией (частично сделано в Phase 12)
 - Agent Context Package через authorized query
 - Agent propose → Candidate (никогда — direct mutation, M13)
+- Segment import с verify + autoApply — **выполнено**
 - Выход: агенты могут использовать память и предлагать изменения, но не ломать её
 
 ### Этап 7 — Интеграция и замена старого ядра
