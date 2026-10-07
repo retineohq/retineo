@@ -1242,3 +1242,91 @@ describe('Candidate extraction pipeline (Stage 4)', () => {
     expect(result.candidatesCreated).toBe(0);
   });
 });
+
+describe('Retrieval projections / query engine (Stage 5)', () => {
+  let QueryEngine: any;
+
+  beforeAll(async () => {
+    const module = await import('../src/index.js');
+    QueryEngine = module.QueryEngine;
+  });
+
+  function buildPopulatedCore(): { core: MemoryCore; engine: any; e1: string; e2: string; e3: string } {
+    const core = buildCore();
+    const e1 = createId('ev', 'e1') as any;
+    const e2 = createId('ev', 'e2') as any;
+    const e3 = createId('ev', 'e3') as any;
+    for (const [id, hash] of [[e1, 'h1'], [e2, 'h2'], [e3, 'h3']] as const) {
+      core.createEvidence({
+        id, sourceVersionId: createId('sv', hash) as any, segmentRef: null, contentHash: hash, state: 'available',
+      });
+    }
+    const postgres = core.createObject({ type: 'technology', name: 'PostgreSQL', actor: 'test' });
+    const incident = core.createObject({ type: 'incident', name: 'Migration Failure', actor: 'test' });
+    const decision = core.createObject({ type: 'decision', name: 'Switch to CockroachDB', actor: 'test' });
+    core.createClaim({ subjectId: postgres.id, predicate: 'has_role', objectOrValue: 'PrimaryDatabase', evidenceRefs: [e1], validFrom: '2022-01-01', actor: 'test' });
+    core.createClaim({ subjectId: incident.id, predicate: 'has_property', objectOrValue: 'caused_outage', evidenceRefs: [e2], actor: 'test' });
+    core.createRelationship({ sourceObject: decision.id, relationType: 'supersedes', targetObject: postgres.id, evidenceRefs: [e3], actor: 'test' });
+    core.createRelationship({ sourceObject: incident.id, relationType: 'caused_by', targetObject: decision.id, evidenceRefs: [e2], actor: 'test' });
+    // Essence representations
+    core.createSemanticRepresentation({ type: 'essence_nl', evidenceId: e1, content: 'PostgreSQL selected as primary database technology', actor: 'test' });
+    core.createSemanticRepresentation({ type: 'essence_nl', evidenceId: e2, content: 'Migration failure caused operational problems', actor: 'test' });
+    core.createSemanticRepresentation({ type: 'essence_nl', evidenceId: e3, content: 'Decision to switch away from PostgreSQL to CockroachDB', actor: 'test' });
+    const engine = new QueryEngine(core);
+    return { core, engine, e1, e2, e3 };
+  }
+
+  it('findEntryPoints: essence matching by tokens', () => {
+    const { engine } = buildPopulatedCore();
+    const result = engine.findEntryPoints('PostgreSQL database');
+    expect(result.representations.length).toBeGreaterThan(0);
+    expect(result.scoreExplanation.length).toBe(result.representations.length);
+    // Top match mentions PostgreSQL
+    const top = result.representations[0];
+    const topContent = typeof top.content === 'string' ? top.content : JSON.stringify(top.content);
+    expect(topContent.toLowerCase()).toContain('postgresql');
+  });
+
+  it('findEntryPoints: no match returns empty', () => {
+    const { engine } = buildPopulatedCore();
+    const result = engine.findEntryPoints('kubernetes deployment');
+    expect(result.representations.length).toBe(0);
+  });
+
+  it('knowledgeQuery: claims by token match', () => {
+    const { engine } = buildPopulatedCore();
+    const result = engine.knowledgeQuery('primary database');
+    expect(result.claims.length).toBeGreaterThan(0);
+    expect(result.objects.length).toBeGreaterThan(0);
+  });
+
+  it('knowledgeQuery: relationships by relation type', () => {
+    const { engine } = buildPopulatedCore();
+    const result = engine.knowledgeQuery('supersedes');
+    expect(result.relationships.length).toBeGreaterThan(0);
+    expect(result.relationships[0].relationType).toBe('supersedes');
+  });
+
+  it('reconstructContext: multi-hop paths from start object', () => {
+    const { engine } = buildPopulatedCore();
+    const decision = (engine as any).core.getObject('obj:switch-to-cockroachdb');
+    const result = engine.reconstructContext(decision.id);
+    expect(result.objects.length).toBe(1);
+    expect(result.claims.length).toBe(0); // decision has no claims, only relationships
+    expect(result.paths.length).toBeGreaterThan(0);
+  });
+
+  it('reconstructContext: includes claims and gaps', () => {
+    const { core, engine } = buildPopulatedCore();
+    const postgres = core.getObject('obj:postgresql');
+    const gap = core.createKnowledgeGap({
+      type: 'UnresolvedConflict',
+      subjectId: postgres.id,
+      description: 'PostgreSQL role disputed',
+      actor: 'test',
+    });
+    const result = engine.reconstructContext(postgres.id);
+    expect(result.claims.length).toBe(1);
+    expect(result.gaps.length).toBe(1);
+  });
+});

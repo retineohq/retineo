@@ -60,9 +60,9 @@ Sources → Evidence → Candidate → Decision → Policy → MEMORY CORE
 
 ### Этап 5 — Retrieval projections
 
-- Essence/Summary как SemanticRepresentation + index
-- Claims/Relationships как knowledge index
-- Multi-hop traversal как context query
+- Essence/Summary как SemanticRepresentation + index — **выполнено** (findEntryPoints)
+- Claims/Relationships как knowledge index — **выполнено** (knowledgeQuery)
+- Multi-hop traversal как context query — **выполнено** (reconstructContext)
 - BM25/vector как derived projections (rebuildable, M8)
 - Multilingual support (embeddings + claims-level extraction)
 - Выход: многослойный retrieval работает —
