@@ -33,6 +33,7 @@
 - **Candidate extraction (Этап 4):** ExtractionModel port + RegexExtractionModel (детерминированный). `extractFromEvidence`: Evidence → extraction → Candidate → Decision → Policy → Memory (Object + Claim/Relationship). Полный pipeline работает без AI.
 - **Retrieval projections (Этап 5):** QueryEngine — `findEntryPoints` (essence token matching), `knowledgeQuery` (claims/relationships по keyword), `reconstructContext` (multi-hop paths + claims + gaps). Многослойный retrieval работает.
 - **Segment import (Этап 6):** `importSegment` — verify signature, expire check, autoApply опция, validation что все members существуют локально. Journal events: import_verified/import_rejected/import_applied. Import не мутирует память молча.
+- **HTTP API (Этап 7):** Fastify сервер с 13 endpoints — health, objects (GET/POST + provenance), claims GET/POST, contexts GET, relationships POST, query (entry-points/knowledge/context), segments (GET/import), journal. Порт 0 для тестов, inject-based.
 - **tsc:** чисто для memory-core и для старого ядра.
 
 ### 1.3. Решения пользователя

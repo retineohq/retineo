@@ -1397,3 +1397,82 @@ describe('Segment import (Stage 6)', () => {
     expect(() => core.importSegment({ segment, actor: 'test', autoApply: true })).not.toThrow();
   });
 });
+
+describe('HTTP API (Stage 7)', () => {
+  let createHttpServer: any;
+  let app: any;
+
+  beforeAll(async () => {
+    const module = await import('../src/index.js');
+    createHttpServer = module.createHttpServer;
+  });
+
+  afterAll(async () => {
+    if (app) await app.close();
+  });
+
+  it('health check + create object + query object via HTTP', async () => {
+    const core = buildCore();
+    const QueryEngineClass = (await import('../src/core/query-engine.js')).QueryEngine;
+    const engine = new QueryEngineClass(core);
+    app = createHttpServer(core, engine, { port: 0, host: '127.0.0.1' });
+    await app.ready();
+
+    const health = await app.inject({ method: 'GET', url: '/health' });
+    expect(health.statusCode).toBe(200);
+    expect(JSON.parse(health.body).status).toBe('ok');
+
+    const created = await app.inject({
+      method: 'POST',
+      url: '/objects',
+      payload: { type: 'technology', name: 'TestObj', actor: 'test' },
+    });
+    expect(created.statusCode).toBe(200);
+    const obj = JSON.parse(created.body);
+    expect(obj.name).toBe('TestObj');
+
+    const fetched = await app.inject({ method: 'GET', url: `/objects/${obj.id}` });
+    expect(fetched.statusCode).toBe(200);
+    expect(JSON.parse(fetched.body).id).toBe(obj.id);
+  });
+
+  it('404 for missing object', async () => {
+    const core = buildCore();
+    const QueryEngineClass = (await import('../src/core/query-engine.js')).QueryEngine;
+    const engine = new QueryEngineClass(core);
+    const testApp = createHttpServer(core, engine, { port: 0, host: '127.0.0.1' });
+    await testApp.ready();
+    const response = await testApp.inject({ method: 'GET', url: '/objects/obj:fake' });
+    expect(response.statusCode).toBe(404);
+    await testApp.close();
+  });
+
+  it('claim via HTTP with evidence', async () => {
+    const core = buildCore();
+    const QueryEngineClass = (await import('../src/core/query-engine.js')).QueryEngine;
+    const engine = new QueryEngineClass(core);
+    const testApp = createHttpServer(core, engine, { port: 0, host: '127.0.0.1' });
+    await testApp.ready();
+    const e1 = createId('ev', 'e1') as any;
+    core.createEvidence({
+      id: e1, sourceVersionId: createId('sv', 'sv-1') as any, segmentRef: null, contentHash: 'h', state: 'available',
+    });
+    const obj = core.createObject({ type: 'technology', name: 'X', actor: 'test' });
+    const response = await testApp.inject({
+      method: 'POST',
+      url: '/claims',
+      payload: {
+        subjectId: obj.id,
+        predicate: 'has_role',
+        objectOrValue: 'Primary',
+        evidenceRefs: [e1],
+        actor: 'test',
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    const claim = JSON.parse(response.body);
+    expect(claim.predicate).toBe('has_role');
+    expect(testApp !== undefined).toBe(true);
+    await testApp.close();
+  });
+});
