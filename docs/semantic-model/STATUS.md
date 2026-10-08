@@ -36,6 +36,7 @@
 - **HTTP API (Этап 7):** Fastify сервер с 13 endpoints — health, objects (GET/POST + provenance), claims GET/POST, contexts GET, relationships POST, query (entry-points/knowledge/context), segments (GET/import), journal. Порт 0 для тестов, inject-based.
 - **CLI (Этап 7):** `memory-core` binary — serve (HTTP), ingest, journal, extract, query. Дефолт SQLite db. Проверено вручную: ingest пишет в journal через MemoryCore.
 - **MCP server (Этап 7):** `MemoryCoreMCPServer` — 9 tools (get_object, get_claim, get_context, create_object, query_entry_points, query_knowledge, query_context, get_journal, get_segment). Stdio transport. CLI команда `memory-core mcp`.
+- **Программная валидация Phase 4–5 (Этап 7):** `experiments/validate-phase4-5.ts` — 5/5 тестов пройдено программно. HashEmbeddingModel (детерминированный, 64 dim). Проверено: entry points через cosine similarity (0.192), compression 5.8×, semantic recall 1.00, relationship discovery через extraction pipeline, multi-hop reconstruction.
 - **tsc:** чисто для memory-core и для старого ядра.
 
 ### 1.3. Решения пользователя
@@ -66,7 +67,7 @@
 | SQLite/Postgres adapter | Phase 7 (persistent) | Инфраструктура, не domain. Отложена до стабилизации. |
 | HTTP API | Phase 12 | Инфраструктура. Не нужна для 16-шагового milestone. |
 | CLI интеграция | — | Старый CLI работает со старым ядром. Замена — после стабилизации. |
-| Semantic compression через LLM | Phase 5 (real) | Эксперимент аналитический. Программная валидация — будущий этап. |
+| Semantic compression через LLM | Phase 5 (real) | Валидация выполнена программно (5/5). LLM-извлечение — adapter за портом, будущее расширение. |
 | Acceptance test метрики | Phase 4 | Отложено по решению пользователя. |
 | Support State вычисление | Phase 6 | Отложено по решению пользователя. |
 | structure.md docs section | — | Обновлён (см. Top-Level Layout + Functional Cross-Reference Index). |

@@ -81,7 +81,7 @@ Sources → Evidence → Candidate → Decision → Policy → MEMORY CORE
 - CLI на новых портах (не через packages/core) — **выполнено** (`memory-core` binary)
 - HTTP bridge на новых портах — **выполнено** (Fastify, 13 endpoints)
 - MCP server на новых портах — **выполнено** (`MemoryCoreMCPServer`, 9 tools, stdio)
-- Программная валидация Phase 4–5 экспериментов (реальные embeddings, не аналитика)
+- Программная валидация Phase 4–5 экспериментов — **выполнено** (5/5, HashEmbeddingModel без AI)
 - Выход: вся пользовательская инфраструктура работает на memory-core
 
 ### Этап 8 — Cleanup

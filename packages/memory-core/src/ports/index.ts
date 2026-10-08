@@ -4,3 +4,4 @@ export * from './lifecycle.js';
 export * from './representation.js';
 export * from './segment.js';
 export * from './extraction.js';
+export * from './embedding.js';
