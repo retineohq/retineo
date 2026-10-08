@@ -80,7 +80,7 @@ Sources → Evidence → Candidate → Decision → Policy → MEMORY CORE
 
 - CLI на новых портах (не через packages/core) — **выполнено** (`memory-core` binary)
 - HTTP bridge на новых портах — **выполнено** (Fastify, 13 endpoints)
-- MCP server на новых портах
+- MCP server на новых портах — **выполнено** (`MemoryCoreMCPServer`, 9 tools, stdio)
 - Программная валидация Phase 4–5 экспериментов (реальные embeddings, не аналитика)
 - Выход: вся пользовательская инфраструктура работает на memory-core
 

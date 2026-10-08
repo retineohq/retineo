@@ -46,6 +46,7 @@ import {
   SqliteIdentityResolver,
 } from '../dist/adapters/sqlite/index.js';
 import { startHttpServer } from '../dist/api/http-server.js';
+import { MemoryCoreMCPServer } from '../dist/api/mcp-server.js';
 import { FilesystemSourceAdapter } from '../dist/adapters/ingestion/index.js';
 
 const args = process.argv.slice(2);
@@ -128,6 +129,20 @@ async function main() {
     return;
   }
 
+  if (command === 'mcp') {
+    const dbFile = args[1] || 'memory-core.db';
+    const { core, close } = buildSqliteCore(dbFile);
+    const engine = new QueryEngine(core);
+    const server = new MemoryCoreMCPServer({ core, engine });
+    await server.start();
+    console.error(`Memory Core MCP server started (db: ${dbFile})`);
+    process.on('SIGINT', () => {
+      close();
+      process.exit(0);
+    });
+    return;
+  }
+
   if (command === 'ingest') {
     const dir = args[1];
     if (!dir) {
@@ -202,6 +217,7 @@ Retineo Memory Core CLI
 
 Usage:
   memory-core serve [dbFile] [port]     Start HTTP API server
+  memory-core mcp [dbFile]             Start MCP server (stdio)
   memory-core ingest <dir> [dbFile]     Ingest text files from directory
   memory-core journal [dbFile]          Show journal events
   memory-core extract <ev> <content> [dbFile]  Extract claims/relationships

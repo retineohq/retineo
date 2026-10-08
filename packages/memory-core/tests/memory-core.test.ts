@@ -1476,3 +1476,20 @@ describe('HTTP API (Stage 7)', () => {
     await testApp.close();
   });
 });
+
+describe('MCP server (Stage 7)', () => {
+  let MemoryCoreMCPServer: any;
+
+  beforeAll(async () => {
+    const module = await import('../src/index.js');
+    MemoryCoreMCPServer = module.MemoryCoreMCPServer;
+  });
+
+  it('creates MCP server with tools', async () => {
+    const core = buildCore();
+    const QueryEngineClass = (await import('../src/core/query-engine.js')).QueryEngine;
+    const engine = new QueryEngineClass(core);
+    const server = new MemoryCoreMCPServer({ core, engine });
+    expect(server).toBeDefined();
+  });
+});
