@@ -1,27 +1,23 @@
 {
-  "name": "@retineo/core",
-  "version": "0.6.7",
-  "description": "Connection discovery engine (L0–L3). Open-source core for the Retineo ecosystem.",
+  "name": "@retineo/memory-core",
+  "version": "0.1.0",
+  "description": "Persistent epistemic memory core. Clean rewrite per HANDOFF Phase 7.",
   "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
   "bin": {
-    "retineo": "bin/retineo.js",
-    "retineo-mcp": "bin/retineo-mcp.js"
+    "memory-core": "packages/memory-core/bin/memory-core.js"
   },
   "files": [
-    "dist",
-    "bin",
+    "packages/memory-core/dist",
+    "packages/memory-core/bin",
     "docs",
     "README.md",
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc && cp packages/core/src/storage/schema.sql dist/storage/ && cp -rn packages/core/adapters/* dist/adapters/ 2>/dev/null || cp -r packages/core/adapters/* dist/adapters/",
-    "test": "vitest --run",
-    "lint": "eslint packages/core/src/**/*.ts",
-    "bundle:binary": "esbuild bin/retineo.js --bundle --platform=node --outfile=dist/bundle.cjs --format=cjs",
-    "package:binary": "pnpm bundle:binary && pkg dist/bundle.cjs --out-path=dist --targets=node18-linux-x64,node18-macos-x64,node18-win-x64"
+    "build": "tsc -p packages/memory-core/tsconfig.json && cp packages/memory-core/src/adapters/sqlite/schema.sql packages/memory-core/dist/adapters/sqlite/schema.sql",
+    "test": "vitest --run packages/memory-core/tests/",
+    "lint": "eslint packages/memory-core/src/**/*.ts",
+    "validate": "node packages/memory-core/experiments/validate-phase4-5.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

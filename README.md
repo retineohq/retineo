@@ -1,145 +1,87 @@
-# Retineo
+# Retineo Memory Core
 
-Retineo is a local-first knowledge compilation engine that converts documents
-into normalized, structured, summarized, and searchable layers. It currently
-implements an L0–L3 pipeline, content-addressed storage, retrieval APIs, and a
-collection health analyzer.
+Retineo Memory Core is a persistent epistemic memory engine. It maintains
+explicit, provenance-backed knowledge — objects, claims, relationships, and
+contexts — with temporal state, support state, and immutable evidence.
 
-## Why Retineo
+Retrieval serves memory. Memory does not exist merely to serve retrieval.
 
-Organizations accumulate documents, but lose the relationships between them. A
-meeting note, a pricing analysis, and a support report may describe the same
-underlying decision without referencing each other. Traditional search can find
-similar words; it does not preserve or explain the chain that connects them.
+## Core idea
 
-Retineo is exploring how to represent and discover relationships between pieces
-of knowledge. Its current Core focuses on making documents reliably structured
-and searchable first.
+The old model:
 
-## What Retineo does
-
-Retineo is not merely a semantic search front end. It compiles each source into
-layered artifacts with structural links between document segments:
-
-| Area | Current implementation |
-|---|---|
-| Ingestion | Markdown, text, PDF, image, audio, and video adapters |
-| L0 | Normalized text and metadata |
-| L1 | Headings, sections, chunk anchors, and line ranges |
-| L2 | LLM-generated summary, concepts, entities, claims, and concept relations |
-| L3 | HNSW vector index and BM25 keyword index with hybrid retrieval |
-| Storage | Immutable SHA-256 CAS, SQLite registry, job queue, and build manifests |
-| Similarity | Document-level semantic and exact similarity modes |
-| Health | Coverage, duplicates, orphans, ghosts, and knowledge-age findings |
-| Interfaces | CLI, local HTTP bridge, MCP server, and Node.js runtime API |
-
-The pipeline is dependency-light but not cloud-free by default: L1/L2/L3 use a
-configured LLM and embedding provider, such as a local Ollama model. Audio and
-video adapters have additional optional external dependencies.
-
-## A small example
-
-```text
-report.pdf
-  → L0 normalized text
-  → L1 heading and chunk outline
-  → L2 summary, concepts, claims
-  → L3 vector + keyword index
-  → searchable result with citation
+```
+documents → chunks → indexes → retrieval → context reconstruction
 ```
 
-The layers preserve structure and provenance instead of reducing the document
-to a flat text blob. This makes chunk-level citations, navigation, similarity
-search, and health analysis possible.
+The new model:
 
-## Current implementation
+```
+sources → evidence → candidates → decisions → policies → memory
+                                                          │
+                                        ┌─────────────────┼─────────────────┐
+                                        ▼                 ▼                 ▼
+                                     indexes           segments          agents
+                                  (rebuildable)      (portable)      (context pkgs)
+```
 
-- L0–L3 compilation and background queue processing
-- Local-first CAS and SQLite persistence
-- CLI, HTTP bridge, MCP, and programmatic Node.js runtime
-- Semantic, keyword, hybrid, and document-similarity retrieval
-- Ghost recovery for deleted or modified sources
-- Health analysis for orphaned, duplicate, or aged documents
+Search finds where to enter memory. Memory contains what the organization
+knows, what it does not know, and why.
 
-Automatic typed relationship discovery, graph traversal, and L4–L9 features are
-not part of the current Core.
+## What it does
+
+| Capability | Description |
+|---|---|
+| **Evidence** | Immutable, hash-addressed. Untrusted sources quarantined |
+| **Objects** | Typed entities with identity, merge via tombstone + redirect |
+| **Claims** | subject + predicate + value with temporal state, support, confidence, scope |
+| **Relationships** | First-class, typed (supersedes, contradicts, caused_by, ...) |
+| **Contexts** | First-class, nested, overlapping, membership by reference |
+| **Knowledge gaps** | Explicit representation of unknowns |
+| **Provenance** | Every authoritative assertion traces to evidence |
+| **Journal** | Atomic, every mutation has an event |
+| **Segments** | Portable, signed, verifiable, expiring |
+| **Extraction** | Evidence → Candidates → Decision → Policy → Memory |
+| **Retrieval** | Essence → entry points; Claims → knowledge; Multi-hop → context |
 
 ## Quick start
 
-Requires Node.js 20+.
-
 ```bash
-# Install
-npm install -g @retineo/core
+# Start HTTP API server (port 7900)
+npx memory-core serve
 
-# Configure models and data directory
-retineo init
+# Ingest text files from a directory
+npx memory-core ingest ./docs
 
-# Optional: check local dependencies
-retineo doctor
+# Query memory
+npx memory-core query entry-points "PostgreSQL database"
+npx memory-core query knowledge "primary database"
+npx memory-core query context "obj:postgresql"
 
-# Ingest and wait for compilation
-retineo ingest ./notes --watch
-
-# Search
-retineo search "pricing objections"
-
-# Find similar documents using a content hash
-retineo similar <contentHash>
-
-# Analyze collection health
-retineo health ./notes
-
-# Inspect jobs and status
-retineo status
-retineo jobs
+# Start MCP server (stdio)
+npx memory-core mcp
 ```
 
-For source checkout:
+## Invariants
+
+20 mandatory invariants (M1–M20) are exhaustively tested. See
+`docs/semantic-model/phase6-domain-model.md` for the full list.
+
+## Development
 
 ```bash
-pnpm install
-pnpm build
-pnpm test
-node bin/retineo.js --help
+npm install
+npm run build
+npm test
+npm run validate
 ```
-
-Detailed setup is in [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md) and
-[docs/INSTALL.md](docs/INSTALL.md).
-
-## Architecture
-
-The full pipeline, storage layout, retrieval design, and module map are in
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
-
-## Experiments / Research
-
-Retineo also explores how relationships between documents can be represented,
-analyzed, and eventually discovered. Some supporting data structures and
-similarity/health tools exist today; typed cross-document relationship
-discovery remains experimental research.
-
-See [docs/EXPERIMENTS.md](docs/EXPERIMENTS.md) for the implemented foundations,
-open questions, and non-goals.
 
 ## Documentation
 
-- [Architecture](docs/ARCHITECTURE.md)
-- [Getting Started](docs/GETTING_STARTED.md)
-- [Installation](docs/INSTALL.md)
-- [CLI](docs/CLI.md)
-- [HTTP API](docs/API.md)
-- [Programmatic API](docs/API.md#programmatic-api)
-- [MCP](docs/MCP.md)
-- [Experiments & Research](docs/EXPERIMENTS.md)
-- [Repository Structure](structure.md)
-- [Contributing](CONTRIBUTING.md)
-
-## Roadmap
-
-See [ROADMAP.md](ROADMAP.md) for planned work, commercial ecosystem notes, and
-release status. Future items are not current capabilities.
+- `docs/semantic-model/` — experiment artifacts (Phase 1–6), detailed roadmap, working conventions
+- `docs/semantic-model/STATUS.md` — current status snapshot
+- `structure.md` — repository structure and cross-reference index
 
 ## License
 
-Apache 2.0 — see [LICENSE](LICENSE).
+See `LICENSE`.
