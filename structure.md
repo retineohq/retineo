@@ -27,9 +27,9 @@ retineo/
 │   ├── bin/            # memory-core CLI (serve, ingest, journal, extract, query, mcp)
 │   ├── experiments/    # Programmatic validation of Phase 4–5 (5/5 passing)
 │   └── tests/          # 65 deterministic tests, no AI/network
-├── docs/                # Developer documentation
+├── docs/                # Documentation
 │   ├── semantic-model/  # Phase 1–6 experiment artifacts + STATUS + ROADMAP-DETAIL + WORKING-CONVENTIONS
-│   ├── ...              # Legacy docs (to be updated for memory-core)
+│   └── DEPRECATED.md    # Legacy docs index (old architecture, deprecated)
 ├── docs/                # Developer documentation
 │   ├── README.md        # Documentation index
 │   ├── INSTALL.md       # Installation guide (npm, binary, source)
