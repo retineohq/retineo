@@ -371,6 +371,10 @@ export class MemoryCore {
         createdAt: now,
         updatedAt: now,
       };
+      const existingContext = this.deps.contexts.get(context.id);
+      if (existingContext) {
+        throw new Error(`Context ID already exists: ${context.id}`);
+      }
       this.deps.contexts.save(context);
       this.journal('create', 'context', context.id, input.actor);
       this.deps.transaction.commit();

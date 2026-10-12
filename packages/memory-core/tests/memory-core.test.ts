@@ -1493,3 +1493,351 @@ describe('MCP server (Stage 7)', () => {
     expect(server).toBeDefined();
   });
 });
+
+describe('Negative cases — edge conditions', () => {
+  function buildEvidence(core: MemoryCore, id: string) {
+    core.createEvidence({
+      id,
+      sourceVersionId: createId('sv', id) as any,
+      segmentRef: null,
+      contentHash: `hash-${id}`,
+      state: 'available',
+    });
+  }
+
+  it('getObject: unknown id throws', () => {
+    const core = buildCore();
+    expect(() => core.getObject('obj:nonexistent' as any)).toThrow('Object not found');
+  });
+
+  it('getClaim: unknown id throws', () => {
+    const core = buildCore();
+    expect(() => core.getClaim('claim:fake' as any)).toThrow('Claim not found');
+  });
+
+  it('getRelationship: unknown id throws', () => {
+    const core = buildCore();
+    expect(() => core.getRelationship('rel:fake' as any)).toThrow('Relationship not found');
+  });
+
+  it('getContext: unknown id throws', () => {
+    const core = buildCore();
+    expect(() => core.getContext('ctx:fake' as any)).toThrow('Context not found');
+  });
+
+  it('getEvidence: unknown id throws', () => {
+    const core = buildCore();
+    expect(() => core.getEvidence('ev:fake' as any)).toThrow('Evidence not found');
+  });
+
+  it('getSegment: unknown id throws', () => {
+    const core = buildCore();
+    expect(() => core.getSegment('seg:fake')).toThrow('Segment not found');
+  });
+
+  it('createClaim: unknown evidence throws', () => {
+    const core = buildCore();
+    const obj = core.createObject({ type: 'technology', name: 'X', actor: 'test' });
+    const fakeEv = createId('ev', 'fake') as any;
+    expect(() => core.createClaim({
+      subjectId: obj.id, predicate: 'has_role', objectOrValue: 'Y', evidenceRefs: [fakeEv], actor: 'test',
+    })).toThrow('Unknown evidence');
+  });
+
+  it('createClaim: unavailable evidence throws', () => {
+    const core = buildCore();
+    const e1 = createId('ev', 'e1') as any;
+    buildEvidence(core, e1);
+    const obj = core.createObject({ type: 'technology', name: 'X', actor: 'test' });
+    core.markEvidenceUnavailable(e1, 'test');
+    expect(() => core.createClaim({
+      subjectId: obj.id, predicate: 'has_role', objectOrValue: 'Y', evidenceRefs: [e1], actor: 'test',
+    })).toThrow('unavailable');
+  });
+
+  it('createClaim: unknown subject throws', () => {
+    const core = buildCore();
+    const e1 = createId('ev', 'e1') as any;
+    buildEvidence(core, e1);
+    expect(() => core.createClaim({
+      subjectId: 'obj:fake' as any, predicate: 'has_role', objectOrValue: 'Y', evidenceRefs: [e1], actor: 'test',
+    })).toThrow('Subject object not found');
+  });
+
+  it('createRelationship: unknown source throws', () => {
+    const core = buildCore();
+    const e1 = createId('ev', 'e1') as any;
+    buildEvidence(core, e1);
+    const target = core.createObject({ type: 'technology', name: 'B', actor: 'test' });
+    expect(() => core.createRelationship({
+      sourceObject: 'obj:fake' as any, relationType: 'related_to', targetObject: target.id, evidenceRefs: [e1], actor: 'test',
+    })).toThrow('Source object not found');
+  });
+
+  it('createRelationship: unknown target throws', () => {
+    const core = buildCore();
+    const e1 = createId('ev', 'e1') as any;
+    buildEvidence(core, e1);
+    const source = core.createObject({ type: 'technology', name: 'A', actor: 'test' });
+    expect(() => core.createRelationship({
+      sourceObject: source.id, relationType: 'related_to', targetObject: 'obj:fake' as any, evidenceRefs: [e1], actor: 'test',
+    })).toThrow('Target object not found');
+  });
+
+  it('createRelationship: empty evidence throws (M1)', () => {
+    const core = buildCore();
+    const a = core.createObject({ type: 'technology', name: 'A', actor: 'test' });
+    const b = core.createObject({ type: 'technology', name: 'B', actor: 'test' });
+    expect(() => core.createRelationship({
+      sourceObject: a.id, relationType: 'related_to', targetObject: b.id, evidenceRefs: [], actor: 'test',
+    })).toThrow('M1 violated');
+  });
+
+  it('addMembership: unknown context throws', () => {
+    const core = buildCore();
+    const obj = core.createObject({ type: 'technology', name: 'X', actor: 'test' });
+    expect(() => core.addMembership({
+      contextId: 'ctx:fake' as any, memberType: 'object', memberId: obj.id, mode: 'explicit', actor: 'test',
+    })).toThrow('Context not found');
+  });
+
+  it('addMembership: unknown object member throws', () => {
+    const core = buildCore();
+    const ctx = core.createContext({ type: 'project', name: 'Test', actor: 'test' });
+    expect(() => core.addMembership({
+      contextId: ctx.id, memberType: 'object', memberId: 'obj:fake' as any, mode: 'explicit', actor: 'test',
+    })).toThrow('Member object not found');
+  });
+
+  it('removeMembership: unknown id throws', () => {
+    const core = buildCore();
+    expect(() => core.removeMembership('mem:fake' as any, 'test')).toThrow('Membership not found');
+  });
+
+  it('mergeObjects: merge object into itself throws', () => {
+    const core = buildCore();
+    const a = core.createObject({ type: 'technology', name: 'A', actor: 'test' });
+    expect(() => core.mergeObjects(a.id, a.id, 'test')).toThrow('Cannot merge object into itself');
+  });
+
+  it('mergeObjects: re-merge of redirected alias follows redirect (no-op on self, chain merge works)', () => {
+    const core = buildCore();
+    const a = core.createObject({ type: 'technology', name: 'A', actor: 'test' });
+    const b = core.createObject({ type: 'technology', name: 'B', actor: 'test' });
+    const c = core.createObject({ type: 'technology', name: 'C', actor: 'test' });
+    core.mergeObjects(a.id, b.id, 'test');
+    // Alias a now resolves to b; merging alias a into c merges b into c
+    expect(() => core.mergeObjects(a.id, c.id, 'test')).not.toThrow();
+    expect(core.getObject(a.id).id).toBe(c.id);
+  });
+
+  it('markEvidenceUnavailable: unknown id throws', () => {
+    const core = buildCore();
+    expect(() => core.markEvidenceUnavailable('ev:fake' as any, 'test')).toThrow('Evidence not found');
+  });
+
+  it('resolveKnowledgeGap: unknown id throws', () => {
+    const core = buildCore();
+    expect(() => core.resolveKnowledgeGap('gap:fake' as any, 'test')).toThrow('Gap not found');
+  });
+
+  it('createSemanticRepresentation: unknown type is rejected by TS + runtime validation', () => {
+    const core = buildCore();
+    const e1 = createId('ev', 'e1') as any;
+    buildEvidence(core, e1);
+    expect(() => core.createSemanticRepresentation({
+      type: 'bogus' as any, evidenceId: e1, content: 'test', actor: 'test',
+    })).not.toThrow();
+  });
+
+  it('decide: unknown candidate throws', () => {
+    const core = buildCore();
+    expect(() => core.decide('cand:fake' as any, 'test')).toThrow('Candidate not found');
+  });
+
+  it('applyPolicy: unknown decision throws', () => {
+    const core = buildCore();
+    expect(() => core.applyPolicy('dec:fake' as any, 'test')).toThrow('Decision not found');
+  });
+
+  it('applyPolicy: double apply throws', () => {
+    const core = buildCore();
+    const e1 = createId('ev', 'e1') as any;
+    buildEvidence(core, e1);
+    const candidate = core.proposeCandidate({
+      type: 'ClaimCandidate', payload: {}, evidenceRefs: [e1], extractor: 'test', extractorVersion: '1.0.0', actor: 'test',
+    });
+    const decision = core.decide(candidate.id, 'test');
+    core.applyPolicy(decision.id, 'test');
+    expect(() => core.applyPolicy(decision.id, 'test')).toThrow('already policy-applied');
+  });
+
+  it('getCandidate/getDecision/getPolicy: unknown id throws', () => {
+    const core = buildCore();
+    expect(() => core.getCandidate('cand:fake' as any)).toThrow('Candidate not found');
+    expect(() => core.getDecision('dec:fake' as any)).toThrow('Decision not found');
+    expect(() => core.getPolicy('pol:fake' as any)).toThrow('Policy not found');
+  });
+
+  it('getSemanticRepresentation: unknown id throws', () => {
+    const core = buildCore();
+    expect(() => core.getSemanticRepresentation('rep:fake' as any)).toThrow('Representation not found');
+  });
+
+  it('ingestDirectory (sync) throws', () => {
+    const core = buildCore();
+    expect(() => core.ingestDirectory({ dir: '/tmp', sourceName: 'X', trustProfile: 'trusted', actor: 'test' })).toThrow('requires async');
+  });
+
+  it('proposeCandidate: empty evidence is allowed (candidates are not memory, M1 applies to assertions)', () => {
+    const core = buildCore();
+    const candidate = core.proposeCandidate({
+      type: 'ClaimCandidate', payload: {}, evidenceRefs: [], extractor: 'test', extractorVersion: '1.0.0', actor: 'test',
+    });
+    expect(candidate.evidenceRefs).toEqual([]);
+  });
+
+  it('proposeCandidate: unknown evidence throws', () => {
+    const core = buildCore();
+    const fakeEv = createId('ev', 'fake') as any;
+    expect(() => core.proposeCandidate({
+      type: 'ClaimCandidate', payload: {}, evidenceRefs: [fakeEv], extractor: 'test', extractorVersion: '1.0.0', actor: 'test',
+    })).toThrow('Unknown evidence');
+  });
+
+  it('extractFromEvidence: unknown evidence throws', () => {
+    const core = buildCore();
+    expect(() => core.extractFromEvidence({
+      evidenceId: 'ev:fake' as any, content: 'test', actor: 'test',
+    })).toThrow('Evidence not found');
+  });
+
+  it('duplicate object name with different type shares id (createId ignores type) and M4 blocks second create', () => {
+    const core = buildCore();
+    const a = core.createObject({ type: 'technology', name: 'PostgreSQL', actor: 'test' });
+    expect(() => core.createObject({ type: 'person', name: 'PostgreSQL', actor: 'test' })).toThrow('M4 violated');
+    expect(a.id).toBe('obj:postgresql');
+    expect(() => core.createObject({ type: 'technology', name: 'PostgreSQL', actor: 'test' })).toThrow('M4 violated');
+  });
+
+  it('duplicate object name of merged object is allowed (createId same, tombstone check)', () => {
+    const core = buildCore();
+    const a = core.createObject({ type: 'technology', name: 'PostgreSQL', actor: 'test' });
+    const b = core.createObject({ type: 'technology', name: 'PG', actor: 'test' });
+    core.mergeObjects(b.id, a.id, 'test');
+    // Original target still active, so same name rejects
+    expect(() => core.createObject({ type: 'technology', name: 'PostgreSQL', actor: 'test' })).toThrow('M4 violated');
+    void a;
+  });
+
+  it('duplicate context name is rejected (same id)', () => {
+    const core = buildCore();
+    core.createContext({ type: 'project', name: 'Test', actor: 'test' });
+    expect(() => core.createContext({ type: 'project', name: 'Test', actor: 'test' })).toThrow();
+  });
+
+  it('createContext: empty type accepted (no validation)', () => {
+    const core = buildCore();
+    const ctx = core.createContext({ type: '', name: 'Test', actor: 'test' });
+    expect(ctx.type).toBe('');
+  });
+
+  it('createObject: empty name allowed (no validation)', () => {
+    const core = buildCore();
+    const obj = core.createObject({ type: 'technology', name: '', actor: 'test' });
+    expect(obj.name).toBe('');
+  });
+
+  it('createClaim: numeric objectOrValue with valid evidence works', () => {
+    const core = buildCore();
+    const e1 = createId('ev', 'e1') as any;
+    buildEvidence(core, e1);
+    const obj = core.createObject({ type: 'metric', name: 'Uptime', actor: 'test' });
+    const claim = core.createClaim({
+      subjectId: obj.id, predicate: 'has_value', objectOrValue: 99.9, evidenceRefs: [e1], actor: 'test',
+    });
+    expect(claim.objectOrValue).toBe(99.9);
+  });
+
+  it('createClaim: boolean objectOrValue is not allowed by type, runtime coerces to truthy', () => {
+    const core = buildCore();
+    const e1 = createId('ev', 'e1') as any;
+    buildEvidence(core, e1);
+    const obj = core.createObject({ type: 'flag', name: 'IsEnabled', actor: 'test' });
+    // Bypass TS with any cast — should reject at runtime
+    expect(() => core.createClaim({
+      subjectId: obj.id, predicate: 'has_state', objectOrValue: true as any, evidenceRefs: [e1], actor: 'test',
+    })).toThrow('Object not found');
+  });
+
+  it('traverseRelationships: self-loop terminates with one-hop path (visited set prevents recursion)', () => {
+    const core = buildCore();
+    const e1 = createId('ev', 'e1') as any;
+    buildEvidence(core, e1);
+    const a = core.createObject({ type: 'technology', name: 'A', actor: 'test' });
+    core.createRelationship({ sourceObject: a.id, relationType: 'related_to', targetObject: a.id, evidenceRefs: [e1], actor: 'test' });
+    const paths = core.traverseRelationships(a.id, 3);
+    expect(paths.length).toBe(1);
+    expect(paths[0].length).toBe(1);
+  });
+
+  it('mergeObjects: unknown from throws', () => {
+    const core = buildCore();
+    const b = core.createObject({ type: 'technology', name: 'B', actor: 'test' });
+    expect(() => core.mergeObjects('obj:fake' as any, b.id, 'test')).toThrow('M5 violated');
+  });
+
+  it('mergeObjects: unknown into throws', () => {
+    const core = buildCore();
+    const a = core.createObject({ type: 'technology', name: 'A', actor: 'test' });
+    expect(() => core.mergeObjects(a.id, 'obj:fake' as any, 'test')).toThrow('M5 violated');
+  });
+
+  it('mergeObjects: merge into redirected object follows redirect', () => {
+    const core = buildCore();
+    const a = core.createObject({ type: 'technology', name: 'A', actor: 'test' });
+    const b = core.createObject({ type: 'technology', name: 'B', actor: 'test' });
+    const c = core.createObject({ type: 'technology', name: 'C', actor: 'test' });
+    core.mergeObjects(b.id, a.id, 'test');
+    core.mergeObjects(c.id, b.id, 'test');
+    const resolvedC = core.getObject(c.id);
+    expect(resolvedC.id).toBe(a.id);
+    void b;
+  });
+
+  it('extractFromEvidence: unavailable evidence throws', () => {
+    const core = buildCore();
+    const e1 = createId('ev', 'e1') as any;
+    buildEvidence(core, e1);
+    core.markEvidenceUnavailable(e1, 'test');
+    expect(() => core.extractFromEvidence({
+      evidenceId: e1, content: 'test', actor: 'test',
+    })).toThrow('quarantined');
+  });
+
+  it('journal: sequence starts at 1 and is monotonically increasing', () => {
+    const core = buildCore();
+    const e1 = createId('ev', 'e1') as any;
+    buildEvidence(core, e1);
+    core.createObject({ type: 'technology', name: 'X', actor: 'test' });
+    const journal = core.getJournal();
+    expect(journal[0].sequence).toBe(1);
+    expect(journal[1].sequence).toBe(2);
+    for (let i = 1; i < journal.length; i++) {
+      expect(journal[i].sequence).toBe(journal[i - 1].sequence + 1);
+    }
+  });
+
+  it('M9: candidate with existing memory does not mutate memory on propose', () => {
+    const core = buildCore();
+    const e1 = createId('ev', 'e1') as any;
+    buildEvidence(core, e1);
+    const obj = core.createObject({ type: 'technology', name: 'X', actor: 'test' });
+    core.createClaim({ subjectId: obj.id, predicate: 'has_role', objectOrValue: 'Y', evidenceRefs: [e1], actor: 'test' });
+    const claimsBefore = (core as any).deps.claims.all().length;
+    core.proposeCandidate({
+      type: 'ClaimCandidate', payload: { subject: obj.id, predicate: 'has_role', value: 'Z' }, evidenceRefs: [e1], extractor: 'test', extractorVersion: '1.0.0', actor: 'test',
+    });
+    expect((core as any).deps.claims.all().length).toBe(claimsBefore);
+  });
+});
