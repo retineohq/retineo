@@ -106,6 +106,111 @@ export function createHttpServer(
     }
   });
 
+  app.post('/contexts', async (request, reply) => {
+    try {
+      const body = request.body as any;
+      return core.createContext({
+        type: body.type,
+        name: body.name,
+        purpose: body.purpose,
+        actor: body.actor ?? 'http',
+      });
+    } catch (error: any) {
+      reply.code(400);
+      return { error: error.message };
+    }
+  });
+
+  app.post('/contexts/:id/memberships', async (request, reply) => {
+    try {
+      const body = request.body as any;
+      return core.addMembership({
+        contextId: (request.params as any).id,
+        memberType: body.memberType,
+        memberId: body.memberId,
+        mode: body.mode,
+        actor: body.actor ?? 'http',
+      });
+    } catch (error: any) {
+      reply.code(400);
+      return { error: error.message };
+    }
+  });
+
+  app.get('/objects/:id/relationships', async (request, reply) => {
+    try {
+      return core.getRelationshipsByObject((request.params as any).id);
+    } catch (error: any) {
+      reply.code(400);
+      return { error: error.message };
+    }
+  });
+
+  app.post('/candidates', async (request, reply) => {
+    try {
+      const body = request.body as any;
+      return core.proposeCandidate({
+        type: body.type,
+        payload: body.payload,
+        evidenceRefs: body.evidenceRefs,
+        extractor: body.extractor,
+        extractorVersion: body.extractorVersion,
+        actor: body.actor ?? 'http',
+      });
+    } catch (error: any) {
+      reply.code(400);
+      return { error: error.message };
+    }
+  });
+
+  app.post('/candidates/:id/decide', async (request, reply) => {
+    try {
+      return core.decide((request.params as any).id, (request.body as any)?.actor ?? 'http');
+    } catch (error: any) {
+      reply.code(400);
+      return { error: error.message };
+    }
+  });
+
+  app.post('/decisions/:id/apply-policy', async (request, reply) => {
+    try {
+      return core.applyPolicy((request.params as any).id, (request.body as any)?.actor ?? 'http');
+    } catch (error: any) {
+      reply.code(400);
+      return { error: error.message };
+    }
+  });
+
+  app.post('/extract', async (request, reply) => {
+    try {
+      const body = request.body as any;
+      return core.extractFromEvidence({
+        evidenceId: body.evidenceId,
+        content: body.content,
+        actor: body.actor ?? 'http',
+      });
+    } catch (error: any) {
+      reply.code(400);
+      return { error: error.message };
+    }
+  });
+
+  app.post('/segments/export', async (request, reply) => {
+    try {
+      const body = request.body as any;
+      return core.exportSegment({
+        rootContext: body.rootContext,
+        purpose: body.purpose,
+        sensitivity: body.sensitivity,
+        actor: body.actor ?? 'http',
+        expiresInDays: body.expiresInDays,
+      });
+    } catch (error: any) {
+      reply.code(400);
+      return { error: error.message };
+    }
+  });
+
   app.post('/query/entry-points', async (request, reply) => {
     try {
       const body = request.body as any;

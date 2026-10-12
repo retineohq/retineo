@@ -46,12 +46,21 @@ const schemaPath = join(dirname(fileURLToPath(import.meta.url)), 'schema.sql');
 
 export class SqliteDatabase {
   readonly db: Database.Database;
+  readonly schemaVersion: number;
 
   constructor(filename: string) {
     this.db = new Database(filename);
     this.db.pragma('journal_mode = WAL');
     this.db.pragma('foreign_keys = ON');
+    this.db.exec('CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)');
+    const row = this.db.prepare('SELECT MAX(version) as v FROM schema_version').get() as { v: number | null };
+    this.schemaVersion = row.v ?? 0;
     this.db.exec(readFileSync(schemaPath, 'utf8'));
+    const latest = 1;
+    if (this.schemaVersion < latest) {
+      this.db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(latest, new Date().toISOString());
+      this.schemaVersion = latest;
+    }
   }
 
   close(): void {
