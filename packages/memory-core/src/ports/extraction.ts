@@ -29,3 +29,7 @@ export interface ExtractionResult {
 export interface ExtractionModel {
   extract(evidence: Evidence, content: string): ExtractionResult;
 }
+
+export interface AsyncExtractionModel {
+  extractAsync(evidence: Evidence, content: string): Promise<ExtractionResult>;
+}

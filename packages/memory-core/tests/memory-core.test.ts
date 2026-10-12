@@ -1228,6 +1228,34 @@ describe('Candidate extraction pipeline (Stage 4)', () => {
     })).toThrow('quarantined');
   });
 
+  it('extractFromEvidenceAsync: full async pipeline and extractor metadata', async () => {
+    const core = buildCore();
+    const e1 = createId('ev', 'e1') as any;
+    core.createEvidence({
+      id: e1,
+      sourceVersionId: createId('sv', 'sv-1') as any,
+      segmentRef: null,
+      contentHash: 'h1',
+      state: 'available',
+    });
+    const result = await core.extractFromEvidenceAsync({
+      evidenceId: e1,
+      content: 'Alice has role engineer.',
+      actor: 'test',
+      extractionModel: {
+        extractAsync: async () => ({
+          claims: [{ subjectName: 'Alice', predicate: 'has_role', objectOrValue: 'engineer', confidence: 0.9, basis: 'mock' }],
+          relationships: [{ sourceName: 'Alice', relationType: 'supports', targetName: 'Bob', confidence: 0.8, basis: null }],
+        }),
+      },
+    });
+    expect(result.candidatesCreated).toBe(2);
+    expect(result.accepted).toBe(2);
+    const candidates = (core as any).deps.candidates.all();
+    expect(candidates.every((candidate: any) => candidate.extractor === 'async-extraction')).toBe(true);
+    expect((core as any).deps.relationships.all().length).toBe(1);
+  });
+
   it('extraction with empty content produces no candidates', () => {
     const core = buildCore();
     const e1 = createId('ev', 'e1') as any;

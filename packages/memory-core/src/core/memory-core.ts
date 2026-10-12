@@ -66,6 +66,9 @@ import type {
 } from '../ports/lifecycle.js';
 import type {
   ExtractionModel,
+  AsyncExtractionModel,
+  ExtractedClaim,
+  ExtractedRelationship,
 } from '../ports/extraction.js';
 import type {
   RepresentationRepository,
@@ -1027,6 +1030,74 @@ export class MemoryCore {
       }
     }
 
+    return { candidatesCreated, accepted, quarantined, rejected };
+  }
+
+  async extractFromEvidenceAsync(input: {
+    evidenceId: EvidenceId;
+    content: string;
+    actor: string;
+    extractionModel?: AsyncExtractionModel;
+  }): Promise<{ candidatesCreated: number; accepted: number; quarantined: number; rejected: number }> {
+    const evidence = this.deps.evidence.get(input.evidenceId);
+    if (!evidence) throw new Error(`Evidence not found: ${input.evidenceId}`);
+    if (evidence.state === 'unavailable') throw new Error(`Evidence quarantined: ${input.evidenceId}`);
+    const model = input.extractionModel ?? (this.deps.extractionModel as unknown as AsyncExtractionModel);
+    const result = await model.extractAsync(evidence, input.content);
+    const isDefault = model === (this.deps.extractionModel as unknown as AsyncExtractionModel);
+    const extractor = isDefault ? 'regex-extraction' : 'async-extraction';
+    const extractorVersion = isDefault ? '1.0.0' : '1.0.0-async';
+
+    let candidatesCreated = 0;
+    let accepted = 0;
+    let quarantined = 0;
+    let rejected = 0;
+
+    const processClaim = async (extracted: ExtractedClaim): Promise<void> => {
+      const candidate = this.proposeCandidate({
+        type: 'ClaimCandidate', payload: { ...extracted }, evidenceRefs: [input.evidenceId],
+        extractor, extractorVersion, actor: input.actor,
+      });
+      candidatesCreated++;
+      const policy = this.applyPolicy(this.decide(candidate.id, input.actor).id, input.actor);
+      if (policy.action === 'Allow') {
+        let subject = this.deps.objects.all().find((obj) => obj.name === extracted.subjectName);
+        if (!subject) subject = this.createObject({ type: 'entity', name: extracted.subjectName, actor: input.actor });
+        this.createClaim({
+          subjectId: this.deps.identity.resolve(subject.id), predicate: extracted.predicate,
+          objectOrValue: extracted.objectOrValue, evidenceRefs: [input.evidenceId],
+          observedAt: extracted.observedAt ?? null, validFrom: extracted.validFrom ?? null,
+          validTo: extracted.validTo ?? null, confidence: extracted.confidence, actor: input.actor,
+        });
+        accepted++;
+      } else if (policy.action === 'Quarantine') quarantined++;
+      else rejected++;
+    };
+
+    const processRelationship = async (extracted: ExtractedRelationship): Promise<void> => {
+      const candidate = this.proposeCandidate({
+        type: 'RelationshipCandidate', payload: { ...extracted }, evidenceRefs: [input.evidenceId],
+        extractor, extractorVersion, actor: input.actor,
+      });
+      candidatesCreated++;
+      const policy = this.applyPolicy(this.decide(candidate.id, input.actor).id, input.actor);
+      if (policy.action === 'Allow') {
+        let source = this.deps.objects.all().find((obj) => obj.name === extracted.sourceName);
+        if (!source) source = this.createObject({ type: 'entity', name: extracted.sourceName, actor: input.actor });
+        let target = this.deps.objects.all().find((obj) => obj.name === extracted.targetName);
+        if (!target) target = this.createObject({ type: 'entity', name: extracted.targetName, actor: input.actor });
+        this.createRelationship({
+          sourceObject: this.deps.identity.resolve(source.id), relationType: extracted.relationType,
+          targetObject: this.deps.identity.resolve(target.id), evidenceRefs: [input.evidenceId],
+          confidence: extracted.confidence, actor: input.actor,
+        });
+        accepted++;
+      } else if (policy.action === 'Quarantine') quarantined++;
+      else rejected++;
+    };
+
+    for (const extracted of result.claims) await processClaim(extracted);
+    for (const extracted of result.relationships) await processRelationship(extracted);
     return { candidatesCreated, accepted, quarantined, rejected };
   }
 
