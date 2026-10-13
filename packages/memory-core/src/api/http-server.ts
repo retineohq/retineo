@@ -199,7 +199,10 @@ export function createHttpServer(
       const body = request.body as any;
       if (body.async === true) {
         const { OpenRouterExtractionModel } = await import('../adapters/openrouter/extraction.js');
-        const model = new OpenRouterExtractionModel();
+        const { OllamaExtractionModel } = await import('../adapters/ollama/extraction.js');
+        const model = body.engine === 'ollama'
+          ? new OllamaExtractionModel()
+          : new OpenRouterExtractionModel();
         return await core.extractFromEvidenceAsync({
           evidenceId: body.evidenceId,
           content: body.content,

@@ -189,13 +189,17 @@ async function main() {
   if (command === 'extract-async') {
     const evidenceId = args[1];
     const content = args[2];
-    const dbFile = args[3] || 'memory-core.db';
+    const engine = args[3] === 'ollama' ? 'ollama' : 'openrouter';
+    const dbFile = args[3] === 'ollama' ? args[4] || 'memory-core.db' : args[3] || 'memory-core.db';
     if (!evidenceId || !content) {
       console.error('Usage: memory-core extract-async <evidenceId> <content> [dbFile]');
       process.exit(1);
     }
     const { OpenRouterExtractionModel } = await import('../dist/adapters/openrouter/extraction.js');
-    const model = new OpenRouterExtractionModel();
+    const { OllamaExtractionModel } = await import('../dist/adapters/ollama/extraction.js');
+    const model = engine === 'ollama'
+      ? new OllamaExtractionModel()
+      : new OpenRouterExtractionModel();
     const { core, close } = buildSqliteCore(dbFile);
     const result = await core.extractFromEvidenceAsync({ evidenceId, content, actor: 'cli', extractionModel: model });
     console.log(JSON.stringify(result, null, 2));
