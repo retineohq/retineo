@@ -582,6 +582,38 @@ describe('Segments + agent access', () => {
     expect(pkg!.knownGaps.length).toBe(1);
   });
 
+  it('agent context filters members by maxSensitivity', () => {
+    const core = buildCore();
+    const ctx = core.createContext({ type: 'project', name: 'Security', actor: 'test' });
+    const internalObject = core.createObject({ type: 'technology', name: 'Internal', actor: 'test', sensitivity: 'internal' });
+    const restrictedObject = core.createObject({ type: 'technology', name: 'Secret', actor: 'test', sensitivity: 'restricted' });
+    const restrictedClaim = core.createClaim({
+      subjectId: restrictedObject.id,
+      predicate: 'has_property',
+      objectOrValue: 'confidential',
+      evidenceRefs: [core.createEvidence({
+        id: createId('ev', 'claim-ev') as any,
+        sourceVersionId: createId('sv', 'claim-ev') as any,
+        segmentRef: null,
+        contentHash: 'claim-ev',
+        state: 'available',
+      }).id],
+      actor: 'test',
+      sensitivity: 'restricted',
+    });
+    core.addMembership({ contextId: ctx.id, memberType: 'object', memberId: internalObject.id, mode: 'explicit', actor: 'test' });
+    core.addMembership({ contextId: ctx.id, memberType: 'object', memberId: restrictedObject.id, mode: 'explicit', actor: 'test' });
+    core.addMembership({ contextId: ctx.id, memberType: 'claim', memberId: restrictedClaim.id, mode: 'explicit', actor: 'test' });
+
+    const internalOnly = core.getAgentContext({ contextId: ctx.id, maxSensitivity: 'internal' });
+    expect(internalOnly!.objects.map((object) => object.name)).toEqual(['Internal']);
+    expect(internalOnly!.claims).toHaveLength(0);
+
+    const unrestricted = core.getAgentContext({ contextId: ctx.id, maxSensitivity: 'restricted' });
+    expect(unrestricted!.objects.length).toBe(2);
+    expect(unrestricted!.claims.length).toBe(1);
+  });
+
   it('segment expires', () => {
     const core = buildCore();
     const ctx = core.createContext({ type: 'project', name: 'Test', actor: 'test' });

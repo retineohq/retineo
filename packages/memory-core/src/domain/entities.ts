@@ -39,6 +39,7 @@ import type {
   SourceState,
   ItemState,
   SourceTrustProfile,
+  SensitivityLevel,
 } from './value-objects.js';
 
 export interface Source {
@@ -88,6 +89,7 @@ export interface Object {
   aliases: string[];
   lifecycleState: ObjectLifecycle;
   redirectTo: ObjectId | null;
+  sensitivity: SensitivityLevel;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -102,6 +104,7 @@ export interface Claim {
   lifecycleState: ClaimLifecycle;
   supportState: SupportState;
   confidence: Confidence;
+  sensitivity: SensitivityLevel;
   scope: ScopeQualifier | null;
   createdAt: Timestamp;
   updatedAt: Timestamp;
@@ -117,6 +120,7 @@ export interface Relationship {
   lifecycleState: RelationshipLifecycle;
   supportState: SupportState;
   confidence: Confidence;
+  sensitivity: SensitivityLevel;
   scope: ScopeQualifier | null;
   createdAt: Timestamp;
   updatedAt: Timestamp;
@@ -127,6 +131,7 @@ export interface Context {
   type: string;
   name: string;
   purpose: string | null;
+  sensitivity: SensitivityLevel;
   lifecycleState: ContextLifecycle;
   temporalState: TemporalState;
   createdAt: Timestamp;
@@ -151,6 +156,7 @@ export interface KnowledgeGap {
   subjectId: ObjectId | null;
   description: string;
   evidenceRefs: EvidenceId[];
+  sensitivity: SensitivityLevel;
   lifecycleState: GapLifecycle;
   createdAt: Timestamp;
   resolvedAt: Timestamp | null;

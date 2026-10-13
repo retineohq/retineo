@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS objects (
   aliases TEXT NOT NULL DEFAULT '[]',
   lifecycle_state TEXT NOT NULL,
   redirect_to TEXT,
+  sensitivity TEXT NOT NULL DEFAULT 'internal',
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -58,6 +59,7 @@ CREATE TABLE IF NOT EXISTS claims (
   support_evidence_count INTEGER NOT NULL,
   support_disagreeing_count INTEGER NOT NULL,
   confidence REAL NOT NULL,
+  sensitivity TEXT NOT NULL DEFAULT 'internal',
   scope TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
@@ -79,6 +81,7 @@ CREATE TABLE IF NOT EXISTS relationships (
   support_evidence_count INTEGER NOT NULL,
   support_disagreeing_count INTEGER NOT NULL,
   confidence REAL NOT NULL,
+  sensitivity TEXT NOT NULL DEFAULT 'internal',
   scope TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
@@ -93,6 +96,7 @@ CREATE TABLE IF NOT EXISTS contexts (
   name TEXT NOT NULL,
   purpose TEXT,
   lifecycle_state TEXT NOT NULL,
+  sensitivity TEXT NOT NULL DEFAULT 'internal',
   observed_at TEXT,
   valid_from TEXT,
   valid_to TEXT,
@@ -121,6 +125,7 @@ CREATE TABLE IF NOT EXISTS gaps (
   description TEXT NOT NULL,
   evidence_refs TEXT NOT NULL DEFAULT '[]',
   lifecycle_state TEXT NOT NULL,
+  sensitivity TEXT NOT NULL DEFAULT 'internal',
   created_at TEXT NOT NULL,
   resolved_at TEXT
 );

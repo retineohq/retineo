@@ -36,6 +36,7 @@ import type {
   EvidenceRepository,
   ProvenanceRepository,
 } from '../../ports/repositories.js';
+import { parseSensitivity } from '../../domain/value-objects.js';
 import type {
   SourceRepository,
   SourceItemRepository,
@@ -81,16 +82,16 @@ export class SqliteObjectRepository implements ObjectRepository {
 
   save(object: Object): void {
     this.db.db.prepare(
-      `INSERT INTO objects (id, type, name, aliases, lifecycle_state, redirect_to, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO objects (id, type, name, aliases, lifecycle_state, redirect_to, sensitivity, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          type = excluded.type, name = excluded.name, aliases = excluded.aliases,
-         lifecycle_state = excluded.lifecycle_state, redirect_to = excluded.redirect_to,
+         lifecycle_state = excluded.lifecycle_state, redirect_to = excluded.redirect_to, sensitivity = excluded.sensitivity,
          updated_at = excluded.updated_at`,
     ).run(
       object.id, object.type, object.name,
       JSON.stringify(object.aliases), object.lifecycleState,
-      object.redirectTo, object.createdAt, object.updatedAt,
+      object.redirectTo, object.sensitivity, object.createdAt, object.updatedAt,
     );
   }
 
@@ -100,7 +101,8 @@ export class SqliteObjectRepository implements ObjectRepository {
     return {
       id: row.id, type: row.type, name: row.name,
       aliases: JSON.parse(row.aliases), lifecycleState: row.lifecycle_state,
-      redirectTo: row.redirect_to, createdAt: row.created_at, updatedAt: row.updated_at,
+      redirectTo: row.redirect_to, sensitivity: parseSensitivity(row.sensitivity),
+      createdAt: row.created_at, updatedAt: row.updated_at,
     };
   }
 
@@ -108,7 +110,8 @@ export class SqliteObjectRepository implements ObjectRepository {
     return (this.db.db.prepare('SELECT * FROM objects').all() as any[]).map((row) => ({
       id: row.id, type: row.type, name: row.name,
       aliases: JSON.parse(row.aliases), lifecycleState: row.lifecycle_state,
-      redirectTo: row.redirect_to, createdAt: row.created_at, updatedAt: row.updated_at,
+      redirectTo: row.redirect_to, sensitivity: parseSensitivity(row.sensitivity),
+      createdAt: row.created_at, updatedAt: row.updated_at,
     }));
   }
 }
@@ -230,7 +233,7 @@ export class SqliteClaimRepository implements ClaimRepository {
       temporalState: { observedAt: row.observed_at, validFrom: row.valid_from, validTo: row.valid_to },
       lifecycleState: row.lifecycle_state,
       supportState: { level: row.support_level, evidenceCount: row.support_evidence_count, disagreeingCount: row.support_disagreeing_count },
-      confidence: row.confidence,
+      confidence: row.confidence, sensitivity: parseSensitivity(row.sensitivity),
       scope: parseScope(row.scope), createdAt: row.created_at, updatedAt: row.updated_at,
     };
   }
@@ -240,20 +243,20 @@ export class SqliteClaimRepository implements ClaimRepository {
       `INSERT INTO claims (id, subject_id, predicate, object_or_value, evidence_refs,
          observed_at, valid_from, valid_to, lifecycle_state,
          support_level, support_evidence_count, support_disagreeing_count,
-         confidence, scope, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         confidence, sensitivity, scope, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          lifecycle_state = excluded.lifecycle_state,
          support_level = excluded.support_level,
          support_evidence_count = excluded.support_evidence_count,
          support_disagreeing_count = excluded.support_disagreeing_count,
-         confidence = excluded.confidence, updated_at = excluded.updated_at`,
+         confidence = excluded.confidence, sensitivity = excluded.sensitivity, updated_at = excluded.updated_at`,
     ).run(
       claim.id, claim.subjectId, claim.predicate,
       String(claim.objectOrValue), JSON.stringify(claim.evidenceRefs),
       claim.temporalState.observedAt, claim.temporalState.validFrom, claim.temporalState.validTo,
       claim.lifecycleState, claim.supportState.level, claim.supportState.evidenceCount,
-      claim.supportState.disagreeingCount, claim.confidence,
+      claim.supportState.disagreeingCount, claim.confidence, claim.sensitivity,
       serializeScope(claim.scope), claim.createdAt, claim.updatedAt,
     );
   }
@@ -282,7 +285,7 @@ export class SqliteRelationshipRepository implements RelationshipRepository {
       temporalState: { observedAt: row.observed_at, validFrom: row.valid_from, validTo: row.valid_to },
       lifecycleState: row.lifecycle_state,
       supportState: { level: row.support_level, evidenceCount: row.support_evidence_count, disagreeingCount: row.support_disagreeing_count },
-      confidence: row.confidence,
+      confidence: row.confidence, sensitivity: parseSensitivity(row.sensitivity),
       scope: parseScope(row.scope), createdAt: row.created_at, updatedAt: row.updated_at,
     };
   }
@@ -292,20 +295,20 @@ export class SqliteRelationshipRepository implements RelationshipRepository {
       `INSERT INTO relationships (id, source_object, relation_type, target_object, evidence_refs,
          observed_at, valid_from, valid_to, lifecycle_state,
          support_level, support_evidence_count, support_disagreeing_count,
-         confidence, scope, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         confidence, sensitivity, scope, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          lifecycle_state = excluded.lifecycle_state,
          support_level = excluded.support_level,
          support_evidence_count = excluded.support_evidence_count,
          support_disagreeing_count = excluded.support_disagreeing_count,
-         confidence = excluded.confidence, updated_at = excluded.updated_at`,
+         confidence = excluded.confidence, sensitivity = excluded.sensitivity, updated_at = excluded.updated_at`,
     ).run(
       relationship.id, relationship.sourceObject, relationship.relationType,
       relationship.targetObject, JSON.stringify(relationship.evidenceRefs),
       relationship.temporalState.observedAt, relationship.temporalState.validFrom, relationship.temporalState.validTo,
       relationship.lifecycleState, relationship.supportState.level, relationship.supportState.evidenceCount,
-      relationship.supportState.disagreeingCount, relationship.confidence,
+      relationship.supportState.disagreeingCount, relationship.confidence, relationship.sensitivity,
       serializeScope(relationship.scope), relationship.createdAt, relationship.updatedAt,
     );
   }
@@ -333,14 +336,14 @@ export class SqliteContextRepository implements ContextRepository {
 
   save(context: Context): void {
     this.db.db.prepare(
-      `INSERT INTO contexts (id, type, name, purpose, lifecycle_state, observed_at, valid_from, valid_to, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO contexts (id, type, name, purpose, lifecycle_state, sensitivity, observed_at, valid_from, valid_to, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          type = excluded.type, name = excluded.name, purpose = excluded.purpose,
-         lifecycle_state = excluded.lifecycle_state, updated_at = excluded.updated_at`,
+         lifecycle_state = excluded.lifecycle_state, sensitivity = excluded.sensitivity, updated_at = excluded.updated_at`,
     ).run(
       context.id, context.type, context.name, context.purpose,
-      context.lifecycleState,
+      context.lifecycleState, context.sensitivity,
       context.temporalState.observedAt, context.temporalState.validFrom, context.temporalState.validTo,
       context.createdAt, context.updatedAt,
     );
@@ -352,6 +355,7 @@ export class SqliteContextRepository implements ContextRepository {
     return {
       id: row.id, type: row.type, name: row.name, purpose: row.purpose,
       lifecycleState: row.lifecycle_state,
+      sensitivity: parseSensitivity(row.sensitivity),
       temporalState: { observedAt: row.observed_at, validFrom: row.valid_from, validTo: row.valid_to },
       createdAt: row.created_at, updatedAt: row.updated_at,
     };
@@ -361,6 +365,7 @@ export class SqliteContextRepository implements ContextRepository {
     return (this.db.db.prepare('SELECT * FROM contexts').all() as any[]).map((row) => ({
       id: row.id, type: row.type, name: row.name, purpose: row.purpose,
       lifecycleState: row.lifecycle_state,
+      sensitivity: parseSensitivity(row.sensitivity),
       temporalState: { observedAt: row.observed_at, validFrom: row.valid_from, validTo: row.valid_to },
       createdAt: row.created_at, updatedAt: row.updated_at,
     }));
@@ -415,13 +420,13 @@ export class SqliteGapRepository implements GapRepository {
 
   save(gap: KnowledgeGap): void {
     this.db.db.prepare(
-      `INSERT INTO gaps (id, type, subject_id, description, evidence_refs, lifecycle_state, created_at, resolved_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO gaps (id, type, subject_id, description, evidence_refs, lifecycle_state, sensitivity, created_at, resolved_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          lifecycle_state = excluded.lifecycle_state, resolved_at = excluded.resolved_at`,
     ).run(
       gap.id, gap.type, gap.subjectId, gap.description,
-      JSON.stringify(gap.evidenceRefs), gap.lifecycleState, gap.createdAt, gap.resolvedAt,
+      JSON.stringify(gap.evidenceRefs), gap.lifecycleState, gap.sensitivity, gap.createdAt, gap.resolvedAt,
     );
   }
 
@@ -431,6 +436,7 @@ export class SqliteGapRepository implements GapRepository {
     return {
       id: row.id, type: row.type, subjectId: row.subject_id, description: row.description,
       evidenceRefs: JSON.parse(row.evidence_refs), lifecycleState: row.lifecycle_state,
+      sensitivity: parseSensitivity(row.sensitivity),
       createdAt: row.created_at, resolvedAt: row.resolved_at,
     };
   }
@@ -439,6 +445,7 @@ export class SqliteGapRepository implements GapRepository {
     return (this.db.db.prepare('SELECT * FROM gaps').all() as any[]).map((row) => ({
       id: row.id, type: row.type, subjectId: row.subject_id, description: row.description,
       evidenceRefs: JSON.parse(row.evidence_refs), lifecycleState: row.lifecycle_state,
+      sensitivity: parseSensitivity(row.sensitivity),
       createdAt: row.created_at, resolvedAt: row.resolved_at,
     }));
   }

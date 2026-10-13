@@ -14,6 +14,22 @@ export interface SupportState {
 
 export type Confidence = number; // 0..1
 
+export type SensitivityLevel = 'public' | 'internal' | 'confidential' | 'restricted';
+
+export const SENSITIVITY_ORDER: Record<SensitivityLevel, number> = {
+  public: 0,
+  internal: 1,
+  confidential: 2,
+  restricted: 3,
+};
+
+export function parseSensitivity(value: string | null | undefined): SensitivityLevel {
+  if (value === 'public' || value === 'internal' || value === 'confidential' || value === 'restricted') {
+    return value;
+  }
+  return 'internal';
+}
+
 export interface ScopeQualifier {
   domain: string | null;
   environment: string | null;

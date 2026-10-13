@@ -42,6 +42,8 @@ import type {
   GapType,
   ScopeQualifier,
 } from '../domain/value-objects.js';
+import { parseSensitivity } from '../domain/value-objects.js';
+import { SENSITIVITY_ORDER } from '../domain/value-objects.js';
 import type {
   ObjectRepository,
   ClaimRepository,
@@ -112,6 +114,7 @@ interface CreateObjectInput {
   type: string;
   name: string;
   aliases?: string[];
+  sensitivity?: string;
   actor: string;
 }
 
@@ -124,6 +127,7 @@ interface CreateClaimInput {
   validFrom?: string | null;
   validTo?: string | null;
   scope?: ScopeQualifier | null;
+  sensitivity?: string;
   confidence?: number;
   supportState?: { level: 'weak' | 'moderate' | 'strong'; evidenceCount: number; disagreeingCount: number };
   actor: string;
@@ -138,6 +142,7 @@ interface CreateRelationshipInput {
   validFrom?: string | null;
   validTo?: string | null;
   scope?: ScopeQualifier | null;
+  sensitivity?: string;
   confidence?: number;
   actor: string;
 }
@@ -146,6 +151,7 @@ interface CreateContextInput {
   type: string;
   name: string;
   purpose?: string | null;
+  sensitivity?: string;
   actor: string;
 }
 
@@ -163,6 +169,7 @@ interface CreateGapInput {
   subjectId?: ObjectId | null;
   description: string;
   evidenceRefs?: EvidenceId[];
+  sensitivity?: string;
   actor: string;
 }
 
@@ -226,6 +233,7 @@ export class MemoryCore {
         aliases: input.aliases ?? [],
         lifecycleState: 'active',
         redirectTo: null,
+        sensitivity: parseSensitivity(input.sensitivity),
         createdAt: now,
         updatedAt: now,
       };
@@ -284,6 +292,7 @@ export class MemoryCore {
         lifecycleState: 'active',
         supportState: input.supportState ?? { level: 'weak', evidenceCount: input.evidenceRefs.length, disagreeingCount: 0 },
         confidence: input.confidence ?? 0.5,
+        sensitivity: parseSensitivity(input.sensitivity),
         scope: input.scope ?? null,
         createdAt: now,
         updatedAt: now,
@@ -336,6 +345,7 @@ export class MemoryCore {
         lifecycleState: 'active',
         supportState: { level: 'weak', evidenceCount: input.evidenceRefs.length, disagreeingCount: 0 },
         confidence: input.confidence ?? 0.5,
+        sensitivity: parseSensitivity(input.sensitivity),
         scope: input.scope ?? null,
         createdAt: now,
         updatedAt: now,
@@ -369,6 +379,7 @@ export class MemoryCore {
         type: input.type,
         name: input.name,
         purpose: input.purpose ?? null,
+        sensitivity: parseSensitivity(input.sensitivity),
         lifecycleState: 'active',
         temporalState: { observedAt: now, validFrom: now, validTo: null },
         createdAt: now,
@@ -455,6 +466,7 @@ export class MemoryCore {
         subjectId: input.subjectId ?? null,
         description: input.description,
         evidenceRefs: input.evidenceRefs ?? [],
+        sensitivity: parseSensitivity(input.sensitivity),
         lifecycleState: 'open',
         createdAt: now,
         resolvedAt: null,
@@ -908,6 +920,10 @@ export class MemoryCore {
     if (!context) {
       return null;
     }
+    const maxLevel = parseSensitivity(input.maxSensitivity ?? 'restricted');
+    const withinSensitivity = (sensitivity: string) => {
+      return SENSITIVITY_ORDER[parseSensitivity(sensitivity)] <= SENSITIVITY_ORDER[maxLevel];
+    };
     const memberships = this.deps.memberships.byContext(input.contextId);
     const objects: Object[] = [];
     const claims: Claim[] = [];
@@ -917,19 +933,19 @@ export class MemoryCore {
     for (const membership of memberships) {
       if (membership.memberType === 'object') {
         const object = this.deps.objects.get(this.deps.identity.resolve(membership.memberId));
-        if (object) objects.push(object);
+        if (object && withinSensitivity(object.sensitivity)) objects.push(object);
       } else if (membership.memberType === 'claim') {
         const claim = this.deps.claims.get(membership.memberId);
-        if (claim) claims.push(claim);
+        if (claim && withinSensitivity(claim.sensitivity)) claims.push(claim);
       } else if (membership.memberType === 'relationship') {
         const relationship = this.deps.relationships.get(membership.memberId);
-        if (relationship) relationships.push(relationship);
+        if (relationship && withinSensitivity(relationship.sensitivity)) relationships.push(relationship);
       } else if (membership.memberType === 'evidence') {
         const evidence = this.deps.evidence.get(membership.memberId);
         if (evidence) evidenceItems.push(evidence);
       } else if (membership.memberType === 'knowledge_gap') {
         const gap = this.deps.gaps.get(membership.memberId);
-        if (gap) knownGaps.push(gap);
+        if (gap && withinSensitivity(gap.sensitivity)) knownGaps.push(gap);
       }
     }
     return { objects, relationships, claims, evidence: evidenceItems, knownGaps };
