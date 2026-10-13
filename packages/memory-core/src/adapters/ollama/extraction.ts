@@ -6,6 +6,7 @@ export interface OllamaExtractionOptions {
   baseUrl?: string;
   model?: string;
   timeoutMs?: number;
+  debug?: boolean;
 }
 
 const PREDICATES: PredicateType[] = ['has_role', 'has_property', 'has_value'];
@@ -18,39 +19,51 @@ export class OllamaExtractionModel implements AsyncExtractionModel {
   private readonly baseUrl: string;
   private readonly model: string;
   private readonly timeoutMs: number;
+  private readonly debug: boolean;
 
   constructor(options: OllamaExtractionOptions = {}) {
     this.baseUrl = (options.baseUrl ?? process.env.OLLAMA_BASE_URL ?? 'http://127.0.0.1:11434').replace(/\/$/, '');
     this.model = options.model ?? process.env.OLLAMA_EXTRACTION_MODEL ?? 'qwen2.5:3b';
     this.timeoutMs = options.timeoutMs ?? 180_000;
+    this.debug = options.debug ?? process.env.OLLAMA_EXTRACTION_DEBUG === '1';
   }
 
   async extractAsync(evidence: Evidence, content: string): Promise<ExtractionResult> {
     if (!content.trim()) return { claims: [], relationships: [] };
     const prompt = this.buildPrompt(evidence, content);
     const response = await this.request(prompt);
+    if (this.debug) {
+      console.error(`OllamaExtractionModel: raw response: ${response.body.slice(0, 2000)}`);
+    }
     return this.parse(response.body);
   }
 
   private buildPrompt(evidence: Evidence, content: string): string {
     return [
-      'Extract factual claims and relationships as strict JSON. Return only JSON, no markdown.',
+      'You are a strict information extraction engine.',
+      'Input: a text passage.',
+      'Output: ONLY a JSON object. No explanations, no schema, no markdown.',
+      'Rules:',
+      '- claims: facts about the subject, predicate is exactly one of: has_role, has_property, has_value.',
+      '- relationships: connections between subjects, relationType is exactly one of: supersedes, caused_by, depends_on, supports, contradicts, invalidates, references, belongs_to, related_to.',
+      '- Do not echo the input. Do not include the schema itself.',
+      '',
+      'Example:',
+      'Input: PostgreSQL is the primary database. We chose Fastify as the HTTP framework.',
+      'Output:',
       JSON.stringify({
-        evidenceId: evidence.id,
-        evidenceSource: evidence.contentHash,
-        content,
-        schema: {
-          claims: [{
-            subjectName: 'string', predicate: PREDICATES, objectOrValue: 'string',
-            observedAt: 'ISO date or null', validFrom: 'ISO date or null',
-            validTo: 'ISO date or null', confidence: 'number 0-1', basis: 'string or null',
-          }],
-          relationships: [{
-            sourceName: 'string', relationType: RELATIONS, targetName: 'string',
-            confidence: 'number 0-1', basis: 'string or null',
-          }],
-        },
+        claims: [
+          { subjectName: 'PostgreSQL', predicate: 'has_property', objectOrValue: 'primary database', observedAt: null, validFrom: null, validTo: null, confidence: 0.9, basis: null },
+          { subjectName: 'Fastify', predicate: 'has_role', objectOrValue: 'HTTP framework', observedAt: null, validFrom: null, validTo: null, confidence: 0.9, basis: null },
+        ],
+        relationships: [
+          { sourceName: 'PostgreSQL', relationType: 'related_to', targetName: 'Fastify', confidence: 0.7, basis: null },
+        ],
       }),
+      '',
+      'Input:',
+      content,
+      'Output:',
     ].join('\n');
   }
 
