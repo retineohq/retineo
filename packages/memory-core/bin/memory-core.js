@@ -194,7 +194,7 @@ async function main() {
       console.error('Usage: memory-core extract-async <evidenceId> <content> [dbFile]');
       process.exit(1);
     }
-    const { OpenRouterExtractionModel } = await import('../src/adapters/openrouter/extraction.js');
+    const { OpenRouterExtractionModel } = await import('../dist/adapters/openrouter/extraction.js');
     const model = new OpenRouterExtractionModel();
     const { core, close } = buildSqliteCore(dbFile);
     const result = await core.extractFromEvidenceAsync({ evidenceId, content, actor: 'cli', extractionModel: model });
