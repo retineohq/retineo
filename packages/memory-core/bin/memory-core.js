@@ -186,6 +186,23 @@ async function main() {
     return;
   }
 
+  if (command === 'extract-async') {
+    const evidenceId = args[1];
+    const content = args[2];
+    const dbFile = args[3] || 'memory-core.db';
+    if (!evidenceId || !content) {
+      console.error('Usage: memory-core extract-async <evidenceId> <content> [dbFile]');
+      process.exit(1);
+    }
+    const { OpenRouterExtractionModel } = await import('../src/adapters/openrouter/extraction.js');
+    const model = new OpenRouterExtractionModel();
+    const { core, close } = buildSqliteCore(dbFile);
+    const result = await core.extractFromEvidenceAsync({ evidenceId, content, actor: 'cli', extractionModel: model });
+    console.log(JSON.stringify(result, null, 2));
+    close();
+    return;
+  }
+
   if (command === 'query') {
     const type = args[1];
     const query = args[2];
@@ -221,6 +238,7 @@ Usage:
   memory-core ingest <dir> [dbFile]     Ingest text files from directory
   memory-core journal [dbFile]          Show journal events
   memory-core extract <ev> <content> [dbFile]  Extract claims/relationships
+  memory-core extract-async <ev> <content> [dbFile]  Extract via OpenRouter LLM
   memory-core query <type> <query> [dbFile]    Query memory
     types: entry-points, knowledge, context
 

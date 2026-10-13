@@ -184,6 +184,16 @@ export function createHttpServer(
   app.post('/extract', async (request, reply) => {
     try {
       const body = request.body as any;
+      if (body.async === true) {
+        const { OpenRouterExtractionModel } = await import('../adapters/openrouter/extraction.js');
+        const model = new OpenRouterExtractionModel();
+        return await core.extractFromEvidenceAsync({
+          evidenceId: body.evidenceId,
+          content: body.content,
+          actor: body.actor ?? 'http',
+          extractionModel: model,
+        });
+      }
       return core.extractFromEvidence({
         evidenceId: body.evidenceId,
         content: body.content,
