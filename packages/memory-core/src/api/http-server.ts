@@ -53,6 +53,19 @@ export function createHttpServer(
     }
   });
 
+  app.get('/contexts/:id/agent-context', async (request, reply) => {
+    try {
+      const query = request.query as any;
+      return core.getAgentContext({
+        contextId: (request.params as any).id,
+        maxSensitivity: query.maxSensitivity,
+      });
+    } catch (error: any) {
+      reply.code(404);
+      return { error: error.message };
+    }
+  });
+
   app.post('/objects', async (request, reply) => {
     try {
       const body = request.body as any;
