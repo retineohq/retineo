@@ -1389,6 +1389,34 @@ describe('Retrieval projections / query engine (Stage 5)', () => {
     expect(result.claims.length).toBe(1);
     expect(result.gaps.length).toBe(1);
   });
+
+  it('findMultiHopPaths: finds path between connected objects', () => {
+    const { engine } = buildPopulatedCore();
+    const incident = (engine as any).core.getObject('obj:migration-failure');
+    const postgres = (engine as any).core.getObject('obj:postgresql');
+    const paths = engine.findMultiHopPaths(incident.id, postgres.id);
+    expect(paths.length).toBeGreaterThan(0);
+    expect(paths[0].path[0].relationType).toBe('caused_by');
+    expect(paths[0].path[1].relationType).toBe('supersedes');
+    expect(paths[0].score).toBeGreaterThan(0);
+  });
+
+  it('findMultiHopPaths: returns direct path for same object', () => {
+    const { engine } = buildPopulatedCore();
+    const postgres = (engine as any).core.getObject('obj:postgresql');
+    const paths = engine.findMultiHopPaths(postgres.id, postgres.id);
+    expect(paths).toHaveLength(1);
+    expect(paths[0].path).toHaveLength(0);
+    expect(paths[0].score).toBe(1);
+  });
+
+  it('findMultiHopPaths: returns empty for disconnected objects', () => {
+    const { core, engine } = buildPopulatedCore();
+    const isolated = core.createObject({ type: 'technology', name: 'Isolated', actor: 'test' });
+    const postgres = (engine as any).core.getObject('obj:postgresql');
+    const paths = engine.findMultiHopPaths(isolated.id, postgres.id);
+    expect(paths).toHaveLength(0);
+  });
 });
 
 describe('Segment import (Stage 6)', () => {

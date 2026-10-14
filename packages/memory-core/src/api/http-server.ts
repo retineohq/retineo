@@ -267,6 +267,16 @@ export function createHttpServer(
     }
   });
 
+  app.post('/query/multi-hop', async (request, reply) => {
+    try {
+      const body = request.body as any;
+      return engine.findMultiHopPaths(body.startObjectId, body.endObjectId, body.maxDepth ?? 4);
+    } catch (error: any) {
+      reply.code(400);
+      return { error: error.message };
+    }
+  });
+
   app.get('/segments/:id', async (request, reply) => {
     try {
       return core.getSegment((request.params as any).id);

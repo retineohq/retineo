@@ -1,5 +1,6 @@
 import type { MemoryCore } from './memory-core.js';
 import type { SemanticRepresentation, Object, Claim, Relationship, KnowledgeGap } from '../domain/entities.js';
+import type { ObjectId } from '../domain/ids.js';
 
 export interface EntryPointsResult {
   representations: SemanticRepresentation[];
@@ -17,6 +18,12 @@ export interface ContextReconstructionResult {
   claims: Claim[];
   objects: Object[];
   gaps: KnowledgeGap[];
+}
+
+export interface MultiHopPathResult {
+  path: Relationship[];
+  objectIds: ObjectId[];
+  score: number;
 }
 
 export class QueryEngine {
@@ -84,5 +91,40 @@ export class QueryEngine {
       objects: object ? [object] : [],
       gaps,
     };
+  }
+
+  findMultiHopPaths(startObjectId: string, endObjectId: string, maxDepth: number = 4): MultiHopPathResult[] {
+    const start = (this.core as any).deps.identity.resolve(startObjectId);
+    const end = (this.core as any).deps.identity.resolve(endObjectId);
+    if (start === end) {
+      return [{ path: [], objectIds: [start], score: 1 }];
+    }
+
+    const results: MultiHopPathResult[] = [];
+    const visited = new Set<ObjectId>();
+
+    const walk = (objectId: ObjectId, path: Relationship[], objectIds: ObjectId[], depth: number): void => {
+      if (depth >= maxDepth) return;
+      if (visited.has(objectId)) return;
+      visited.add(objectId);
+      const resolved = (this.core as any).deps.identity.resolve(objectId);
+      const relationships = (this.core as any).deps.relationships.bySource(resolved);
+      for (const relationship of relationships) {
+        if (relationship.lifecycleState !== 'active') continue;
+        const newPath = [...path, relationship];
+        const newObjectIds = [...objectIds, relationship.targetObject];
+        const resolvedTarget = (this.core as any).deps.identity.resolve(relationship.targetObject);
+        if (resolvedTarget === end) {
+          const confidenceProduct = newPath.reduce((acc, rel) => acc * Math.min(1, Math.max(0, rel.confidence)), 1);
+          results.push({ path: newPath, objectIds: newObjectIds, score: confidenceProduct });
+          continue;
+        }
+        walk(relationship.targetObject, newPath, newObjectIds, depth + 1);
+      }
+    };
+
+    walk(start, [], [start], 0);
+    results.sort((a, b) => b.score - a.score);
+    return results;
   }
 }
