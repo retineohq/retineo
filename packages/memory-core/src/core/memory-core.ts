@@ -920,6 +920,7 @@ export class MemoryCore {
   getAgentContext(input: {
     contextId: ContextId;
     maxSensitivity?: string;
+    tenantId?: string;
     allowedPurposes?: string[];
   }): {
     objects: Object[];
@@ -936,7 +937,9 @@ export class MemoryCore {
     const withinSensitivity = (sensitivity: string) => {
       return SENSITIVITY_ORDER[parseSensitivity(sensitivity)] <= SENSITIVITY_ORDER[maxLevel];
     };
-    const memberships = this.deps.memberships.byContext(input.contextId);
+    const tenant = input.tenantId ?? 'default';
+    const memberships = this.deps.memberships.byContext(input.contextId)
+      .filter((membership) => (membership as any).tenantId === tenant);
     const objects: Object[] = [];
     const claims: Claim[] = [];
     const relationships: Relationship[] = [];
@@ -945,19 +948,19 @@ export class MemoryCore {
     for (const membership of memberships) {
       if (membership.memberType === 'object') {
         const object = this.deps.objects.get(this.deps.identity.resolve(membership.memberId));
-        if (object && withinSensitivity(object.sensitivity)) objects.push(object);
+        if (object && (object as any).tenantId === tenant && withinSensitivity(object.sensitivity)) objects.push(object);
       } else if (membership.memberType === 'claim') {
         const claim = this.deps.claims.get(membership.memberId);
-        if (claim && withinSensitivity(claim.sensitivity)) claims.push(claim);
+        if (claim && (claim as any).tenantId === tenant && withinSensitivity(claim.sensitivity)) claims.push(claim);
       } else if (membership.memberType === 'relationship') {
         const relationship = this.deps.relationships.get(membership.memberId);
-        if (relationship && withinSensitivity(relationship.sensitivity)) relationships.push(relationship);
+        if (relationship && (relationship as any).tenantId === tenant && withinSensitivity(relationship.sensitivity)) relationships.push(relationship);
       } else if (membership.memberType === 'evidence') {
         const evidence = this.deps.evidence.get(membership.memberId);
-        if (evidence) evidenceItems.push(evidence);
+        if (evidence && (evidence as any).tenantId === tenant) evidenceItems.push(evidence);
       } else if (membership.memberType === 'knowledge_gap') {
         const gap = this.deps.gaps.get(membership.memberId);
-        if (gap && withinSensitivity(gap.sensitivity)) knownGaps.push(gap);
+        if (gap && (gap as any).tenantId === tenant && withinSensitivity(gap.sensitivity)) knownGaps.push(gap);
       }
     }
     return { objects, relationships, claims, evidence: evidenceItems, knownGaps };

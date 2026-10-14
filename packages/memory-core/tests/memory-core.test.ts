@@ -282,6 +282,7 @@ describe('Candidate → Decision → Policy pipeline', () => {
       segmentRef: null,
       contentHash: `hash-${id}`,
       state: 'available',
+      tenantId: 'default',
     });
   }
 
@@ -412,6 +413,7 @@ describe('SemanticRepresentation + retrieval', () => {
       segmentRef: null,
       contentHash: `hash-${id}`,
       state: 'available',
+      tenantId: 'default',
     });
   }
 
@@ -535,6 +537,7 @@ describe('Segments + agent access', () => {
       segmentRef: null,
       contentHash: `hash-${id}`,
       state: 'available',
+      tenantId: 'default',
     });
   }
 
@@ -597,7 +600,7 @@ describe('Segments + agent access', () => {
     const e1 = createId('ev', 'e1') as any;
     buildEvidence(core, e1);
     const ctx = core.createContext({ type: 'project', name: 'Test', actor: 'test', tenantId: 'default' });
-    const gap = core.createKnowledgeGap({ type: 'OpenQuestion', description: 'Why?', actor: 'test' });
+    const gap = core.createKnowledgeGap({ type: 'OpenQuestion', description: 'Why?', actor: 'test', tenantId: 'default' });
     core.addMembership({ contextId: ctx.id, memberType: 'knowledge_gap', memberId: gap.id, mode: 'explicit', actor: 'test', tenantId: 'default' });
     const pkg = core.getAgentContext({ contextId: ctx.id });
     expect(pkg!.knownGaps.length).toBe(1);
@@ -606,8 +609,8 @@ describe('Segments + agent access', () => {
   it('agent context filters members by maxSensitivity', () => {
     const core = buildCore();
     const ctx = core.createContext({ type: 'project', name: 'Security', actor: 'test', tenantId: 'default' });
-    const internalObject = core.createObject({ type: 'technology', name: 'Internal', actor: 'test', sensitivity: 'internal' });
-    const restrictedObject = core.createObject({ type: 'technology', name: 'Secret', actor: 'test', sensitivity: 'restricted' });
+    const internalObject = core.createObject({ type: 'technology', name: 'Internal', actor: 'test', sensitivity: 'internal', tenantId: 'default' });
+    const restrictedObject = core.createObject({ type: 'technology', name: 'Secret', actor: 'test', sensitivity: 'restricted', tenantId: 'default' });
     const restrictedClaim = core.createClaim({
       subjectId: restrictedObject.id,
       predicate: 'has_property',
@@ -621,6 +624,7 @@ describe('Segments + agent access', () => {
       }).id],
       actor: 'test',
       sensitivity: 'restricted',
+      tenantId: 'default',
     });
     core.addMembership({ contextId: ctx.id, memberType: 'object', memberId: internalObject.id, mode: 'explicit', actor: 'test', tenantId: 'default' });
     core.addMembership({ contextId: ctx.id, memberType: 'object', memberId: restrictedObject.id, mode: 'explicit', actor: 'test', tenantId: 'default' });
@@ -651,6 +655,7 @@ describe('Invariant coverage — remaining 12 invariants', () => {
       segmentRef: null,
       contentHash: `hash-${id}`,
       state: 'available',
+      tenantId: 'default',
     });
   }
 
@@ -1449,6 +1454,17 @@ describe('Retrieval projections / query engine (Stage 5)', () => {
     const paths = engine.findMultiHopPaths(isolated.id, postgres.id);
     expect(paths).toHaveLength(0);
   });
+
+  it('multi-tenant: getAgentContext filters by tenantId', () => {
+    const core = buildCore();
+    const objA = core.createObject({ type: 'technology', name: 'A', actor: 'test', tenantId: 'tenant-a' });
+    const objB = core.createObject({ type: 'technology', name: 'B', actor: 'test', tenantId: 'tenant-b' });
+    const ctx = core.createContext({ type: 'project', name: 'Shared', actor: 'test', tenantId: 'tenant-a' });
+    core.addMembership({ contextId: ctx.id, memberType: 'object', memberId: objA.id, mode: 'explicit', actor: 'test', tenantId: 'tenant-a' });
+    core.addMembership({ contextId: ctx.id, memberType: 'object', memberId: objB.id, mode: 'explicit', actor: 'test', tenantId: 'tenant-b' });
+    const pkg = core.getAgentContext({ contextId: ctx.id, tenantId: 'tenant-a' });
+    expect(pkg!.objects.map((object) => object.name)).toEqual(['A']);
+  });
 });
 
 describe('Segment import (Stage 6)', () => {
@@ -1459,6 +1475,7 @@ describe('Segment import (Stage 6)', () => {
       segmentRef: null,
       contentHash: `hash-${id}`,
       state: 'available',
+      tenantId: 'default',
     });
   }
 
@@ -1622,6 +1639,7 @@ describe('Negative cases — edge conditions', () => {
       segmentRef: null,
       contentHash: `hash-${id}`,
       state: 'available',
+      tenantId: 'default',
     });
   }
 

@@ -59,6 +59,7 @@ export function createHttpServer(
       return core.getAgentContext({
         contextId: (request.params as any).id,
         maxSensitivity: query.maxSensitivity,
+        tenantId: query.tenantId ?? 'default',
       });
     } catch (error: any) {
       reply.code(404);
@@ -247,7 +248,7 @@ export function createHttpServer(
   app.post('/query/entry-points', async (request, reply) => {
     try {
       const body = request.body as any;
-      return engine.findEntryPoints(body.query, body.type ?? 'essence_nl');
+      return engine.findEntryPoints(body.query, body.type ?? 'essence_nl', body.tenantId ?? 'default');
     } catch (error: any) {
       reply.code(400);
       return { error: error.message };
@@ -257,7 +258,7 @@ export function createHttpServer(
   app.post('/query/knowledge', async (request, reply) => {
     try {
       const body = request.body as any;
-      return engine.knowledgeQuery(body.query);
+      return engine.knowledgeQuery(body.query, body.tenantId ?? 'default');
     } catch (error: any) {
       reply.code(400);
       return { error: error.message };
@@ -267,7 +268,7 @@ export function createHttpServer(
   app.post('/query/context', async (request, reply) => {
     try {
       const body = request.body as any;
-      return engine.reconstructContext(body.startObjectId, body.maxDepth ?? 3);
+      return engine.reconstructContext(body.startObjectId, body.maxDepth ?? 3, body.tenantId ?? 'default');
     } catch (error: any) {
       reply.code(400);
       return { error: error.message };
@@ -277,7 +278,7 @@ export function createHttpServer(
   app.post('/query/multi-hop', async (request, reply) => {
     try {
       const body = request.body as any;
-      return engine.findMultiHopPaths(body.startObjectId, body.endObjectId, body.maxDepth ?? 4);
+      return engine.findMultiHopPaths(body.startObjectId, body.endObjectId, body.maxDepth ?? 4, body.tenantId ?? 'default');
     } catch (error: any) {
       reply.code(400);
       return { error: error.message };

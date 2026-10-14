@@ -29,6 +29,10 @@ export interface MultiHopPathResult {
 export class QueryEngine {
   constructor(private core: MemoryCore) {}
 
+  private withinTenant(tenantId: string, tenantIdOf: string): boolean {
+    return tenantIdOf === tenantId;
+  }
+
   private tokenize(text: string): string[] {
     return text
       .replace(/([a-z])([A-Z])/g, '$1 $2')
@@ -37,9 +41,10 @@ export class QueryEngine {
       .filter((token) => token.length > 2);
   }
 
-  findEntryPoints(query: string, type: 'summary' | 'essence_nl' | 'essence_structured' | 'embedding' = 'essence_nl'): EntryPointsResult {
+  findEntryPoints(query: string, type: 'summary' | 'essence_nl' | 'essence_structured' | 'embedding' = 'essence_nl', tenantId: string = 'default'): EntryPointsResult {
     const queryTokens = this.tokenize(query);
-    const representations = (this.core as any).deps.representations.byType(type);
+    const representations = (this.core as any).deps.representations.byType(type)
+      .filter((representation: any) => !representation.tenantId || this.withinTenant(tenantId, representation.tenantId));
     const scored: Array<{ representation: SemanticRepresentation; score: number; explanation: string }> = [];
     for (const representation of representations) {
       const contentText = typeof representation.content === 'string'
@@ -59,15 +64,17 @@ export class QueryEngine {
     };
   }
 
-  knowledgeQuery(query: string): KnowledgeQueryResult {
+  knowledgeQuery(query: string, tenantId: string = 'default'): KnowledgeQueryResult {
     const queryTokens = this.tokenize(query);
     const claims = (this.core as any).deps.claims.all().filter((claim: Claim) => {
+      if (!this.withinTenant(tenantId, (claim as any).tenantId)) return false;
       const text = `${claim.predicate} ${String(claim.objectOrValue)}`;
       const tokens = this.tokenize(text);
       return queryTokens.some((token) => tokens.includes(token));
     });
     const relationships = (this.core as any).deps.relationships.all().filter((relationship: Relationship) =>
-      queryTokens.includes(relationship.relationType.toLowerCase()),
+      this.withinTenant(tenantId, (relationship as any).tenantId)
+      && queryTokens.includes(relationship.relationType.toLowerCase()),
     );
     const objectIds = new Set<string>();
     for (const claim of claims) objectIds.add(claim.subjectId);
@@ -79,21 +86,25 @@ export class QueryEngine {
     return { claims, relationships, objects };
   }
 
-  reconstructContext(startObjectId: string, maxDepth: number = 3): ContextReconstructionResult {
+  reconstructContext(startObjectId: string, maxDepth: number = 3, tenantId: string = 'default'): ContextReconstructionResult {
     const resolvedId = (this.core as any).deps.identity.resolve(startObjectId);
-    const paths = (this.core as any).traverseRelationships(resolvedId, maxDepth);
-    const claims = (this.core as any).deps.claims.bySubject(resolvedId);
+    const paths = (this.core as any).traverseRelationships(resolvedId, maxDepth).filter((path: Relationship[]) =>
+      path.every((relationship) => this.withinTenant(tenantId, (relationship as any).tenantId)));
+    const claims = (this.core as any).deps.claims.bySubject(resolvedId)
+      .filter((claim: Claim) => this.withinTenant(tenantId, (claim as any).tenantId));
     const object = (this.core as any).deps.objects.get(resolvedId);
-    const gaps = (this.core as any).deps.gaps.all().filter((gap: KnowledgeGap) => gap.subjectId === resolvedId);
+    const tenantObject = object && this.withinTenant(tenantId, (object as any).tenantId) ? object : undefined;
+    const gaps = (this.core as any).deps.gaps.all().filter((gap: KnowledgeGap) =>
+      gap.subjectId === resolvedId && this.withinTenant(tenantId, (gap as any).tenantId));
     return {
       paths,
       claims,
-      objects: object ? [object] : [],
+      objects: tenantObject ? [tenantObject] : [],
       gaps,
     };
   }
 
-  findMultiHopPaths(startObjectId: string, endObjectId: string, maxDepth: number = 4): MultiHopPathResult[] {
+  findMultiHopPaths(startObjectId: string, endObjectId: string, maxDepth: number = 4, tenantId: string = 'default'): MultiHopPathResult[] {
     const start = (this.core as any).deps.identity.resolve(startObjectId);
     const end = (this.core as any).deps.identity.resolve(endObjectId);
     if (start === end) {
@@ -111,6 +122,7 @@ export class QueryEngine {
       const relationships = (this.core as any).deps.relationships.bySource(resolved);
       for (const relationship of relationships) {
         if (relationship.lifecycleState !== 'active') continue;
+        if (!this.withinTenant(tenantId, (relationship as any).tenantId)) continue;
         const newPath = [...path, relationship];
         const newObjectIds = [...objectIds, relationship.targetObject];
         const resolvedTarget = (this.core as any).deps.identity.resolve(relationship.targetObject);
