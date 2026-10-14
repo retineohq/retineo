@@ -37,3 +37,11 @@ export interface PolicyModel {
     decision: Decision,
   ): { action: 'Allow' | 'Deny' | 'Quarantine'; aclRef: string | null };
 }
+
+export interface AccessControlModel {
+  canRead(input: {
+    tenantId: string;
+    sensitivity: string;
+    maxSensitivity?: string;
+  }): { allowed: boolean; reason: string | null };
+}

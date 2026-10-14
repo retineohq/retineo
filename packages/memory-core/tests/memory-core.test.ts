@@ -16,6 +16,7 @@ import {
   TrivialRepresentationModel,
   InMemorySegmentRepository,
   TrivialSegmentSecurityModel,
+  SensitivityAccessControlModel,
   InMemorySourceRepository,
   InMemorySourceItemRepository,
   InMemorySourceVersionRepository,
@@ -48,6 +49,7 @@ function buildCore(): MemoryCore {
     policies: new InMemoryPolicyRepository(),
     decisionModel: new DeterministicDecisionModel(),
     policyModel: new PermissivePolicyModel(),
+    accessControl: new SensitivityAccessControlModel(),
     representations: new InMemoryRepresentationRepository(),
     representationModel: new TrivialRepresentationModel(),
     segments: new InMemorySegmentRepository(),
@@ -639,6 +641,13 @@ describe('Segments + agent access', () => {
     expect(unrestricted!.claims.length).toBe(1);
   });
 
+  it('ACL: denied agent context returns null when maxSensitivity below context sensitivity', () => {
+    const core = buildCore();
+    const ctx = core.createContext({ type: 'project', name: 'Confidential', actor: 'test', tenantId: 'default', sensitivity: 'confidential' });
+    const pkg = core.getAgentContext({ contextId: ctx.id, maxSensitivity: 'internal' });
+    expect(pkg).toBe(null);
+  });
+
   it('segment expires', () => {
     const core = buildCore();
     const ctx = core.createContext({ type: 'project', name: 'Test', actor: 'test', tenantId: 'default' });
@@ -904,10 +913,12 @@ describe('SQLite persistent adapter (Stage 2)', () => {
       policies: new InMemoryPolicyRepository(),
       decisionModel: new DeterministicDecisionModel(),
       policyModel: new PermissivePolicyModel(),
+      accessControl: new SensitivityAccessControlModel(),
       representations: new InMemoryRepresentationRepository(),
       representationModel: new TrivialRepresentationModel(),
       segments: new InMemorySegmentRepository(),
       segmentSecurity: new TrivialSegmentSecurityModel(),
+      accessControl: new SensitivityAccessControlModel(),
       _db: db,
     } as any);
     return { core, close: () => db.close() };
@@ -961,6 +972,7 @@ describe('SQLite persistent adapter (Stage 2)', () => {
         policies: new InMemoryPolicyRepository(),
         decisionModel: new DeterministicDecisionModel(),
         policyModel: new PermissivePolicyModel(),
+        accessControl: new SensitivityAccessControlModel(),
         representations: new InMemoryRepresentationRepository(),
         representationModel: new TrivialRepresentationModel(),
         segments: new InMemorySegmentRepository(),

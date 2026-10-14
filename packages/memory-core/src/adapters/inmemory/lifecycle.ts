@@ -10,6 +10,7 @@ import type {
   PolicyRepository,
   DecisionModel,
   PolicyModel,
+  AccessControlModel,
 } from '../../ports/lifecycle.js';
 import type {
   RepresentationRepository,
@@ -104,6 +105,22 @@ export class PermissivePolicyModel implements PolicyModel {
       return { action: 'Quarantine', aclRef: null };
     }
     return { action: 'Deny', aclRef: null };
+  }
+}
+
+export class SensitivityAccessControlModel implements AccessControlModel {
+  canRead(input: {
+    tenantId: string;
+    sensitivity: string;
+    maxSensitivity?: string;
+  }): { allowed: boolean; reason: string | null } {
+    const order: Record<string, number> = { public: 0, internal: 1, confidential: 2, restricted: 3 };
+    const level = order[input.sensitivity] ?? 1;
+    const maxLevel = order[input.maxSensitivity ?? 'internal'] ?? 1;
+    if (level > maxLevel) {
+      return { allowed: false, reason: `sensitivity ${input.sensitivity} exceeds max ${input.maxSensitivity ?? 'internal'}` };
+    }
+    return { allowed: true, reason: null };
   }
 }
 

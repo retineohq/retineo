@@ -65,6 +65,7 @@ import type {
   PolicyRepository,
   DecisionModel,
   PolicyModel,
+  AccessControlModel,
 } from '../ports/lifecycle.js';
 import type {
   ExtractionModel,
@@ -100,6 +101,7 @@ export interface MemoryCoreDeps {
   policies: PolicyRepository;
   decisionModel: DecisionModel;
   policyModel: PolicyModel;
+  accessControl: AccessControlModel;
   representations: RepresentationRepository;
   representationModel: RepresentationModel;
   segments: SegmentRepository;
@@ -933,11 +935,13 @@ export class MemoryCore {
     if (!context) {
       return null;
     }
+    const tenant = input.tenantId ?? 'default';
+    const access = this.deps.accessControl.canRead({ tenantId: tenant, sensitivity: context.sensitivity, maxSensitivity: input.maxSensitivity });
+    if (!access.allowed) return null;
     const maxLevel = parseSensitivity(input.maxSensitivity ?? 'restricted');
     const withinSensitivity = (sensitivity: string) => {
       return SENSITIVITY_ORDER[parseSensitivity(sensitivity)] <= SENSITIVITY_ORDER[maxLevel];
     };
-    const tenant = input.tenantId ?? 'default';
     const memberships = this.deps.memberships.byContext(input.contextId)
       .filter((membership) => (membership as any).tenantId === tenant);
     const objects: Object[] = [];
