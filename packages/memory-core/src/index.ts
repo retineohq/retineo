@@ -2,6 +2,7 @@ export * from './domain/index.js';
 export * from './ports/index.js';
 export * from './adapters/inmemory/index.js';
 export * from './adapters/sqlite/index.js';
+export * from './adapters/postgres/index.js';
 export * from './adapters/ollama/index.js';
 export * from './adapters/openrouter/index.js';
 export * from './adapters/ingestion/index.js';
