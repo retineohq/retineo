@@ -19,8 +19,8 @@ export class PostgresObjectRepository implements ObjectRepository {
   }
 
   get(id: ObjectId): DomainObject | undefined {
-    const { rows } = this.db.query('SELECT * FROM objects WHERE id = $1', [id]) as any;
-    const row = rows[0];
+    const result = this.db.query('SELECT * FROM objects WHERE id = $1', [id]) as any;
+    const row = result?.rows?.[0];
     if (!row) return undefined;
     return {
       id: row.id, type: row.type, name: row.name,
@@ -31,7 +31,8 @@ export class PostgresObjectRepository implements ObjectRepository {
   }
 
   all(): DomainObject[] {
-    const { rows } = this.db.query('SELECT * FROM objects') as any;
+    const result = this.db.query('SELECT * FROM objects') as any;
+    const rows = result?.rows ?? [];
     return rows.map((row: any) => ({
       id: row.id, type: row.type, name: row.name,
       aliases: JSON.parse(row.aliases), lifecycleState: row.lifecycle_state,
