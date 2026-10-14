@@ -38,7 +38,10 @@ export async function createPgExecutor(options: PostgresConnectionOptions = {}):
         return { rows };
       }
       const promise = pool.query(sql, params as any[]);
-      void promise.then(() => queryCache.clear()).catch(() => {});
+      void promise.then(() => {
+        queryCache.clear();
+        pending.clear();
+      }).catch(() => {});
       return { rows: [] };
     },
     async exec(sql: string) {
