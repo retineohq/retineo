@@ -72,9 +72,9 @@ describe('MemoryCore first milestone (16 steps without AI)', () => {
     expect(evidence.state).toBe('available');
 
     // 3. Objects
-    const postgres = core.createObject({ type: 'technology', name: 'PostgreSQL', actor: 'test' });
-    const decision = core.createObject({ type: 'decision', name: 'Primary DB choice', actor: 'test' });
-    const incident = core.createObject({ type: 'incident', name: 'DB migration failure', actor: 'test' });
+    const postgres = core.createObject({ type: 'technology', name: 'PostgreSQL', actor: 'test', tenantId: 'default' });
+    const decision = core.createObject({ type: 'decision', name: 'Primary DB choice', actor: 'test', tenantId: 'default' });
+    const incident = core.createObject({ type: 'incident', name: 'DB migration failure', actor: 'test', tenantId: 'default' });
 
     // 4. Claims
     const claim1 = core.createClaim({
@@ -84,6 +84,7 @@ describe('MemoryCore first milestone (16 steps without AI)', () => {
       evidenceRefs: [evidence.id],
       validFrom: '2022-01-01',
       actor: 'test',
+      tenantId: 'default',
     });
     expect(claim1.temporalState.validFrom).toBe('2022-01-01');
 
@@ -94,6 +95,7 @@ describe('MemoryCore first milestone (16 steps without AI)', () => {
       evidenceRefs: [evidence.id],
       validFrom: '2023-06-01',
       actor: 'test',
+      tenantId: 'default',
     });
 
     // 5. Relationships
@@ -103,6 +105,7 @@ describe('MemoryCore first milestone (16 steps without AI)', () => {
       targetObject: decision.id,
       evidenceRefs: [evidence.id],
       actor: 'test',
+      tenantId: 'default',
     });
     expect(rel.relationType).toBe('caused_by');
 
@@ -116,12 +119,13 @@ describe('MemoryCore first milestone (16 steps without AI)', () => {
       name: 'Database Platform Decision',
       purpose: 'Track database decision history',
       actor: 'test',
+      tenantId: 'default',
     });
 
     // 8. Membership (object in multiple contexts)
-    const ctx2 = core.createContext({ type: 'project', name: 'Platform', actor: 'test' });
-    core.addMembership({ contextId: context.id, memberType: 'object', memberId: postgres.id, mode: 'explicit', actor: 'test' });
-    core.addMembership({ contextId: ctx2.id, memberType: 'object', memberId: postgres.id, mode: 'explicit', actor: 'test' });
+    const ctx2 = core.createContext({ type: 'project', name: 'Platform', actor: 'test', tenantId: 'default' });
+    core.addMembership({ contextId: context.id, memberType: 'object', memberId: postgres.id, mode: 'explicit', actor: 'test', tenantId: 'default' });
+    core.addMembership({ contextId: ctx2.id, memberType: 'object', memberId: postgres.id, mode: 'explicit', actor: 'test', tenantId: 'default' });
 
     // 9. Contradiction (claim stays alive)
     const contradictingClaim = core.createClaim({
@@ -131,6 +135,7 @@ describe('MemoryCore first milestone (16 steps without AI)', () => {
       evidenceRefs: [evidence.id],
       validFrom: '2024-11-01',
       actor: 'test',
+      tenantId: 'default',
     });
     core.createRelationship({
       sourceObject: contradictingClaim.subjectId,
@@ -138,6 +143,7 @@ describe('MemoryCore first milestone (16 steps without AI)', () => {
       targetObject: claim1.subjectId,
       evidenceRefs: [evidence.id],
       actor: 'test',
+      tenantId: 'default',
     });
     expect(core.getClaim(claim1.id).lifecycleState).toBe('active');
 
@@ -146,11 +152,12 @@ describe('MemoryCore first milestone (16 steps without AI)', () => {
       type: 'UnresolvedConflict',
       description: 'PostgreSQL role: PrimaryDatabase vs Deprecated — needs resolution',
       actor: 'test',
+      tenantId: 'default',
     });
     expect(gap.lifecycleState).toBe('open');
 
     // 11–12. Merge + preserve history
-    const pgAlias = core.createObject({ type: 'technology', name: 'PG', actor: 'test' });
+    const pgAlias = core.createObject({ type: 'technology', name: 'PG', actor: 'test', tenantId: 'default' });
     core.mergeObjects(pgAlias.id, postgres.id, 'test');
     const resolved = core.getObject(pgAlias.id);
     expect(resolved.id).toBe(postgres.id);
@@ -176,7 +183,7 @@ describe('MemoryCore first milestone (16 steps without AI)', () => {
 describe('Invariants', () => {
   it('M1: claim without provenance is rejected', () => {
     const core = buildCore();
-    const postgres = core.createObject({ type: 'technology', name: 'PostgreSQL', actor: 'test' });
+    const postgres = core.createObject({ type: 'technology', name: 'PostgreSQL', actor: 'test', tenantId: 'default' });
     expect(() => core.createClaim({
       subjectId: postgres.id,
       predicate: 'has_role',
@@ -188,14 +195,14 @@ describe('Invariants', () => {
 
   it('M4: duplicate object ID is rejected', () => {
     const core = buildCore();
-    core.createObject({ type: 'technology', name: 'PostgreSQL', actor: 'test' });
-    expect(() => core.createObject({ type: 'technology', name: 'PostgreSQL', actor: 'test' })).toThrow('M4 violated');
+    core.createObject({ type: 'technology', name: 'PostgreSQL', actor: 'test', tenantId: 'default' });
+    expect(() => core.createObject({ type: 'technology', name: 'PostgreSQL', actor: 'test', tenantId: 'default' })).toThrow('M4 violated');
   });
 
   it('M5: merge preserves historical object as tombstone+redirect', () => {
     const core = buildCore();
-    const a = core.createObject({ type: 'technology', name: 'PG', actor: 'test' });
-    const b = core.createObject({ type: 'technology', name: 'PostgreSQL', actor: 'test' });
+    const a = core.createObject({ type: 'technology', name: 'PG', actor: 'test', tenantId: 'default' });
+    const b = core.createObject({ type: 'technology', name: 'PostgreSQL', actor: 'test', tenantId: 'default' });
     core.mergeObjects(a.id, b.id, 'test');
     const merged = (core as any).deps.objects.get(a.id);
     expect(merged.lifecycleState).toBe('merged');
@@ -204,7 +211,7 @@ describe('Invariants', () => {
 
   it('M9: candidate is not memory (empty evidence rejects)', () => {
     const core = buildCore();
-    const obj = core.createObject({ type: 'technology', name: 'PostgreSQL', actor: 'test' });
+    const obj = core.createObject({ type: 'technology', name: 'PostgreSQL', actor: 'test', tenantId: 'default' });
     const fakeEvidenceId = createId('ev', 'fake') as any;
     expect(() => core.createClaim({
       subjectId: obj.id,
@@ -225,13 +232,14 @@ describe('Invariants', () => {
       contentHash: 'h',
       state: 'available',
     });
-    const obj = core.createObject({ type: 'technology', name: 'Test', actor: 'test' });
+    const obj = core.createObject({ type: 'technology', name: 'Test', actor: 'test', tenantId: 'default' });
     core.createClaim({
       subjectId: obj.id,
       predicate: 'has_role',
       objectOrValue: 'X',
       evidenceRefs: [evidenceId],
       actor: 'test',
+      tenantId: 'default',
     });
     core.markEvidenceUnavailable(evidenceId, 'test');
     const claims = (core as any).deps.claims.bySubject(obj.id);
@@ -249,7 +257,7 @@ describe('Invariants', () => {
       contentHash: 'h',
       state: 'available',
     });
-    const obj = core.createObject({ type: 'technology', name: 'Test', actor: 'test' });
+    const obj = core.createObject({ type: 'technology', name: 'Test', actor: 'test', tenantId: 'default' });
     const claim = core.createClaim({
       subjectId: obj.id,
       predicate: 'has_role',
@@ -258,6 +266,7 @@ describe('Invariants', () => {
       confidence: 0.9,
       supportState: { level: 'weak', evidenceCount: 1, disagreeingCount: 0 },
       actor: 'test',
+      tenantId: 'default',
     });
     expect(claim.confidence).toBe(0.9);
     expect(claim.supportState.level).toBe('weak');
@@ -289,6 +298,7 @@ describe('Candidate → Decision → Policy pipeline', () => {
       extractor: 'test',
       extractorVersion: '1.0.0',
       actor: 'test',
+      tenantId: 'default',
     });
     const decision = core.decide(candidate.id, 'test');
     expect(decision.verdict).toBe('Accept');
@@ -305,6 +315,7 @@ describe('Candidate → Decision → Policy pipeline', () => {
       extractor: 'test',
       extractorVersion: '1.0.0',
       actor: 'test',
+      tenantId: 'default',
     });
     const decision = core.decide(candidate.id, 'test');
     expect(decision.verdict).toBe('Reject');
@@ -323,6 +334,7 @@ describe('Candidate → Decision → Policy pipeline', () => {
       extractor: 'test',
       extractorVersion: '1.0.0',
       actor: 'test',
+      tenantId: 'default',
     });
     expect((core as any).deps.claims.all().length).toBe(0);
     expect((core as any).deps.objects.all().length).toBe(0);
@@ -339,6 +351,7 @@ describe('Candidate → Decision → Policy pipeline', () => {
       extractor: 'test',
       extractorVersion: '1.0.0',
       actor: 'test',
+      tenantId: 'default',
     });
     core.decide(candidate.id, 'test');
     expect((core as any).deps.claims.all().length).toBe(0);
@@ -356,6 +369,7 @@ describe('Candidate → Decision → Policy pipeline', () => {
       extractor: 'test',
       extractorVersion: '1.0.0',
       actor: 'test',
+      tenantId: 'default',
     });
     core.decide(candidate.id, 'test');
     expect(() => core.decide(candidate.id, 'test')).toThrow('already decided');
@@ -365,13 +379,14 @@ describe('Candidate → Decision → Policy pipeline', () => {
     const core = buildCore();
     const e1 = createId('ev', 'e1') as any;
     buildEvidence(core, e1);
-    const obj = core.createObject({ type: 'technology', name: 'Test', actor: 'test' });
+    const obj = core.createObject({ type: 'technology', name: 'Test', actor: 'test', tenantId: 'default' });
     core.createClaim({
       subjectId: obj.id,
       predicate: 'has_role',
       objectOrValue: 'X',
       evidenceRefs: [e1],
       actor: 'test',
+      tenantId: 'default',
     });
     const candidate = core.proposeCandidate({
       type: 'ClaimCandidate',
@@ -380,6 +395,7 @@ describe('Candidate → Decision → Policy pipeline', () => {
       extractor: 'test',
       extractorVersion: '1.0.0',
       actor: 'test',
+      tenantId: 'default',
     });
     const decision = core.decide(candidate.id, 'test');
     expect(decision.verdict).toBe('Escalate');
@@ -408,6 +424,7 @@ describe('SemanticRepresentation + retrieval', () => {
       evidenceId: e1,
       content: 'PostgreSQL selected as primary database in 2022. Later migration caused problems.',
       actor: 'test',
+      tenantId: 'default',
     });
     expect(rep.type).toBe('summary');
     expect(rep.content).toContain('PostgreSQL');
@@ -424,6 +441,7 @@ describe('SemanticRepresentation + retrieval', () => {
       evidenceId: e1,
       content: 'Some content',
       actor: 'test',
+      tenantId: 'default',
     });
     const original = core.getSemanticRepresentationsByType('summary');
     expect(original.length).toBe(1);
@@ -433,6 +451,7 @@ describe('SemanticRepresentation + retrieval', () => {
       evidenceId: e1,
       content: 'Some content',
       actor: 'test',
+      tenantId: 'default',
     });
     expect(rebuilt.id).not.toBe(original[0].id);
   });
@@ -462,11 +481,11 @@ describe('SemanticRepresentation + retrieval', () => {
     const core = buildCore();
     const e1 = createId('ev', 'e1') as any;
     buildEvidence(core, e1);
-    const a = core.createObject({ type: 'decision', name: 'DB chosen', actor: 'test' });
-    const b = core.createObject({ type: 'incident', name: 'Migration failed', actor: 'test' });
-    const c = core.createObject({ type: 'decision', name: 'DB changed', actor: 'test' });
-    core.createRelationship({ sourceObject: a.id, relationType: 'caused_by', targetObject: b.id, evidenceRefs: [e1], actor: 'test' });
-    core.createRelationship({ sourceObject: b.id, relationType: 'caused_by', targetObject: c.id, evidenceRefs: [e1], actor: 'test' });
+    const a = core.createObject({ type: 'decision', name: 'DB chosen', actor: 'test', tenantId: 'default' });
+    const b = core.createObject({ type: 'incident', name: 'Migration failed', actor: 'test', tenantId: 'default' });
+    const c = core.createObject({ type: 'decision', name: 'DB changed', actor: 'test', tenantId: 'default' });
+    core.createRelationship({ sourceObject: a.id, relationType: 'caused_by', targetObject: b.id, evidenceRefs: [e1], actor: 'test', tenantId: 'default' });
+    core.createRelationship({ sourceObject: b.id, relationType: 'caused_by', targetObject: c.id, evidenceRefs: [e1], actor: 'test', tenantId: 'default' });
     const paths = core.traverseRelationships(a.id);
     expect(paths.length).toBeGreaterThan(0);
     expect(paths[0].length).toBe(1);
@@ -477,11 +496,11 @@ describe('SemanticRepresentation + retrieval', () => {
     const core = buildCore();
     const e1 = createId('ev', 'e1') as any;
     buildEvidence(core, e1);
-    const a = core.createObject({ type: 'technology', name: 'A', actor: 'test' });
-    const b = core.createObject({ type: 'technology', name: 'B', actor: 'test' });
-    const c = core.createObject({ type: 'technology', name: 'C', actor: 'test' });
-    const rel1 = core.createRelationship({ sourceObject: a.id, relationType: 'supersedes', targetObject: b.id, evidenceRefs: [e1], actor: 'test' });
-    core.createRelationship({ sourceObject: b.id, relationType: 'related_to', targetObject: c.id, evidenceRefs: [e1], actor: 'test' });
+    const a = core.createObject({ type: 'technology', name: 'A', actor: 'test', tenantId: 'default' });
+    const b = core.createObject({ type: 'technology', name: 'B', actor: 'test', tenantId: 'default' });
+    const c = core.createObject({ type: 'technology', name: 'C', actor: 'test', tenantId: 'default' });
+    const rel1 = core.createRelationship({ sourceObject: a.id, relationType: 'supersedes', targetObject: b.id, evidenceRefs: [e1], actor: 'test', tenantId: 'default' });
+    core.createRelationship({ sourceObject: b.id, relationType: 'related_to', targetObject: c.id, evidenceRefs: [e1], actor: 'test', tenantId: 'default' });
     // Manually supersede rel1
     (core as any).deps.relationships.save({ ...core.getRelationship(rel1.id), lifecycleState: 'superseded' });
     const paths = core.traverseRelationships(a.id);
@@ -492,8 +511,8 @@ describe('SemanticRepresentation + retrieval', () => {
     const core = buildCore();
     const e1 = createId('ev', 'e1') as any;
     buildEvidence(core, e1);
-    const a = core.createObject({ type: 'technology', name: 'PG', actor: 'test' });
-    const b = core.createObject({ type: 'technology', name: 'PostgreSQL', actor: 'test' });
+    const a = core.createObject({ type: 'technology', name: 'PG', actor: 'test', tenantId: 'default' });
+    const b = core.createObject({ type: 'technology', name: 'PostgreSQL', actor: 'test', tenantId: 'default' });
     core.mergeObjects(a.id, b.id, 'test');
     core.createClaim({
       subjectId: b.id,
@@ -501,6 +520,7 @@ describe('SemanticRepresentation + retrieval', () => {
       objectOrValue: 'Primary',
       evidenceRefs: [e1],
       actor: 'test',
+      tenantId: 'default',
     });
     const claims = core.getClaimsByObject(a.id);
     expect(claims.length).toBe(1);
@@ -522,14 +542,15 @@ describe('Segments + agent access', () => {
     const core = buildCore();
     const e1 = createId('ev', 'e1') as any;
     buildEvidence(core, e1);
-    const ctx = core.createContext({ type: 'project', name: 'DB Decision', actor: 'test' });
-    const obj = core.createObject({ type: 'technology', name: 'PostgreSQL', actor: 'test' });
-    core.addMembership({ contextId: ctx.id, memberType: 'object', memberId: obj.id, mode: 'explicit', actor: 'test' });
+    const ctx = core.createContext({ type: 'project', name: 'DB Decision', actor: 'test', tenantId: 'default' });
+    const obj = core.createObject({ type: 'technology', name: 'PostgreSQL', actor: 'test', tenantId: 'default' });
+    core.addMembership({ contextId: ctx.id, memberType: 'object', memberId: obj.id, mode: 'explicit', actor: 'test', tenantId: 'default' });
     const segment = core.exportSegment({
       rootContext: ctx.id,
       purpose: 'incident_investigation',
       sensitivity: 'internal',
       actor: 'test',
+      tenantId: 'default',
     });
     expect(segment.rootContext).toBe(ctx.id);
     expect(segment.includedObjects).toContain(obj.id);
@@ -538,14 +559,14 @@ describe('Segments + agent access', () => {
 
   it('verify segment signature', () => {
     const core = buildCore();
-    const ctx = core.createContext({ type: 'project', name: 'Test', actor: 'test' });
+    const ctx = core.createContext({ type: 'project', name: 'Test', actor: 'test', tenantId: 'default' });
     const segment = core.exportSegment({ rootContext: ctx.id, purpose: 'test', sensitivity: 'internal', actor: 'test' });
     expect(core.verifySegment(segment.id)).toBe(true);
   });
 
   it('verify rejects tampered segment', () => {
     const core = buildCore();
-    const ctx = core.createContext({ type: 'project', name: 'Test', actor: 'test' });
+    const ctx = core.createContext({ type: 'project', name: 'Test', actor: 'test', tenantId: 'default' });
     const segment = core.exportSegment({ rootContext: ctx.id, purpose: 'test', sensitivity: 'internal', actor: 'test' });
     const tampered = { ...core.getSegment(segment.id), payloadHash: 'tampered' };
     (core as any).deps.segments.save(tampered);
@@ -561,10 +582,10 @@ describe('Segments + agent access', () => {
     const core = buildCore();
     const e1 = createId('ev', 'e1') as any;
     buildEvidence(core, e1);
-    const ctx = core.createContext({ type: 'project', name: 'Test', actor: 'test' });
-    const obj = core.createObject({ type: 'technology', name: 'PostgreSQL', actor: 'test' });
-    core.addMembership({ contextId: ctx.id, memberType: 'object', memberId: obj.id, mode: 'explicit', actor: 'test' });
-    core.addMembership({ contextId: ctx.id, memberType: 'evidence', memberId: e1, mode: 'explicit', actor: 'test' });
+    const ctx = core.createContext({ type: 'project', name: 'Test', actor: 'test', tenantId: 'default' });
+    const obj = core.createObject({ type: 'technology', name: 'PostgreSQL', actor: 'test', tenantId: 'default' });
+    core.addMembership({ contextId: ctx.id, memberType: 'object', memberId: obj.id, mode: 'explicit', actor: 'test', tenantId: 'default' });
+    core.addMembership({ contextId: ctx.id, memberType: 'evidence', memberId: e1, mode: 'explicit', actor: 'test', tenantId: 'default' });
     const pkg = core.getAgentContext({ contextId: ctx.id });
     expect(pkg).not.toBe(null);
     expect(pkg!.objects.length).toBe(1);
@@ -575,16 +596,16 @@ describe('Segments + agent access', () => {
     const core = buildCore();
     const e1 = createId('ev', 'e1') as any;
     buildEvidence(core, e1);
-    const ctx = core.createContext({ type: 'project', name: 'Test', actor: 'test' });
+    const ctx = core.createContext({ type: 'project', name: 'Test', actor: 'test', tenantId: 'default' });
     const gap = core.createKnowledgeGap({ type: 'OpenQuestion', description: 'Why?', actor: 'test' });
-    core.addMembership({ contextId: ctx.id, memberType: 'knowledge_gap', memberId: gap.id, mode: 'explicit', actor: 'test' });
+    core.addMembership({ contextId: ctx.id, memberType: 'knowledge_gap', memberId: gap.id, mode: 'explicit', actor: 'test', tenantId: 'default' });
     const pkg = core.getAgentContext({ contextId: ctx.id });
     expect(pkg!.knownGaps.length).toBe(1);
   });
 
   it('agent context filters members by maxSensitivity', () => {
     const core = buildCore();
-    const ctx = core.createContext({ type: 'project', name: 'Security', actor: 'test' });
+    const ctx = core.createContext({ type: 'project', name: 'Security', actor: 'test', tenantId: 'default' });
     const internalObject = core.createObject({ type: 'technology', name: 'Internal', actor: 'test', sensitivity: 'internal' });
     const restrictedObject = core.createObject({ type: 'technology', name: 'Secret', actor: 'test', sensitivity: 'restricted' });
     const restrictedClaim = core.createClaim({
@@ -601,9 +622,9 @@ describe('Segments + agent access', () => {
       actor: 'test',
       sensitivity: 'restricted',
     });
-    core.addMembership({ contextId: ctx.id, memberType: 'object', memberId: internalObject.id, mode: 'explicit', actor: 'test' });
-    core.addMembership({ contextId: ctx.id, memberType: 'object', memberId: restrictedObject.id, mode: 'explicit', actor: 'test' });
-    core.addMembership({ contextId: ctx.id, memberType: 'claim', memberId: restrictedClaim.id, mode: 'explicit', actor: 'test' });
+    core.addMembership({ contextId: ctx.id, memberType: 'object', memberId: internalObject.id, mode: 'explicit', actor: 'test', tenantId: 'default' });
+    core.addMembership({ contextId: ctx.id, memberType: 'object', memberId: restrictedObject.id, mode: 'explicit', actor: 'test', tenantId: 'default' });
+    core.addMembership({ contextId: ctx.id, memberType: 'claim', memberId: restrictedClaim.id, mode: 'explicit', actor: 'test', tenantId: 'default' });
 
     const internalOnly = core.getAgentContext({ contextId: ctx.id, maxSensitivity: 'internal' });
     expect(internalOnly!.objects.map((object) => object.name)).toEqual(['Internal']);
@@ -616,7 +637,7 @@ describe('Segments + agent access', () => {
 
   it('segment expires', () => {
     const core = buildCore();
-    const ctx = core.createContext({ type: 'project', name: 'Test', actor: 'test' });
+    const ctx = core.createContext({ type: 'project', name: 'Test', actor: 'test', tenantId: 'default' });
     const segment = core.exportSegment({ rootContext: ctx.id, purpose: 'test', sensitivity: 'internal', actor: 'test', expiresInDays: 7 });
     expect(segment.expiresAt).not.toBe(null);
   });
@@ -660,11 +681,11 @@ describe('Invariant coverage — remaining 12 invariants', () => {
 
   it('M6: context membership never copies object (two contexts share same object)', () => {
     const core = buildCore();
-    const ctx1 = core.createContext({ type: 'project', name: 'A', actor: 'test' });
-    const ctx2 = core.createContext({ type: 'project', name: 'B', actor: 'test' });
-    const obj = core.createObject({ type: 'technology', name: 'PostgreSQL', actor: 'test' });
-    core.addMembership({ contextId: ctx1.id, memberType: 'object', memberId: obj.id, mode: 'explicit', actor: 'test' });
-    core.addMembership({ contextId: ctx2.id, memberType: 'object', memberId: obj.id, mode: 'explicit', actor: 'test' });
+    const ctx1 = core.createContext({ type: 'project', name: 'A', actor: 'test', tenantId: 'default' });
+    const ctx2 = core.createContext({ type: 'project', name: 'B', actor: 'test', tenantId: 'default' });
+    const obj = core.createObject({ type: 'technology', name: 'PostgreSQL', actor: 'test', tenantId: 'default' });
+    core.addMembership({ contextId: ctx1.id, memberType: 'object', memberId: obj.id, mode: 'explicit', actor: 'test', tenantId: 'default' });
+    core.addMembership({ contextId: ctx2.id, memberType: 'object', memberId: obj.id, mode: 'explicit', actor: 'test', tenantId: 'default' });
     // Mutate object once
     (core as any).deps.objects.save({ ...obj, name: 'PostgreSQL 16' });
     // Both memberships resolve to same (mutated) object — reference semantics
@@ -678,13 +699,14 @@ describe('Invariant coverage — remaining 12 invariants', () => {
     const core = buildCore();
     const e1 = createId('ev', 'e1') as any;
     buildEvidence(core, e1);
-    const obj = core.createObject({ type: 'technology', name: 'X', actor: 'test' });
+    const obj = core.createObject({ type: 'technology', name: 'X', actor: 'test', tenantId: 'default' });
     const claim1 = core.createClaim({
       subjectId: obj.id,
       predicate: 'has_role',
       objectOrValue: 'Primary',
       evidenceRefs: [e1],
       actor: 'test',
+      tenantId: 'default',
     });
     const claim2 = core.createClaim({
       subjectId: obj.id,
@@ -692,6 +714,7 @@ describe('Invariant coverage — remaining 12 invariants', () => {
       objectOrValue: 'Deprecated',
       evidenceRefs: [e1],
       actor: 'test',
+      tenantId: 'default',
     });
     core.createRelationship({
       sourceObject: obj.id,
@@ -699,6 +722,7 @@ describe('Invariant coverage — remaining 12 invariants', () => {
       targetObject: obj.id,
       evidenceRefs: [e1],
       actor: 'test',
+      tenantId: 'default',
     });
     // Both claims still exist and are active
     expect(core.getClaim(claim1.id).lifecycleState).toBe('active');
@@ -716,6 +740,7 @@ describe('Invariant coverage — remaining 12 invariants', () => {
       extractor: 'test',
       extractorVersion: '1.0.0',
       actor: 'test',
+      tenantId: 'default',
     });
     const decision = core.decide(candidate.id, 'test');
     core.applyPolicy(decision.id, 'test');
@@ -735,6 +760,7 @@ describe('Invariant coverage — remaining 12 invariants', () => {
       extractor: 'test',
       extractorVersion: '1.0.0',
       actor: 'test',
+      tenantId: 'default',
     });
     const decision = core.decide(candidate.id, 'test');
     // Decision has no ACL fields; only Policy does
@@ -747,7 +773,7 @@ describe('Invariant coverage — remaining 12 invariants', () => {
     const core = buildCore();
     const e1 = createId('ev', 'e1') as any;
     buildEvidence(core, e1);
-    const obj = core.createObject({ type: 'technology', name: 'X', actor: 'test' });
+    const obj = core.createObject({ type: 'technology', name: 'X', actor: 'test', tenantId: 'default' });
     const objectsBefore = (core as any).deps.objects.all().length;
     const claimsBefore = (core as any).deps.claims.all().length;
     // "LLM" proposes candidate — memory unchanged
@@ -772,18 +798,18 @@ describe('Invariant coverage — remaining 12 invariants', () => {
     const e1 = createId('ev', 'e1') as any;
     buildEvidence(core, e1);
     const journalBefore = core.getJournal().length;
-    const obj = core.createObject({ type: 'technology', name: 'X', actor: 'test' });
+    const obj = core.createObject({ type: 'technology', name: 'X', actor: 'test', tenantId: 'default' });
     expect(core.getJournal().length).toBe(journalBefore + 1);
-    core.createClaim({ subjectId: obj.id, predicate: 'has_role', objectOrValue: 'Y', evidenceRefs: [e1], actor: 'test' });
+    core.createClaim({ subjectId: obj.id, predicate: 'has_role', objectOrValue: 'Y', evidenceRefs: [e1], actor: 'test', tenantId: 'default' });
     expect(core.getJournal().length).toBe(journalBefore + 2);
   });
 
   it('M16: failed mutation leaves no journal event (atomic rollback)', () => {
     const core = buildCore();
     const journalBefore = core.getJournal().length;
-    expect(() => core.createObject({ type: 'technology', name: 'PostgreSQL', actor: 'test' })).not.toThrow();
+    expect(() => core.createObject({ type: 'technology', name: 'PostgreSQL', actor: 'test', tenantId: 'default' })).not.toThrow();
     const after = core.getJournal().length;
-    expect(() => core.createObject({ type: 'technology', name: 'PostgreSQL', actor: 'test' })).toThrow('M4 violated');
+    expect(() => core.createObject({ type: 'technology', name: 'PostgreSQL', actor: 'test', tenantId: 'default' })).toThrow('M4 violated');
     expect(core.getJournal().length).toBe(after);
   });
 
@@ -791,8 +817,8 @@ describe('Invariant coverage — remaining 12 invariants', () => {
     const core = buildCore();
     const e1 = createId('ev', 'e1') as any;
     buildEvidence(core, e1);
-    const obj = core.createObject({ type: 'technology', name: 'X', actor: 'test' });
-    core.createClaim({ subjectId: obj.id, predicate: 'has_role', objectOrValue: 'Y', evidenceRefs: [e1], actor: 'test' });
+    const obj = core.createObject({ type: 'technology', name: 'X', actor: 'test', tenantId: 'default' });
+    core.createClaim({ subjectId: obj.id, predicate: 'has_role', objectOrValue: 'Y', evidenceRefs: [e1], actor: 'test', tenantId: 'default' });
     const journal = core.getJournal();
     const createEvents = journal.filter((event) => event.operation === 'create');
     expect(createEvents.length).toBeGreaterThanOrEqual(3);
@@ -806,6 +832,7 @@ describe('Invariant coverage — remaining 12 invariants', () => {
       type: 'UnknownDependency',
       description: 'We do not know if service X depends on service Y',
       actor: 'test',
+      tenantId: 'default',
     });
     expect(gap.lifecycleState).toBe('open');
     const resolved = core.resolveKnowledgeGap(gap.id, 'test');
@@ -827,6 +854,7 @@ describe('Invariant coverage — remaining 12 invariants', () => {
       extractor: 'test',
       extractorVersion: '1.0.0',
       actor: 'test',
+      tenantId: 'default',
     });
     const decision = core.decide(candidate.id, 'test');
     expect(decision.verdict).toBe('Escalate');
@@ -894,7 +922,7 @@ describe('SQLite persistent adapter (Stage 2)', () => {
         contentHash: 'hash-1',
         state: 'available',
       });
-      const obj = core.createObject({ type: 'technology', name: 'PostgreSQL', actor: 'test' });
+      const obj = core.createObject({ type: 'technology', name: 'PostgreSQL', actor: 'test', tenantId: 'default' });
       core.createClaim({
         subjectId: obj.id,
         predicate: 'has_role',
@@ -902,9 +930,9 @@ describe('SQLite persistent adapter (Stage 2)', () => {
         evidenceRefs: [evidenceId],
         validFrom: '2022-01-01',
         actor: 'test',
-      });
-      const ctx = core.createContext({ type: 'project', name: 'DB Decision', actor: 'test' });
-      core.addMembership({ contextId: ctx.id, memberType: 'object', memberId: obj.id, mode: 'explicit', actor: 'test' });
+        tenantId: 'default',      });
+      const ctx = core.createContext({ type: 'project', name: 'DB Decision', actor: 'test', tenantId: 'default' });
+      core.addMembership({ contextId: ctx.id, memberType: 'object', memberId: obj.id, mode: 'explicit', actor: 'test', tenantId: 'default' });
       close();
     }
 
@@ -952,9 +980,9 @@ describe('SQLite persistent adapter (Stage 2)', () => {
   it('M16 SQLite: failed mutation rolls back atomically', () => {
     const dbFile = `${tmpDir}/test2.db`;
     const { core, close } = buildSqliteCore(dbFile);
-    core.createObject({ type: 'technology', name: 'X', actor: 'test' });
+    core.createObject({ type: 'technology', name: 'X', actor: 'test', tenantId: 'default' });
     const journalBefore = core.getJournal().length;
-    expect(() => core.createObject({ type: 'technology', name: 'X', actor: 'test' })).toThrow('M4 violated');
+    expect(() => core.createObject({ type: 'technology', name: 'X', actor: 'test', tenantId: 'default' })).toThrow('M4 violated');
     expect(core.getJournal().length).toBe(journalBefore);
     expect((core as any).deps.objects.all().length).toBe(1);
     close();
@@ -971,8 +999,8 @@ describe('SQLite persistent adapter (Stage 2)', () => {
       contentHash: 'h',
       state: 'available',
     });
-    const obj = core.createObject({ type: 'technology', name: 'X', actor: 'test' });
-    core.createClaim({ subjectId: obj.id, predicate: 'has_role', objectOrValue: 'Y', evidenceRefs: [e1], actor: 'test' });
+    const obj = core.createObject({ type: 'technology', name: 'X', actor: 'test', tenantId: 'default' });
+    core.createClaim({ subjectId: obj.id, predicate: 'has_role', objectOrValue: 'Y', evidenceRefs: [e1], actor: 'test', tenantId: 'default' });
     const journal = core.getJournal();
     expect(journal.length).toBe(3);
     expect(journal[0].sequence).toBe(1);
@@ -1017,6 +1045,7 @@ describe('Filesystem ingestion (Stage 3)', () => {
       sourceName: 'Test Project Docs',
       trustProfile: 'trusted',
       actor: 'test',
+      tenantId: 'default',
     });
 
     expect(result.itemsIngested).toBe(3);
@@ -1143,7 +1172,7 @@ describe('Sandboxing untrusted sources (handoff #40)', () => {
     const ev = (core as any).deps.evidence.all()[0];
     expect(ev.state).toBe('unavailable');
 
-    const obj = core.createObject({ type: 'report', name: 'External', actor: 'test' });
+    const obj = core.createObject({ type: 'report', name: 'External', actor: 'test', tenantId: 'default' });
     expect(() => core.createClaim({
       subjectId: obj.id,
       predicate: 'has_role',
@@ -1167,13 +1196,14 @@ describe('Sandboxing untrusted sources (handoff #40)', () => {
     const ev = (core as any).deps.evidence.all()[0];
     expect(ev.state).toBe('available');
 
-    const obj = core.createObject({ type: 'technology', name: 'X', actor: 'test' });
+    const obj = core.createObject({ type: 'technology', name: 'X', actor: 'test', tenantId: 'default' });
     const claim = core.createClaim({
       subjectId: obj.id,
       predicate: 'has_role',
       objectOrValue: 'Primary',
       evidenceRefs: [ev.id],
       actor: 'test',
+      tenantId: 'default',
     });
     expect(claim.lifecycleState).toBe('active');
   });
@@ -1227,13 +1257,14 @@ describe('Candidate extraction pipeline (Stage 4)', () => {
       state: 'available',
     });
     // Create existing claim manually to trigger Escalate on next single-evidence candidate
-    const obj = core.createObject({ type: 'technology', name: 'X', actor: 'test' });
+    const obj = core.createObject({ type: 'technology', name: 'X', actor: 'test', tenantId: 'default' });
     core.createClaim({
       subjectId: obj.id,
       predicate: 'has_role',
       objectOrValue: 'Y',
       evidenceRefs: [e1],
       actor: 'test',
+      tenantId: 'default',
     });
 
     const content = 'We chose PostgreSQL.';
@@ -1321,13 +1352,13 @@ describe('Retrieval projections / query engine (Stage 5)', () => {
         id, sourceVersionId: createId('sv', hash) as any, segmentRef: null, contentHash: hash, state: 'available',
       });
     }
-    const postgres = core.createObject({ type: 'technology', name: 'PostgreSQL', actor: 'test' });
-    const incident = core.createObject({ type: 'incident', name: 'Migration Failure', actor: 'test' });
-    const decision = core.createObject({ type: 'decision', name: 'Switch to CockroachDB', actor: 'test' });
-    core.createClaim({ subjectId: postgres.id, predicate: 'has_role', objectOrValue: 'PrimaryDatabase', evidenceRefs: [e1], validFrom: '2022-01-01', actor: 'test' });
-    core.createClaim({ subjectId: incident.id, predicate: 'has_property', objectOrValue: 'caused_outage', evidenceRefs: [e2], actor: 'test' });
-    core.createRelationship({ sourceObject: decision.id, relationType: 'supersedes', targetObject: postgres.id, evidenceRefs: [e3], actor: 'test' });
-    core.createRelationship({ sourceObject: incident.id, relationType: 'caused_by', targetObject: decision.id, evidenceRefs: [e2], actor: 'test' });
+    const postgres = core.createObject({ type: 'technology', name: 'PostgreSQL', actor: 'test', tenantId: 'default' });
+    const incident = core.createObject({ type: 'incident', name: 'Migration Failure', actor: 'test', tenantId: 'default' });
+    const decision = core.createObject({ type: 'decision', name: 'Switch to CockroachDB', actor: 'test', tenantId: 'default' });
+    core.createClaim({ subjectId: postgres.id, predicate: 'has_role', objectOrValue: 'PrimaryDatabase', evidenceRefs: [e1], validFrom: '2022-01-01', actor: 'test', tenantId: 'default' });
+    core.createClaim({ subjectId: incident.id, predicate: 'has_property', objectOrValue: 'caused_outage', evidenceRefs: [e2], actor: 'test', tenantId: 'default' });
+    core.createRelationship({ sourceObject: decision.id, relationType: 'supersedes', targetObject: postgres.id, evidenceRefs: [e3], actor: 'test', tenantId: 'default' });
+    core.createRelationship({ sourceObject: incident.id, relationType: 'caused_by', targetObject: decision.id, evidenceRefs: [e2], actor: 'test', tenantId: 'default' });
     // Essence representations
     core.createSemanticRepresentation({ type: 'essence_nl', evidenceId: e1, content: 'PostgreSQL selected as primary database technology', actor: 'test' });
     core.createSemanticRepresentation({ type: 'essence_nl', evidenceId: e2, content: 'Migration failure caused operational problems', actor: 'test' });
@@ -1384,6 +1415,7 @@ describe('Retrieval projections / query engine (Stage 5)', () => {
       subjectId: postgres.id,
       description: 'PostgreSQL role disputed',
       actor: 'test',
+      tenantId: 'default',
     });
     const result = engine.reconstructContext(postgres.id);
     expect(result.claims.length).toBe(1);
@@ -1412,7 +1444,7 @@ describe('Retrieval projections / query engine (Stage 5)', () => {
 
   it('findMultiHopPaths: returns empty for disconnected objects', () => {
     const { core, engine } = buildPopulatedCore();
-    const isolated = core.createObject({ type: 'technology', name: 'Isolated', actor: 'test' });
+    const isolated = core.createObject({ type: 'technology', name: 'Isolated', actor: 'test', tenantId: 'default' });
     const postgres = (engine as any).core.getObject('obj:postgresql');
     const paths = engine.findMultiHopPaths(isolated.id, postgres.id);
     expect(paths).toHaveLength(0);
@@ -1432,7 +1464,7 @@ describe('Segment import (Stage 6)', () => {
 
   it('importSegment: verify without apply (autoApply=false)', () => {
     const core = buildCore();
-    const ctx = core.createContext({ type: 'project', name: 'Test', actor: 'test' });
+    const ctx = core.createContext({ type: 'project', name: 'Test', actor: 'test', tenantId: 'default' });
     const segment = core.exportSegment({ rootContext: ctx.id, purpose: 'test', sensitivity: 'internal', actor: 'test' });
     const result = core.importSegment({ segment, actor: 'test', autoApply: false });
     expect(result.verified).toBe(true);
@@ -1443,7 +1475,7 @@ describe('Segment import (Stage 6)', () => {
 
   it('importSegment: tampered segment rejected', () => {
     const core = buildCore();
-    const ctx = core.createContext({ type: 'project', name: 'Test', actor: 'test' });
+    const ctx = core.createContext({ type: 'project', name: 'Test', actor: 'test', tenantId: 'default' });
     const segment = core.exportSegment({ rootContext: ctx.id, purpose: 'test', sensitivity: 'internal', actor: 'test' });
     const tampered = { ...core.getSegment(segment.id), payloadHash: 'tampered' };
     const result = core.importSegment({ segment: tampered, actor: 'test', autoApply: true });
@@ -1455,7 +1487,7 @@ describe('Segment import (Stage 6)', () => {
 
   it('importSegment: expired segment throws', () => {
     const core = buildCore();
-    const ctx = core.createContext({ type: 'project', name: 'Test', actor: 'test' });
+    const ctx = core.createContext({ type: 'project', name: 'Test', actor: 'test', tenantId: 'default' });
     const segment = core.exportSegment({ rootContext: ctx.id, purpose: 'test', sensitivity: 'internal', actor: 'test', expiresInDays: -1 });
     expect(() => core.importSegment({ segment, actor: 'test', autoApply: false })).toThrow('expired');
   });
@@ -1464,10 +1496,10 @@ describe('Segment import (Stage 6)', () => {
     const core = buildCore();
     const e1 = createId('ev', 'e1') as any;
     buildEvidence(core, e1);
-    const ctx = core.createContext({ type: 'project', name: 'Test', actor: 'test' });
-    const obj = core.createObject({ type: 'technology', name: 'PostgreSQL', actor: 'test' });
-    core.addMembership({ contextId: ctx.id, memberType: 'object', memberId: obj.id, mode: 'explicit', actor: 'test' });
-    core.addMembership({ contextId: ctx.id, memberType: 'evidence', memberId: e1, mode: 'explicit', actor: 'test' });
+    const ctx = core.createContext({ type: 'project', name: 'Test', actor: 'test', tenantId: 'default' });
+    const obj = core.createObject({ type: 'technology', name: 'PostgreSQL', actor: 'test', tenantId: 'default' });
+    core.addMembership({ contextId: ctx.id, memberType: 'object', memberId: obj.id, mode: 'explicit', actor: 'test', tenantId: 'default' });
+    core.addMembership({ contextId: ctx.id, memberType: 'evidence', memberId: e1, mode: 'explicit', actor: 'test', tenantId: 'default' });
     const segment = core.exportSegment({ rootContext: ctx.id, purpose: 'test', sensitivity: 'internal', actor: 'test' });
     const result = core.importSegment({ segment, actor: 'test', autoApply: true });
     expect(result.verified).toBe(true);
@@ -1476,9 +1508,9 @@ describe('Segment import (Stage 6)', () => {
 
   it('importSegment: autoApply with missing member throws', () => {
     const core = buildCore();
-    const ctx = core.createContext({ type: 'project', name: 'Test', actor: 'test' });
-    const obj = core.createObject({ type: 'technology', name: 'X', actor: 'test' });
-    core.addMembership({ contextId: ctx.id, memberType: 'object', memberId: obj.id, mode: 'explicit', actor: 'test' });
+    const ctx = core.createContext({ type: 'project', name: 'Test', actor: 'test', tenantId: 'default' });
+    const obj = core.createObject({ type: 'technology', name: 'X', actor: 'test', tenantId: 'default' });
+    core.addMembership({ contextId: ctx.id, memberType: 'object', memberId: obj.id, mode: 'explicit', actor: 'test', tenantId: 'default' });
     const segment = core.exportSegment({ rootContext: ctx.id, purpose: 'test', sensitivity: 'internal', actor: 'test' });
     // Remove object to simulate missing member
     (core as any).deps.objects.save({ ...core.getObject(obj.id), lifecycleState: 'retired' });
@@ -1545,7 +1577,7 @@ describe('HTTP API (Stage 7)', () => {
     core.createEvidence({
       id: e1, sourceVersionId: createId('sv', 'sv-1') as any, segmentRef: null, contentHash: 'h', state: 'available',
     });
-    const obj = core.createObject({ type: 'technology', name: 'X', actor: 'test' });
+    const obj = core.createObject({ type: 'technology', name: 'X', actor: 'test', tenantId: 'default' });
     const response = await testApp.inject({
       method: 'POST',
       url: '/claims',
@@ -1625,7 +1657,7 @@ describe('Negative cases — edge conditions', () => {
 
   it('createClaim: unknown evidence throws', () => {
     const core = buildCore();
-    const obj = core.createObject({ type: 'technology', name: 'X', actor: 'test' });
+    const obj = core.createObject({ type: 'technology', name: 'X', actor: 'test', tenantId: 'default' });
     const fakeEv = createId('ev', 'fake') as any;
     expect(() => core.createClaim({
       subjectId: obj.id, predicate: 'has_role', objectOrValue: 'Y', evidenceRefs: [fakeEv], actor: 'test',
@@ -1636,7 +1668,7 @@ describe('Negative cases — edge conditions', () => {
     const core = buildCore();
     const e1 = createId('ev', 'e1') as any;
     buildEvidence(core, e1);
-    const obj = core.createObject({ type: 'technology', name: 'X', actor: 'test' });
+    const obj = core.createObject({ type: 'technology', name: 'X', actor: 'test', tenantId: 'default' });
     core.markEvidenceUnavailable(e1, 'test');
     expect(() => core.createClaim({
       subjectId: obj.id, predicate: 'has_role', objectOrValue: 'Y', evidenceRefs: [e1], actor: 'test',
@@ -1656,7 +1688,7 @@ describe('Negative cases — edge conditions', () => {
     const core = buildCore();
     const e1 = createId('ev', 'e1') as any;
     buildEvidence(core, e1);
-    const target = core.createObject({ type: 'technology', name: 'B', actor: 'test' });
+    const target = core.createObject({ type: 'technology', name: 'B', actor: 'test', tenantId: 'default' });
     expect(() => core.createRelationship({
       sourceObject: 'obj:fake' as any, relationType: 'related_to', targetObject: target.id, evidenceRefs: [e1], actor: 'test',
     })).toThrow('Source object not found');
@@ -1666,7 +1698,7 @@ describe('Negative cases — edge conditions', () => {
     const core = buildCore();
     const e1 = createId('ev', 'e1') as any;
     buildEvidence(core, e1);
-    const source = core.createObject({ type: 'technology', name: 'A', actor: 'test' });
+    const source = core.createObject({ type: 'technology', name: 'A', actor: 'test', tenantId: 'default' });
     expect(() => core.createRelationship({
       sourceObject: source.id, relationType: 'related_to', targetObject: 'obj:fake' as any, evidenceRefs: [e1], actor: 'test',
     })).toThrow('Target object not found');
@@ -1674,8 +1706,8 @@ describe('Negative cases — edge conditions', () => {
 
   it('createRelationship: empty evidence throws (M1)', () => {
     const core = buildCore();
-    const a = core.createObject({ type: 'technology', name: 'A', actor: 'test' });
-    const b = core.createObject({ type: 'technology', name: 'B', actor: 'test' });
+    const a = core.createObject({ type: 'technology', name: 'A', actor: 'test', tenantId: 'default' });
+    const b = core.createObject({ type: 'technology', name: 'B', actor: 'test', tenantId: 'default' });
     expect(() => core.createRelationship({
       sourceObject: a.id, relationType: 'related_to', targetObject: b.id, evidenceRefs: [], actor: 'test',
     })).toThrow('M1 violated');
@@ -1683,7 +1715,7 @@ describe('Negative cases — edge conditions', () => {
 
   it('addMembership: unknown context throws', () => {
     const core = buildCore();
-    const obj = core.createObject({ type: 'technology', name: 'X', actor: 'test' });
+    const obj = core.createObject({ type: 'technology', name: 'X', actor: 'test', tenantId: 'default' });
     expect(() => core.addMembership({
       contextId: 'ctx:fake' as any, memberType: 'object', memberId: obj.id, mode: 'explicit', actor: 'test',
     })).toThrow('Context not found');
@@ -1691,7 +1723,7 @@ describe('Negative cases — edge conditions', () => {
 
   it('addMembership: unknown object member throws', () => {
     const core = buildCore();
-    const ctx = core.createContext({ type: 'project', name: 'Test', actor: 'test' });
+    const ctx = core.createContext({ type: 'project', name: 'Test', actor: 'test', tenantId: 'default' });
     expect(() => core.addMembership({
       contextId: ctx.id, memberType: 'object', memberId: 'obj:fake' as any, mode: 'explicit', actor: 'test',
     })).toThrow('Member object not found');
@@ -1704,15 +1736,15 @@ describe('Negative cases — edge conditions', () => {
 
   it('mergeObjects: merge object into itself throws', () => {
     const core = buildCore();
-    const a = core.createObject({ type: 'technology', name: 'A', actor: 'test' });
+    const a = core.createObject({ type: 'technology', name: 'A', actor: 'test', tenantId: 'default' });
     expect(() => core.mergeObjects(a.id, a.id, 'test')).toThrow('Cannot merge object into itself');
   });
 
   it('mergeObjects: re-merge of redirected alias follows redirect (no-op on self, chain merge works)', () => {
     const core = buildCore();
-    const a = core.createObject({ type: 'technology', name: 'A', actor: 'test' });
-    const b = core.createObject({ type: 'technology', name: 'B', actor: 'test' });
-    const c = core.createObject({ type: 'technology', name: 'C', actor: 'test' });
+    const a = core.createObject({ type: 'technology', name: 'A', actor: 'test', tenantId: 'default' });
+    const b = core.createObject({ type: 'technology', name: 'B', actor: 'test', tenantId: 'default' });
+    const c = core.createObject({ type: 'technology', name: 'C', actor: 'test', tenantId: 'default' });
     core.mergeObjects(a.id, b.id, 'test');
     // Alias a now resolves to b; merging alias a into c merges b into c
     expect(() => core.mergeObjects(a.id, c.id, 'test')).not.toThrow();
@@ -1802,37 +1834,37 @@ describe('Negative cases — edge conditions', () => {
 
   it('duplicate object name with different type shares id (createId ignores type) and M4 blocks second create', () => {
     const core = buildCore();
-    const a = core.createObject({ type: 'technology', name: 'PostgreSQL', actor: 'test' });
-    expect(() => core.createObject({ type: 'person', name: 'PostgreSQL', actor: 'test' })).toThrow('M4 violated');
+    const a = core.createObject({ type: 'technology', name: 'PostgreSQL', actor: 'test', tenantId: 'default' });
+    expect(() => core.createObject({ type: 'person', name: 'PostgreSQL', actor: 'test', tenantId: 'default' })).toThrow('M4 violated');
     expect(a.id).toBe('obj:postgresql');
-    expect(() => core.createObject({ type: 'technology', name: 'PostgreSQL', actor: 'test' })).toThrow('M4 violated');
+    expect(() => core.createObject({ type: 'technology', name: 'PostgreSQL', actor: 'test', tenantId: 'default' })).toThrow('M4 violated');
   });
 
   it('duplicate object name of merged object is allowed (createId same, tombstone check)', () => {
     const core = buildCore();
-    const a = core.createObject({ type: 'technology', name: 'PostgreSQL', actor: 'test' });
-    const b = core.createObject({ type: 'technology', name: 'PG', actor: 'test' });
+    const a = core.createObject({ type: 'technology', name: 'PostgreSQL', actor: 'test', tenantId: 'default' });
+    const b = core.createObject({ type: 'technology', name: 'PG', actor: 'test', tenantId: 'default' });
     core.mergeObjects(b.id, a.id, 'test');
     // Original target still active, so same name rejects
-    expect(() => core.createObject({ type: 'technology', name: 'PostgreSQL', actor: 'test' })).toThrow('M4 violated');
+    expect(() => core.createObject({ type: 'technology', name: 'PostgreSQL', actor: 'test', tenantId: 'default' })).toThrow('M4 violated');
     void a;
   });
 
   it('duplicate context name is rejected (same id)', () => {
     const core = buildCore();
-    core.createContext({ type: 'project', name: 'Test', actor: 'test' });
-    expect(() => core.createContext({ type: 'project', name: 'Test', actor: 'test' })).toThrow();
+    core.createContext({ type: 'project', name: 'Test', actor: 'test', tenantId: 'default' });
+    expect(() => core.createContext({ type: 'project', name: 'Test', actor: 'test', tenantId: 'default' })).toThrow();
   });
 
   it('createContext: empty type accepted (no validation)', () => {
     const core = buildCore();
-    const ctx = core.createContext({ type: '', name: 'Test', actor: 'test' });
+    const ctx = core.createContext({ type: '', name: 'Test', actor: 'test', tenantId: 'default' });
     expect(ctx.type).toBe('');
   });
 
   it('createObject: empty name allowed (no validation)', () => {
     const core = buildCore();
-    const obj = core.createObject({ type: 'technology', name: '', actor: 'test' });
+    const obj = core.createObject({ type: 'technology', name: '', actor: 'test', tenantId: 'default' });
     expect(obj.name).toBe('');
   });
 
@@ -1840,7 +1872,7 @@ describe('Negative cases — edge conditions', () => {
     const core = buildCore();
     const e1 = createId('ev', 'e1') as any;
     buildEvidence(core, e1);
-    const obj = core.createObject({ type: 'metric', name: 'Uptime', actor: 'test' });
+    const obj = core.createObject({ type: 'metric', name: 'Uptime', actor: 'test', tenantId: 'default' });
     const claim = core.createClaim({
       subjectId: obj.id, predicate: 'has_value', objectOrValue: 99.9, evidenceRefs: [e1], actor: 'test',
     });
@@ -1851,7 +1883,7 @@ describe('Negative cases — edge conditions', () => {
     const core = buildCore();
     const e1 = createId('ev', 'e1') as any;
     buildEvidence(core, e1);
-    const obj = core.createObject({ type: 'flag', name: 'IsEnabled', actor: 'test' });
+    const obj = core.createObject({ type: 'flag', name: 'IsEnabled', actor: 'test', tenantId: 'default' });
     // Bypass TS with any cast — should reject at runtime
     expect(() => core.createClaim({
       subjectId: obj.id, predicate: 'has_state', objectOrValue: true as any, evidenceRefs: [e1], actor: 'test',
@@ -1862,8 +1894,8 @@ describe('Negative cases — edge conditions', () => {
     const core = buildCore();
     const e1 = createId('ev', 'e1') as any;
     buildEvidence(core, e1);
-    const a = core.createObject({ type: 'technology', name: 'A', actor: 'test' });
-    core.createRelationship({ sourceObject: a.id, relationType: 'related_to', targetObject: a.id, evidenceRefs: [e1], actor: 'test' });
+    const a = core.createObject({ type: 'technology', name: 'A', actor: 'test', tenantId: 'default' });
+    core.createRelationship({ sourceObject: a.id, relationType: 'related_to', targetObject: a.id, evidenceRefs: [e1], actor: 'test', tenantId: 'default' });
     const paths = core.traverseRelationships(a.id, 3);
     expect(paths.length).toBe(1);
     expect(paths[0].length).toBe(1);
@@ -1871,21 +1903,21 @@ describe('Negative cases — edge conditions', () => {
 
   it('mergeObjects: unknown from throws', () => {
     const core = buildCore();
-    const b = core.createObject({ type: 'technology', name: 'B', actor: 'test' });
+    const b = core.createObject({ type: 'technology', name: 'B', actor: 'test', tenantId: 'default' });
     expect(() => core.mergeObjects('obj:fake' as any, b.id, 'test')).toThrow('M5 violated');
   });
 
   it('mergeObjects: unknown into throws', () => {
     const core = buildCore();
-    const a = core.createObject({ type: 'technology', name: 'A', actor: 'test' });
+    const a = core.createObject({ type: 'technology', name: 'A', actor: 'test', tenantId: 'default' });
     expect(() => core.mergeObjects(a.id, 'obj:fake' as any, 'test')).toThrow('M5 violated');
   });
 
   it('mergeObjects: merge into redirected object follows redirect', () => {
     const core = buildCore();
-    const a = core.createObject({ type: 'technology', name: 'A', actor: 'test' });
-    const b = core.createObject({ type: 'technology', name: 'B', actor: 'test' });
-    const c = core.createObject({ type: 'technology', name: 'C', actor: 'test' });
+    const a = core.createObject({ type: 'technology', name: 'A', actor: 'test', tenantId: 'default' });
+    const b = core.createObject({ type: 'technology', name: 'B', actor: 'test', tenantId: 'default' });
+    const c = core.createObject({ type: 'technology', name: 'C', actor: 'test', tenantId: 'default' });
     core.mergeObjects(b.id, a.id, 'test');
     core.mergeObjects(c.id, b.id, 'test');
     const resolvedC = core.getObject(c.id);
@@ -1907,7 +1939,7 @@ describe('Negative cases — edge conditions', () => {
     const core = buildCore();
     const e1 = createId('ev', 'e1') as any;
     buildEvidence(core, e1);
-    core.createObject({ type: 'technology', name: 'X', actor: 'test' });
+    core.createObject({ type: 'technology', name: 'X', actor: 'test', tenantId: 'default' });
     const journal = core.getJournal();
     expect(journal[0].sequence).toBe(1);
     expect(journal[1].sequence).toBe(2);
@@ -1920,8 +1952,8 @@ describe('Negative cases — edge conditions', () => {
     const core = buildCore();
     const e1 = createId('ev', 'e1') as any;
     buildEvidence(core, e1);
-    const obj = core.createObject({ type: 'technology', name: 'X', actor: 'test' });
-    core.createClaim({ subjectId: obj.id, predicate: 'has_role', objectOrValue: 'Y', evidenceRefs: [e1], actor: 'test' });
+    const obj = core.createObject({ type: 'technology', name: 'X', actor: 'test', tenantId: 'default' });
+    core.createClaim({ subjectId: obj.id, predicate: 'has_role', objectOrValue: 'Y', evidenceRefs: [e1], actor: 'test', tenantId: 'default' });
     const claimsBefore = (core as any).deps.claims.all().length;
     core.proposeCandidate({
       type: 'ClaimCandidate', payload: { subject: obj.id, predicate: 'has_role', value: 'Z' }, evidenceRefs: [e1], extractor: 'test', extractorVersion: '1.0.0', actor: 'test',

@@ -12,6 +12,7 @@ export interface IngestOptions {
   sourceName: string;
   trustProfile: 'trusted' | 'untrusted' | 'sandboxed';
   actor: string;
+  tenantId: string;
 }
 
 export interface IngestResult {
@@ -66,6 +67,7 @@ export class FilesystemSourceAdapter {
         name: options.sourceName,
         trustProfile: options.trustProfile,
         state: 'active',
+        tenantId: options.tenantId,
         createdAt: now,
         updatedAt: now,
       };
@@ -108,6 +110,7 @@ export class FilesystemSourceAdapter {
           sourceTime: null,
           contentRef: filePath,
           metadata: {},
+          tenantId: options.tenantId,
         });
         versionsCreated++;
       }
@@ -120,6 +123,7 @@ export class FilesystemSourceAdapter {
           locator,
           state: 'active',
           currentVersionId: versionId,
+          tenantId: options.tenantId,
           createdAt: now,
           updatedAt: now,
         });
@@ -129,6 +133,7 @@ export class FilesystemSourceAdapter {
           ...existing,
           currentVersionId: versionId,
           updatedAt: now,
+          tenantId: options.tenantId,
         });
       }
 
@@ -141,6 +146,7 @@ export class FilesystemSourceAdapter {
           segmentRef: null,
           contentHash,
           state: options.trustProfile === 'trusted' ? 'available' : 'unavailable',
+          tenantId: options.tenantId,
           createdAt: now,
         });
         evidenceCreated++;

@@ -74,6 +74,7 @@ export function createHttpServer(
         name: body.name,
         aliases: body.aliases,
         actor: body.actor ?? 'http',
+        tenantId: body.tenantId ?? 'default',
       });
     } catch (error: any) {
       reply.code(400);
@@ -95,6 +96,7 @@ export function createHttpServer(
         scope: body.scope ?? null,
         confidence: body.confidence,
         actor: body.actor ?? 'http',
+        tenantId: body.tenantId ?? 'default',
       });
     } catch (error: any) {
       reply.code(400);
@@ -112,6 +114,7 @@ export function createHttpServer(
         evidenceRefs: body.evidenceRefs,
         confidence: body.confidence,
         actor: body.actor ?? 'http',
+        tenantId: body.tenantId ?? 'default',
       });
     } catch (error: any) {
       reply.code(400);
@@ -127,6 +130,7 @@ export function createHttpServer(
         name: body.name,
         purpose: body.purpose,
         actor: body.actor ?? 'http',
+        tenantId: body.tenantId ?? 'default',
       });
     } catch (error: any) {
       reply.code(400);
@@ -143,6 +147,7 @@ export function createHttpServer(
         memberId: body.memberId,
         mode: body.mode,
         actor: body.actor ?? 'http',
+        tenantId: body.tenantId ?? 'default',
       });
     } catch (error: any) {
       reply.code(400);
@@ -207,6 +212,7 @@ export function createHttpServer(
           evidenceId: body.evidenceId,
           content: body.content,
           actor: body.actor ?? 'http',
+          tenantId: body.tenantId ?? 'default',
           extractionModel: model,
         });
       }
@@ -214,6 +220,7 @@ export function createHttpServer(
         evidenceId: body.evidenceId,
         content: body.content,
         actor: body.actor ?? 'http',
+        tenantId: body.tenantId ?? 'default',
       });
     } catch (error: any) {
       reply.code(400);

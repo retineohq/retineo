@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS sources (
   name TEXT NOT NULL,
   trust_profile TEXT NOT NULL,
   state TEXT NOT NULL,
+  tenant_id TEXT NOT NULL DEFAULT 'default',
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -15,6 +16,7 @@ CREATE TABLE IF NOT EXISTS source_items (
   locator TEXT NOT NULL,
   state TEXT NOT NULL,
   current_version_id TEXT NOT NULL,
+  tenant_id TEXT NOT NULL DEFAULT 'default',
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -28,7 +30,8 @@ CREATE TABLE IF NOT EXISTS source_versions (
   captured_at TEXT NOT NULL,
   source_time TEXT,
   content_ref TEXT NOT NULL,
-  metadata TEXT NOT NULL DEFAULT '{}'
+  metadata TEXT NOT NULL DEFAULT '{}',
+  tenant_id TEXT NOT NULL DEFAULT 'default'
 );
 
 CREATE INDEX IF NOT EXISTS idx_source_version_item ON source_versions(source_item_id);
@@ -42,7 +45,8 @@ CREATE TABLE IF NOT EXISTS objects (
   redirect_to TEXT,
   sensitivity TEXT NOT NULL DEFAULT 'internal',
   created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
+  updated_at TEXT NOT NULL,
+  tenant_id TEXT NOT NULL DEFAULT 'default'
 );
 
 CREATE TABLE IF NOT EXISTS claims (
@@ -61,6 +65,7 @@ CREATE TABLE IF NOT EXISTS claims (
   confidence REAL NOT NULL,
   sensitivity TEXT NOT NULL DEFAULT 'internal',
   scope TEXT,
+  tenant_id TEXT NOT NULL DEFAULT 'default',
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -83,6 +88,7 @@ CREATE TABLE IF NOT EXISTS relationships (
   confidence REAL NOT NULL,
   sensitivity TEXT NOT NULL DEFAULT 'internal',
   scope TEXT,
+  tenant_id TEXT NOT NULL DEFAULT 'default',
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -101,7 +107,8 @@ CREATE TABLE IF NOT EXISTS contexts (
   valid_from TEXT,
   valid_to TEXT,
   created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
+  updated_at TEXT NOT NULL,
+  tenant_id TEXT NOT NULL DEFAULT 'default'
 );
 
 CREATE TABLE IF NOT EXISTS memberships (
@@ -113,7 +120,8 @@ CREATE TABLE IF NOT EXISTS memberships (
   confidence REAL NOT NULL,
   valid_from TEXT,
   valid_to TEXT,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  tenant_id TEXT NOT NULL DEFAULT 'default'
 );
 
 CREATE INDEX IF NOT EXISTS idx_membership_context ON memberships(context_id);
@@ -127,7 +135,8 @@ CREATE TABLE IF NOT EXISTS gaps (
   lifecycle_state TEXT NOT NULL,
   sensitivity TEXT NOT NULL DEFAULT 'internal',
   created_at TEXT NOT NULL,
-  resolved_at TEXT
+  resolved_at TEXT,
+  tenant_id TEXT NOT NULL DEFAULT 'default'
 );
 
 CREATE TABLE IF NOT EXISTS evidence (
@@ -136,7 +145,8 @@ CREATE TABLE IF NOT EXISTS evidence (
   segment_ref TEXT,
   content_hash TEXT NOT NULL,
   state TEXT NOT NULL,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  tenant_id TEXT NOT NULL DEFAULT 'default'
 );
 
 CREATE TABLE IF NOT EXISTS provenance (

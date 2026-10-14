@@ -48,6 +48,7 @@ export interface Source {
   name: string;
   trustProfile: SourceTrustProfile;
   state: SourceState;
+  tenantId: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -59,6 +60,7 @@ export interface SourceItem {
   locator: string;
   state: ItemState;
   currentVersionId: SourceVersionId;
+  tenantId: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -71,6 +73,7 @@ export interface SourceVersion {
   sourceTime: Timestamp | null;
   contentRef: string;
   metadata: Record<string, unknown>;
+  tenantId: string;
 }
 
 export interface Evidence {
@@ -79,6 +82,7 @@ export interface Evidence {
   segmentRef: string | null;
   contentHash: string;
   state: EvidenceState;
+  tenantId: string;
   createdAt: Timestamp;
 }
 
@@ -90,6 +94,7 @@ export interface Object {
   lifecycleState: ObjectLifecycle;
   redirectTo: ObjectId | null;
   sensitivity: SensitivityLevel;
+  tenantId: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -105,6 +110,7 @@ export interface Claim {
   supportState: SupportState;
   confidence: Confidence;
   sensitivity: SensitivityLevel;
+  tenantId: string;
   scope: ScopeQualifier | null;
   createdAt: Timestamp;
   updatedAt: Timestamp;
@@ -121,6 +127,7 @@ export interface Relationship {
   supportState: SupportState;
   confidence: Confidence;
   sensitivity: SensitivityLevel;
+  tenantId: string;
   scope: ScopeQualifier | null;
   createdAt: Timestamp;
   updatedAt: Timestamp;
@@ -132,6 +139,7 @@ export interface Context {
   name: string;
   purpose: string | null;
   sensitivity: SensitivityLevel;
+  tenantId: string;
   lifecycleState: ContextLifecycle;
   temporalState: TemporalState;
   createdAt: Timestamp;
@@ -148,6 +156,7 @@ export interface ContextMembership {
   validFrom: Timestamp | null;
   validTo: Timestamp | null;
   createdAt: Timestamp;
+  tenantId: string;
 }
 
 export interface KnowledgeGap {
@@ -157,6 +166,7 @@ export interface KnowledgeGap {
   description: string;
   evidenceRefs: EvidenceId[];
   sensitivity: SensitivityLevel;
+  tenantId: string;
   lifecycleState: GapLifecycle;
   createdAt: Timestamp;
   resolvedAt: Timestamp | null;

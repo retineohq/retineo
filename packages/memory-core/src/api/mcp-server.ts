@@ -149,6 +149,7 @@ export class MemoryCoreMCPServer {
           type: args.type,
           name: args.name,
           actor: 'mcp',
+          tenantId: args.tenantId ?? 'default',
         });
       case 'memory_query_entry_points':
         return this.engine.findEntryPoints(args.query, args.type ?? 'essence_nl');

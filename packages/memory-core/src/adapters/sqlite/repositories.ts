@@ -82,8 +82,8 @@ export class SqliteObjectRepository implements ObjectRepository {
 
   save(object: Object): void {
     this.db.db.prepare(
-      `INSERT INTO objects (id, type, name, aliases, lifecycle_state, redirect_to, sensitivity, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO objects (id, type, name, aliases, lifecycle_state, redirect_to, sensitivity, tenant_id, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          type = excluded.type, name = excluded.name, aliases = excluded.aliases,
          lifecycle_state = excluded.lifecycle_state, redirect_to = excluded.redirect_to, sensitivity = excluded.sensitivity,
@@ -91,7 +91,7 @@ export class SqliteObjectRepository implements ObjectRepository {
     ).run(
       object.id, object.type, object.name,
       JSON.stringify(object.aliases), object.lifecycleState,
-      object.redirectTo, object.sensitivity, object.createdAt, object.updatedAt,
+      object.redirectTo, object.sensitivity, object.tenantId, object.createdAt, object.updatedAt,
     );
   }
 
@@ -101,7 +101,7 @@ export class SqliteObjectRepository implements ObjectRepository {
     return {
       id: row.id, type: row.type, name: row.name,
       aliases: JSON.parse(row.aliases), lifecycleState: row.lifecycle_state,
-      redirectTo: row.redirect_to, sensitivity: parseSensitivity(row.sensitivity),
+      redirectTo: row.redirect_to, sensitivity: parseSensitivity(row.sensitivity), tenantId: row.tenant_id,
       createdAt: row.created_at, updatedAt: row.updated_at,
     };
   }
@@ -110,7 +110,7 @@ export class SqliteObjectRepository implements ObjectRepository {
     return (this.db.db.prepare('SELECT * FROM objects').all() as any[]).map((row) => ({
       id: row.id, type: row.type, name: row.name,
       aliases: JSON.parse(row.aliases), lifecycleState: row.lifecycle_state,
-      redirectTo: row.redirect_to, sensitivity: parseSensitivity(row.sensitivity),
+      redirectTo: row.redirect_to, sensitivity: parseSensitivity(row.sensitivity), tenantId: row.tenant_id,
       createdAt: row.created_at, updatedAt: row.updated_at,
     }));
   }
@@ -121,12 +121,12 @@ export class SqliteSourceRepository implements SourceRepository {
 
   save(source: Source): void {
     this.db.db.prepare(
-      `INSERT INTO sources (id, type, name, trust_profile, state, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO sources (id, type, name, trust_profile, state, tenant_id, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          type = excluded.type, name = excluded.name, trust_profile = excluded.trust_profile,
          state = excluded.state, updated_at = excluded.updated_at`,
-    ).run(source.id, source.type, source.name, source.trustProfile, source.state, source.createdAt, source.updatedAt);
+    ).run(source.id, source.type, source.name, source.trustProfile, source.state, source.tenantId, source.createdAt, source.updatedAt);
   }
 
   get(id: SourceId): Source | undefined {
@@ -134,14 +134,14 @@ export class SqliteSourceRepository implements SourceRepository {
     if (!row) return undefined;
     return {
       id: row.id, type: row.type, name: row.name, trustProfile: row.trust_profile,
-      state: row.state, createdAt: row.created_at, updatedAt: row.updated_at,
+      state: row.state, createdAt: row.created_at, updatedAt: row.updated_at, tenantId: row.tenant_id,
     };
   }
 
   all(): Source[] {
     return (this.db.db.prepare('SELECT * FROM sources').all() as any[]).map((row) => ({
       id: row.id, type: row.type, name: row.name, trustProfile: row.trust_profile,
-      state: row.state, createdAt: row.created_at, updatedAt: row.updated_at,
+      state: row.state, createdAt: row.created_at, updatedAt: row.updated_at, tenantId: row.tenant_id,
     }));
   }
 }
@@ -151,11 +151,11 @@ export class SqliteSourceItemRepository implements SourceItemRepository {
 
   save(item: SourceItem): void {
     this.db.db.prepare(
-      `INSERT INTO source_items (id, source_id, external_id, locator, state, current_version_id, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO source_items (id, source_id, external_id, locator, state, current_version_id, tenant_id, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          state = excluded.state, current_version_id = excluded.current_version_id, updated_at = excluded.updated_at`,
-    ).run(item.id, item.sourceId, item.externalId, item.locator, item.state, item.currentVersionId, item.createdAt, item.updatedAt);
+    ).run(item.id, item.sourceId, item.externalId, item.locator, item.state, item.currentVersionId, item.tenantId, item.createdAt, item.updatedAt);
   }
 
   get(id: SourceItemId): SourceItem | undefined {
@@ -164,7 +164,7 @@ export class SqliteSourceItemRepository implements SourceItemRepository {
     return {
       id: row.id, sourceId: row.source_id, externalId: row.external_id, locator: row.locator,
       state: row.state, currentVersionId: row.current_version_id,
-      createdAt: row.created_at, updatedAt: row.updated_at,
+      createdAt: row.created_at, updatedAt: row.updated_at, tenantId: row.tenant_id,
     };
   }
 
@@ -172,7 +172,7 @@ export class SqliteSourceItemRepository implements SourceItemRepository {
     return (this.db.db.prepare('SELECT * FROM source_items').all() as any[]).map((row) => ({
       id: row.id, sourceId: row.source_id, externalId: row.external_id, locator: row.locator,
       state: row.state, currentVersionId: row.current_version_id,
-      createdAt: row.created_at, updatedAt: row.updated_at,
+      createdAt: row.created_at, updatedAt: row.updated_at, tenantId: row.tenant_id,
     }));
   }
 
@@ -180,7 +180,7 @@ export class SqliteSourceItemRepository implements SourceItemRepository {
     return (this.db.db.prepare('SELECT * FROM source_items WHERE source_id = ?').all(sourceId) as any[]).map((row) => ({
       id: row.id, sourceId: row.source_id, externalId: row.external_id, locator: row.locator,
       state: row.state, currentVersionId: row.current_version_id,
-      createdAt: row.created_at, updatedAt: row.updated_at,
+      createdAt: row.created_at, updatedAt: row.updated_at, tenantId: row.tenant_id,
     }));
   }
 }
@@ -190,10 +190,10 @@ export class SqliteSourceVersionRepository implements SourceVersionRepository {
 
   save(version: SourceVersion): void {
     this.db.db.prepare(
-      `INSERT INTO source_versions (id, source_item_id, content_hash, captured_at, source_time, content_ref, metadata)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO source_versions (id, source_item_id, content_hash, captured_at, source_time, content_ref, metadata, tenant_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO NOTHING`,
-    ).run(version.id, version.sourceItemId, version.contentHash, version.capturedAt, version.sourceTime, version.contentRef, JSON.stringify(version.metadata));
+    ).run(version.id, version.sourceItemId, version.contentHash, version.capturedAt, version.sourceTime, version.contentRef, JSON.stringify(version.metadata), version.tenantId);
   }
 
   get(id: SourceVersionId): SourceVersion | undefined {
@@ -202,7 +202,7 @@ export class SqliteSourceVersionRepository implements SourceVersionRepository {
     return {
       id: row.id, sourceItemId: row.source_item_id, contentHash: row.content_hash,
       capturedAt: row.captured_at, sourceTime: row.source_time,
-      contentRef: row.content_ref, metadata: JSON.parse(row.metadata),
+      contentRef: row.content_ref, metadata: JSON.parse(row.metadata), tenantId: row.tenant_id,
     };
   }
 
@@ -210,7 +210,7 @@ export class SqliteSourceVersionRepository implements SourceVersionRepository {
     return (this.db.db.prepare('SELECT * FROM source_versions').all() as any[]).map((row) => ({
       id: row.id, sourceItemId: row.source_item_id, contentHash: row.content_hash,
       capturedAt: row.captured_at, sourceTime: row.source_time,
-      contentRef: row.content_ref, metadata: JSON.parse(row.metadata),
+      contentRef: row.content_ref, metadata: JSON.parse(row.metadata), tenantId: row.tenant_id,
     }));
   }
 
@@ -218,7 +218,7 @@ export class SqliteSourceVersionRepository implements SourceVersionRepository {
     return (this.db.db.prepare('SELECT * FROM source_versions WHERE source_item_id = ?').all(itemId) as any[]).map((row) => ({
       id: row.id, sourceItemId: row.source_item_id, contentHash: row.content_hash,
       capturedAt: row.captured_at, sourceTime: row.source_time,
-      contentRef: row.content_ref, metadata: JSON.parse(row.metadata),
+      contentRef: row.content_ref, metadata: JSON.parse(row.metadata), tenantId: row.tenant_id,
     }));
   }
 }
@@ -234,7 +234,7 @@ export class SqliteClaimRepository implements ClaimRepository {
       lifecycleState: row.lifecycle_state,
       supportState: { level: row.support_level, evidenceCount: row.support_evidence_count, disagreeingCount: row.support_disagreeing_count },
       confidence: row.confidence, sensitivity: parseSensitivity(row.sensitivity),
-      scope: parseScope(row.scope), createdAt: row.created_at, updatedAt: row.updated_at,
+      scope: parseScope(row.scope), createdAt: row.created_at, updatedAt: row.updated_at, tenantId: row.tenant_id,
     };
   }
 
@@ -243,20 +243,20 @@ export class SqliteClaimRepository implements ClaimRepository {
       `INSERT INTO claims (id, subject_id, predicate, object_or_value, evidence_refs,
          observed_at, valid_from, valid_to, lifecycle_state,
          support_level, support_evidence_count, support_disagreeing_count,
-         confidence, sensitivity, scope, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         confidence, sensitivity, tenant_id, scope, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          lifecycle_state = excluded.lifecycle_state,
          support_level = excluded.support_level,
          support_evidence_count = excluded.support_evidence_count,
          support_disagreeing_count = excluded.support_disagreeing_count,
-         confidence = excluded.confidence, sensitivity = excluded.sensitivity, updated_at = excluded.updated_at`,
+         confidence = excluded.confidence, sensitivity = excluded.sensitivity, tenant_id = excluded.tenant_id, updated_at = excluded.updated_at`,
     ).run(
       claim.id, claim.subjectId, claim.predicate,
       String(claim.objectOrValue), JSON.stringify(claim.evidenceRefs),
       claim.temporalState.observedAt, claim.temporalState.validFrom, claim.temporalState.validTo,
       claim.lifecycleState, claim.supportState.level, claim.supportState.evidenceCount,
-      claim.supportState.disagreeingCount, claim.confidence, claim.sensitivity,
+      claim.supportState.disagreeingCount, claim.confidence, claim.sensitivity, claim.tenantId,
       serializeScope(claim.scope), claim.createdAt, claim.updatedAt,
     );
   }
@@ -286,7 +286,7 @@ export class SqliteRelationshipRepository implements RelationshipRepository {
       lifecycleState: row.lifecycle_state,
       supportState: { level: row.support_level, evidenceCount: row.support_evidence_count, disagreeingCount: row.support_disagreeing_count },
       confidence: row.confidence, sensitivity: parseSensitivity(row.sensitivity),
-      scope: parseScope(row.scope), createdAt: row.created_at, updatedAt: row.updated_at,
+      scope: parseScope(row.scope), createdAt: row.created_at, updatedAt: row.updated_at, tenantId: row.tenant_id,
     };
   }
 
@@ -295,20 +295,20 @@ export class SqliteRelationshipRepository implements RelationshipRepository {
       `INSERT INTO relationships (id, source_object, relation_type, target_object, evidence_refs,
          observed_at, valid_from, valid_to, lifecycle_state,
          support_level, support_evidence_count, support_disagreeing_count,
-         confidence, sensitivity, scope, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         confidence, sensitivity, tenant_id, scope, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          lifecycle_state = excluded.lifecycle_state,
          support_level = excluded.support_level,
          support_evidence_count = excluded.support_evidence_count,
          support_disagreeing_count = excluded.support_disagreeing_count,
-         confidence = excluded.confidence, sensitivity = excluded.sensitivity, updated_at = excluded.updated_at`,
+         confidence = excluded.confidence, sensitivity = excluded.sensitivity, tenant_id = excluded.tenant_id, updated_at = excluded.updated_at`,
     ).run(
       relationship.id, relationship.sourceObject, relationship.relationType,
       relationship.targetObject, JSON.stringify(relationship.evidenceRefs),
       relationship.temporalState.observedAt, relationship.temporalState.validFrom, relationship.temporalState.validTo,
       relationship.lifecycleState, relationship.supportState.level, relationship.supportState.evidenceCount,
-      relationship.supportState.disagreeingCount, relationship.confidence, relationship.sensitivity,
+      relationship.supportState.disagreeingCount, relationship.confidence, relationship.sensitivity, relationship.tenantId,
       serializeScope(relationship.scope), relationship.createdAt, relationship.updatedAt,
     );
   }
@@ -355,7 +355,7 @@ export class SqliteContextRepository implements ContextRepository {
     return {
       id: row.id, type: row.type, name: row.name, purpose: row.purpose,
       lifecycleState: row.lifecycle_state,
-      sensitivity: parseSensitivity(row.sensitivity),
+      sensitivity: parseSensitivity(row.sensitivity), tenantId: row.tenant_id,
       temporalState: { observedAt: row.observed_at, validFrom: row.valid_from, validTo: row.valid_to },
       createdAt: row.created_at, updatedAt: row.updated_at,
     };
@@ -365,7 +365,7 @@ export class SqliteContextRepository implements ContextRepository {
     return (this.db.db.prepare('SELECT * FROM contexts').all() as any[]).map((row) => ({
       id: row.id, type: row.type, name: row.name, purpose: row.purpose,
       lifecycleState: row.lifecycle_state,
-      sensitivity: parseSensitivity(row.sensitivity),
+      sensitivity: parseSensitivity(row.sensitivity), tenantId: row.tenant_id,
       temporalState: { observedAt: row.observed_at, validFrom: row.valid_from, validTo: row.valid_to },
       createdAt: row.created_at, updatedAt: row.updated_at,
     }));
@@ -394,7 +394,7 @@ export class SqliteMembershipRepository implements MembershipRepository {
     return {
       id: row.id, contextId: row.context_id, memberType: row.member_type,
       memberId: row.member_id, mode: row.mode, confidence: row.confidence,
-      validFrom: row.valid_from, validTo: row.valid_to, createdAt: row.created_at,
+      validFrom: row.valid_from, validTo: row.valid_to, createdAt: row.created_at, tenantId: row.tenant_id,
     };
   }
 
@@ -402,7 +402,7 @@ export class SqliteMembershipRepository implements MembershipRepository {
     return (this.db.db.prepare('SELECT * FROM memberships WHERE context_id = ?').all(contextId) as any[]).map((row) => ({
       id: row.id, contextId: row.context_id, memberType: row.member_type,
       memberId: row.member_id, mode: row.mode, confidence: row.confidence,
-      validFrom: row.valid_from, validTo: row.valid_to, createdAt: row.created_at,
+      validFrom: row.valid_from, validTo: row.valid_to, createdAt: row.created_at, tenantId: row.tenant_id,
     }));
   }
 
@@ -410,7 +410,7 @@ export class SqliteMembershipRepository implements MembershipRepository {
     return (this.db.db.prepare('SELECT * FROM memberships').all() as any[]).map((row) => ({
       id: row.id, contextId: row.context_id, memberType: row.member_type,
       memberId: row.member_id, mode: row.mode, confidence: row.confidence,
-      validFrom: row.valid_from, validTo: row.valid_to, createdAt: row.created_at,
+      validFrom: row.valid_from, validTo: row.valid_to, createdAt: row.created_at, tenantId: row.tenant_id,
     }));
   }
 }
@@ -436,7 +436,7 @@ export class SqliteGapRepository implements GapRepository {
     return {
       id: row.id, type: row.type, subjectId: row.subject_id, description: row.description,
       evidenceRefs: JSON.parse(row.evidence_refs), lifecycleState: row.lifecycle_state,
-      sensitivity: parseSensitivity(row.sensitivity),
+      sensitivity: parseSensitivity(row.sensitivity), tenantId: row.tenant_id,
       createdAt: row.created_at, resolvedAt: row.resolved_at,
     };
   }
@@ -445,7 +445,7 @@ export class SqliteGapRepository implements GapRepository {
     return (this.db.db.prepare('SELECT * FROM gaps').all() as any[]).map((row) => ({
       id: row.id, type: row.type, subjectId: row.subject_id, description: row.description,
       evidenceRefs: JSON.parse(row.evidence_refs), lifecycleState: row.lifecycle_state,
-      sensitivity: parseSensitivity(row.sensitivity),
+      sensitivity: parseSensitivity(row.sensitivity), tenantId: row.tenant_id,
       createdAt: row.created_at, resolvedAt: row.resolved_at,
     }));
   }
@@ -467,14 +467,14 @@ export class SqliteEvidenceRepository implements EvidenceRepository {
     if (!row) return undefined;
     return {
       id: row.id, sourceVersionId: row.source_version_id, segmentRef: row.segment_ref,
-      contentHash: row.content_hash, state: row.state, createdAt: row.created_at,
+      contentHash: row.content_hash, state: row.state, createdAt: row.created_at, tenantId: row.tenant_id,
     };
   }
 
   all(): Evidence[] {
     return (this.db.db.prepare('SELECT * FROM evidence').all() as any[]).map((row) => ({
       id: row.id, sourceVersionId: row.source_version_id, segmentRef: row.segment_ref,
-      contentHash: row.content_hash, state: row.state, createdAt: row.created_at,
+      contentHash: row.content_hash, state: row.state, createdAt: row.created_at, tenantId: row.tenant_id,
     }));
   }
 }

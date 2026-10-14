@@ -115,6 +115,7 @@ interface CreateObjectInput {
   name: string;
   aliases?: string[];
   sensitivity?: string;
+  tenantId: string;
   actor: string;
 }
 
@@ -128,6 +129,7 @@ interface CreateClaimInput {
   validTo?: string | null;
   scope?: ScopeQualifier | null;
   sensitivity?: string;
+  tenantId: string;
   confidence?: number;
   supportState?: { level: 'weak' | 'moderate' | 'strong'; evidenceCount: number; disagreeingCount: number };
   actor: string;
@@ -143,6 +145,7 @@ interface CreateRelationshipInput {
   validTo?: string | null;
   scope?: ScopeQualifier | null;
   sensitivity?: string;
+  tenantId: string;
   confidence?: number;
   actor: string;
 }
@@ -152,6 +155,7 @@ interface CreateContextInput {
   name: string;
   purpose?: string | null;
   sensitivity?: string;
+  tenantId: string;
   actor: string;
 }
 
@@ -162,6 +166,7 @@ interface AddMembershipInput {
   mode: MembershipMode;
   confidence?: number;
   actor: string;
+  tenantId: string;
 }
 
 interface CreateGapInput {
@@ -170,6 +175,7 @@ interface CreateGapInput {
   description: string;
   evidenceRefs?: EvidenceId[];
   sensitivity?: string;
+  tenantId: string;
   actor: string;
 }
 
@@ -234,6 +240,7 @@ export class MemoryCore {
         lifecycleState: 'active',
         redirectTo: null,
         sensitivity: parseSensitivity(input.sensitivity),
+        tenantId: input.tenantId,
         createdAt: now,
         updatedAt: now,
       };
@@ -293,6 +300,7 @@ export class MemoryCore {
         supportState: input.supportState ?? { level: 'weak', evidenceCount: input.evidenceRefs.length, disagreeingCount: 0 },
         confidence: input.confidence ?? 0.5,
         sensitivity: parseSensitivity(input.sensitivity),
+        tenantId: input.tenantId,
         scope: input.scope ?? null,
         createdAt: now,
         updatedAt: now,
@@ -346,6 +354,7 @@ export class MemoryCore {
         supportState: { level: 'weak', evidenceCount: input.evidenceRefs.length, disagreeingCount: 0 },
         confidence: input.confidence ?? 0.5,
         sensitivity: parseSensitivity(input.sensitivity),
+        tenantId: input.tenantId,
         scope: input.scope ?? null,
         createdAt: now,
         updatedAt: now,
@@ -380,6 +389,7 @@ export class MemoryCore {
         name: input.name,
         purpose: input.purpose ?? null,
         sensitivity: parseSensitivity(input.sensitivity),
+        tenantId: input.tenantId,
         lifecycleState: 'active',
         temporalState: { observedAt: now, validFrom: now, validTo: null },
         createdAt: now,
@@ -431,6 +441,7 @@ export class MemoryCore {
         validFrom: now,
         validTo: null,
         createdAt: now,
+        tenantId: input.tenantId,
       };
       this.deps.memberships.save(membership);
       this.journal('add_membership', 'membership', membership.id, input.actor);
@@ -467,6 +478,7 @@ export class MemoryCore {
         description: input.description,
         evidenceRefs: input.evidenceRefs ?? [],
         sensitivity: parseSensitivity(input.sensitivity),
+        tenantId: input.tenantId,
         lifecycleState: 'open',
         createdAt: now,
         resolvedAt: null,
@@ -955,6 +967,7 @@ export class MemoryCore {
     evidenceId: EvidenceId;
     content: string;
     actor: string;
+    tenantId: string;
   }): { candidatesCreated: number; accepted: number; quarantined: number; rejected: number } {
     const evidence = this.deps.evidence.get(input.evidenceId);
     if (!evidence) {
@@ -987,7 +1000,7 @@ export class MemoryCore {
         const subjectName = extracted.subjectName;
         let subject = this.deps.objects.all().find((obj) => obj.name === subjectName);
         if (!subject) {
-          subject = this.createObject({ type: 'entity', name: subjectName, actor: input.actor });
+          subject = this.createObject({ type: 'entity', name: subjectName, actor: input.actor, tenantId: input.tenantId });
         }
         const subjectId = this.deps.identity.resolve(subject.id);
         this.createClaim({
@@ -1000,6 +1013,7 @@ export class MemoryCore {
           validTo: extracted.validTo ?? null,
           confidence: extracted.confidence,
           actor: input.actor,
+          tenantId: input.tenantId,
         });
         accepted++;
       } else if (policy.action === 'Quarantine') {
@@ -1024,11 +1038,11 @@ export class MemoryCore {
       if (policy.action === 'Allow') {
         let source = this.deps.objects.all().find((obj) => obj.name === extracted.sourceName);
         if (!source) {
-          source = this.createObject({ type: 'entity', name: extracted.sourceName, actor: input.actor });
+          source = this.createObject({ type: 'entity', name: extracted.sourceName, actor: input.actor, tenantId: input.tenantId });
         }
         let target = this.deps.objects.all().find((obj) => obj.name === extracted.targetName);
         if (!target) {
-          target = this.createObject({ type: 'entity', name: extracted.targetName, actor: input.actor });
+          target = this.createObject({ type: 'entity', name: extracted.targetName, actor: input.actor, tenantId: input.tenantId });
         }
         this.createRelationship({
           sourceObject: this.deps.identity.resolve(source.id),
@@ -1037,6 +1051,7 @@ export class MemoryCore {
           evidenceRefs: [input.evidenceId],
           confidence: extracted.confidence,
           actor: input.actor,
+          tenantId: input.tenantId,
         });
         accepted++;
       } else if (policy.action === 'Quarantine') {
@@ -1053,6 +1068,7 @@ export class MemoryCore {
     evidenceId: EvidenceId;
     content: string;
     actor: string;
+    tenantId: string;
     extractionModel?: AsyncExtractionModel;
   }): Promise<{ candidatesCreated: number; accepted: number; quarantined: number; rejected: number }> {
     const evidence = this.deps.evidence.get(input.evidenceId);
@@ -1078,12 +1094,13 @@ export class MemoryCore {
       const policy = this.applyPolicy(this.decide(candidate.id, input.actor).id, input.actor);
       if (policy.action === 'Allow') {
         let subject = this.deps.objects.all().find((obj) => obj.name === extracted.subjectName);
-        if (!subject) subject = this.createObject({ type: 'entity', name: extracted.subjectName, actor: input.actor });
+        if (!subject) subject = this.createObject({ type: 'entity', name: extracted.subjectName, actor: input.actor, tenantId: input.tenantId });
         this.createClaim({
           subjectId: this.deps.identity.resolve(subject.id), predicate: extracted.predicate,
           objectOrValue: extracted.objectOrValue, evidenceRefs: [input.evidenceId],
           observedAt: extracted.observedAt ?? null, validFrom: extracted.validFrom ?? null,
           validTo: extracted.validTo ?? null, confidence: extracted.confidence, actor: input.actor,
+          tenantId: input.tenantId,
         });
         accepted++;
       } else if (policy.action === 'Quarantine') quarantined++;
@@ -1099,13 +1116,14 @@ export class MemoryCore {
       const policy = this.applyPolicy(this.decide(candidate.id, input.actor).id, input.actor);
       if (policy.action === 'Allow') {
         let source = this.deps.objects.all().find((obj) => obj.name === extracted.sourceName);
-        if (!source) source = this.createObject({ type: 'entity', name: extracted.sourceName, actor: input.actor });
+        if (!source) source = this.createObject({ type: 'entity', name: extracted.sourceName, actor: input.actor, tenantId: input.tenantId });
         let target = this.deps.objects.all().find((obj) => obj.name === extracted.targetName);
-        if (!target) target = this.createObject({ type: 'entity', name: extracted.targetName, actor: input.actor });
+        if (!target) target = this.createObject({ type: 'entity', name: extracted.targetName, actor: input.actor, tenantId: input.tenantId });
         this.createRelationship({
           sourceObject: this.deps.identity.resolve(source.id), relationType: extracted.relationType,
           targetObject: this.deps.identity.resolve(target.id), evidenceRefs: [input.evidenceId],
           confidence: extracted.confidence, actor: input.actor,
+          tenantId: input.tenantId,
         });
         accepted++;
       } else if (policy.action === 'Quarantine') quarantined++;
@@ -1131,6 +1149,7 @@ export class MemoryCore {
     sourceName: string;
     trustProfile: 'trusted' | 'untrusted' | 'sandboxed';
     actor: string;
+    tenantId: string;
   }): Promise<any> {
     const { FilesystemSourceAdapter } = await import('../adapters/ingestion/index.js');
     const adapter = new FilesystemSourceAdapter(
@@ -1143,6 +1162,7 @@ export class MemoryCore {
       sourceName: input.sourceName,
       trustProfile: input.trustProfile,
       actor: input.actor,
+      tenantId: input.tenantId,
     });
     this.journal('ingest', 'source', result.sourceId, input.actor);
     return result;
