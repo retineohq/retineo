@@ -310,6 +310,35 @@ export function createHttpServer(
 
   app.get('/journal', async () => core.getJournal());
 
+  app.get('/replication/events', async (request, reply) => {
+    try {
+      const query = request.query as any;
+      return {
+        lastSequence: core.journalSequence(),
+        events: core.journalSince(parseInt(query.since ?? '0', 10)),
+      };
+    } catch (error: any) {
+      reply.code(400);
+      return { error: error.message };
+    }
+  });
+
+  app.post('/replication/events', async (request, reply) => {
+    try {
+      const body = request.body as any;
+      const events: any[] = Array.isArray(body?.events) ? body.events : [body];
+      let applied = 0;
+      for (const event of events) {
+        const result = core.applyJournalEvent(event);
+        if (result.applied) applied++;
+      }
+      return { applied, received: events.length };
+    } catch (error: any) {
+      reply.code(400);
+      return { error: error.message };
+    }
+  });
+
   return app;
 }
 

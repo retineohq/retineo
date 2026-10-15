@@ -648,6 +648,24 @@ describe('Segments + agent access', () => {
     expect(pkg).toBe(null);
   });
 
+  it('distributed: journalSince and applyJournalEvent basics', () => {
+    const core = buildCore();
+    core.createObject({ type: 'technology', name: 'Replicated', actor: 'test', tenantId: 'default' });
+    const lastSeq = core.journalSequence();
+    expect(lastSeq).toBeGreaterThanOrEqual(1);
+    const events = core.journalSince(0);
+    expect(events.length).toBeGreaterThan(0);
+    expect(core.journalSince(lastSeq)).toHaveLength(0);
+
+    const event = events[0];
+    const replica = buildCore();
+    const first = replica.applyJournalEvent(event);
+    expect(first.applied).toBe(true);
+    const second = replica.applyJournalEvent(event);
+    expect(second.applied).toBe(false);
+    expect(replica.journalSequence()).toBe(event.sequence);
+  });
+
   it('segment expires', () => {
     const core = buildCore();
     const ctx = core.createContext({ type: 'project', name: 'Test', actor: 'test', tenantId: 'default' });

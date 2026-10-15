@@ -591,6 +591,23 @@ export class MemoryCore {
     return this.deps.journal.all();
   }
 
+  journalSince(sinceSequence: number): JournalEvent[] {
+    return this.deps.journal.all().filter((event) => event.sequence > sinceSequence);
+  }
+
+  applyJournalEvent(event: JournalEvent): { applied: boolean } {
+    const all = this.deps.journal.all();
+    if (all.some((existing) => existing.id === event.id)) {
+      return { applied: false };
+    }
+    this.deps.journal.append(event);
+    return { applied: true };
+  }
+
+  journalSequence(): number {
+    return this.deps.journal.sequence();
+  }
+
   proposeCandidate(input: {
     type: string;
     payload: Record<string, unknown>;
