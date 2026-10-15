@@ -1,4 +1,5 @@
 export * from './database.js';
+export * from './migrations.js';
 export * from './repositories.js';
 export * from './pg-driver.js';
 import { readFileSync } from 'node:fs';

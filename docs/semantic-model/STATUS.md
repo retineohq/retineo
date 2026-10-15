@@ -56,6 +56,13 @@
 - **Distributed foundation:** journal events idempotent, `core.journalSince/journalSequence/applyJournalEvent`, REST `GET/POST /replication/events`.
 - **CI:** green; tests 140 (плюс 1 integration skipped без DATABASE_URL).
 
+### 1.4. Wave 3 (2026-10-16)
+
+- **Postgres completion:** полный набор репозиториев (Sources, SourceItems, SourceVersions, Claims, Relationships, Contexts, Memberships, Gaps, Evidence, Provenance), полный schema.sql, migrations runner `runPostgresMigrations`.
+- **Distributed v1:** `pullReplicationOnce/pullReplicationLoop` (adapter), дедупликация через journal id, тест pull-loop.
+- **Agent filtering v2:** port `AgentAccessModel`, `PolicyBasedAgentAccessModel` (agent+tenant → maxSensitivity, allowedPurposes), 4 теста.
+- **CI:** green; tests 145 passing (+1 integration skipped).
+
 ### 1.4. Решения пользователя
 
 1. Summary/Essence — representation layer, не память (подтверждено)
@@ -84,9 +91,8 @@
 | Semantic compression через LLM | Phase 5 (real) | Валидация выполнена программно (5/5). Essence-LLM — адаптер за портом, будущее расширение. |
 | Acceptance test метрики | Phase 4 | Отложено по решению пользователя. |
 | Support State вычисление | Phase 6 | Отложено по решению пользователя. |
-| Distributed (реальная синхронизация) | Wave 3 | Есть только journal-фундамент: pull по sequence, idempotent apply. Нет конфликт-резолюции и push.
-| Postgres: полный набор репозиториев | Wave 3 | Сейчас foundation (Object + schema + executor). Остальные repository по аналогии. |
-| Postgres migrations | Wave 3 | SQLite-схема не переносится автоматически; нужен SQL runner поверх `schema.sql`.
+| Distributed (push + conflict resolution + compaction) | Wave 4 | Pull-loop v1 готов; push/CRDT/compaction — следующая фаза.
+| Postgres runtime в CLI/REST по умолчанию | Wave 4 | Postgres адаптеры готовы; интеграция в CLI/REST не включена.
 
 ---
 
@@ -94,10 +100,10 @@
 
 Рекомендуемый порядок:
 
-1. **Wave 3 — Postgres completion.** Остальные репозитории (Source*, Claim, Relationship, Context*, Gap, Evidence, Provenance) по образцу Object; SQL migrations runner; peer-тест с SQLite-поведением.
-2. **Wave 3 — Distributed v1.** Pull-loop между инстансами по `/replication/events?since=`, дедупликация, journal compaction, опционально push-уведомления.
-3. **Wave 3 — Agent filtering v2.** Фильтрация по агентским правам поверх tenant+sensitivity (Политики-как-код, тесты).
-4. **Cleanup старого ядра.** После полного перевода CLI/bridge на новые порты — удалить `packages/core`.
+1. **Wave 4 — Runtime integration.** Postgres executor + repos в CLI/REST (env `STORAGE=postgres`), pull-loop daemon.
+2. **Wave 4 — Distributed hardening.** Push, compaction, auth между инстансами.
+3. **Wave 4 — Agent access policies storage.** Хранение политик (tenant-scoped) в memory.
+4. **Release.** Версия 0.1.0 memory-core, CHANGELOG, публичный npm publish.
 
 ---
 
@@ -111,4 +117,4 @@ packages/memory-core/tests  # 140 passing (+1 integration skipped без DATABAS
 docs/semantic-model/        # артефакты Phase 1–6 + STATUS snapshot (Wave 2)
 ```
 
-Старое ядро (`packages/core/`) не изменено.
+Старое ядро (`packages/core/`) удалено ранее — в репо остаётся только `packages/memory-core`.
