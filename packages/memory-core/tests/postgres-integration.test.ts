@@ -5,7 +5,7 @@ const DATABASE_URL = process.env.DATABASE_URL;
 
 describe.skipIf(!DATABASE_URL)('Postgres integration', () => {
   it('applies schema and round-trips object', async () => {
-    const executor = await createPgExecutor({ connectionString: DATABASE_URL });
+    const executor = await createPgExecutor({ connectionString: DATABASE_URL, diagnostic: true });
     const db = new PostgresDatabase(executor);
     await db.applySchema(postgresSchemaSql);
 
@@ -24,6 +24,7 @@ describe.skipIf(!DATABASE_URL)('Postgres integration', () => {
     };
     repo.save(object);
     await executor.exec('SELECT 1');
+    await (executor as any).__pump?.();
     const loaded = repo.get(object.id);
     expect(loaded).toEqual(object);
     await executor.query('DELETE FROM objects WHERE id = $1', [object.id]);

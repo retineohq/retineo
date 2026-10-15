@@ -3,6 +3,10 @@ export interface SqlExecutor {
   exec(sql: string): void | Promise<void>;
 }
 
+export interface SqlExecutorWithPump extends SqlExecutor {
+  __pump?: () => Promise<void>;
+}
+
 export class PostgresDatabase {
   constructor(private client: SqlExecutor, public schemaVersion: number = 1) {}
 
