@@ -5,6 +5,8 @@ export interface ReplicationPullOptions {
   getEvents: (since: number) => Promise<{ lastSequence: number; events: JournalEvent[] }>;
   intervalMs?: number;
   maxRounds?: number;
+  authHeader?: string | null;
+  sourceUrl?: string | null;
 }
 
 export interface ReplicationPullResult {
@@ -14,8 +16,25 @@ export interface ReplicationPullResult {
 }
 
 export async function pullReplicationOnce(core: MemoryCore, options: ReplicationPullOptions): Promise<ReplicationPullResult> {
-  const since = core.journalSequence();
-  const { lastSequence, events } = await options.getEvents(since);
+  let events: JournalEvent[];
+  let lastSequence: number;
+  const sourceUrl = options.sourceUrl ?? null;
+  if (sourceUrl) {
+    const authHeader = options.authHeader ?? (process.env.REPLICATION_TOKEN ? `Bearer ${process.env.REPLICATION_TOKEN}` : null);
+    const response = await fetch(`${sourceUrl.replace(/\/$/, '')}/replication/events?since=${core.journalSequence()}`, {
+      headers: options.authHeader ? { authorization: options.authHeader } : undefined,
+    });
+    if (!response.ok) {
+      throw new Error(`replication pull failed: HTTP ${response.status}`);
+    }
+    const body = (await response.json()) as { lastSequence: number; events: JournalEvent[] };
+    events = body.events;
+    lastSequence = body.lastSequence;
+  } else {
+    const resolved = await options.getEvents(core.journalSequence());
+    events = resolved.events;
+    lastSequence = resolved.lastSequence;
+  }
   let applied = 0;
   for (const event of events) {
     const result = core.applyJournalEvent(event);

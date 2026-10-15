@@ -25,6 +25,9 @@ import {
   TrivialRepresentationModel,
   InMemorySegmentRepository,
   TrivialSegmentSecurityModel,
+  SensitivityAccessControlModel,
+  PolicyBasedAgentAccessModel,
+  InMemoryAgentPolicyRepository,
   RegexExtractionModel,
   QueryEngine,
 } from '../dist/index.js';
@@ -45,6 +48,20 @@ import {
   SqliteTransaction,
   SqliteIdentityResolver,
 } from '../dist/adapters/sqlite/index.js';
+import { PostgresDatabase, createPgExecutor, runPostgresMigrations } from '../dist/adapters/postgres/index.js';
+import {
+  PostgresObjectRepository,
+  PostgresSourceRepository,
+  PostgresSourceItemRepository,
+  PostgresSourceVersionRepository,
+  PostgresClaimRepository,
+  PostgresRelationshipRepository,
+  PostgresContextRepository,
+  PostgresMembershipRepository,
+  PostgresGapRepository,
+  PostgresEvidenceRepository,
+  PostgresProvenanceRepository,
+} from '../dist/adapters/postgres/index.js';
 import { startHttpServer } from '../dist/api/http-server.js';
 import { MemoryCoreMCPServer } from '../dist/api/mcp-server.js';
 import { FilesystemSourceAdapter } from '../dist/adapters/ingestion/index.js';
@@ -74,6 +91,8 @@ function buildInMemoryCore() {
     decisionModel: new DeterministicDecisionModel(),
     policyModel: new PermissivePolicyModel(),
     accessControl: new SensitivityAccessControlModel(),
+    agentPolicies: new InMemoryAgentPolicyRepository(),
+    agentAccessModel: new PolicyBasedAgentAccessModel(),
     representations: new InMemoryRepresentationRepository(),
     representationModel: new TrivialRepresentationModel(),
     segments: new InMemorySegmentRepository(),
@@ -106,6 +125,10 @@ function buildSqliteCore(dbFile) {
       decisionModel: new DeterministicDecisionModel(),
       policyModel: new PermissivePolicyModel(),
       accessControl: new SensitivityAccessControlModel(),
+    agentPolicies: new InMemoryAgentPolicyRepository(),
+    agentAccessModel: new PolicyBasedAgentAccessModel(),
+      agentPolicies: new InMemoryAgentPolicyRepository(),
+      agentAccessModel: new PolicyBasedAgentAccessModel(),
       representations: new InMemoryRepresentationRepository(),
       representationModel: new TrivialRepresentationModel(),
       segments: new InMemorySegmentRepository(),
@@ -117,10 +140,54 @@ function buildSqliteCore(dbFile) {
 }
 
 async function main() {
+  const storage = process.env.STORAGE || 'sqlite';
+  const databaseUrl = process.env.DATABASE_URL || null;
+
+  async function buildPostgresCore() {
+    if (!databaseUrl) {
+      throw new Error('STORAGE=postgres requires DATABASE_URL');
+    }
+    const executor = await createPgExecutor({ connectionString: databaseUrl });
+    const migrations = await runPostgresMigrations({ exec: executor });
+    console.error(`postgres migrations applied: ${migrations.applied}`);
+    const core = new MemoryCore({
+      objects: new PostgresObjectRepository(executor),
+      claims: new PostgresClaimRepository(executor),
+      relationships: new PostgresRelationshipRepository(executor),
+      contexts: new PostgresContextRepository(executor),
+      memberships: new PostgresMembershipRepository(executor),
+      gaps: new PostgresGapRepository(executor),
+      evidence: new PostgresEvidenceRepository(executor),
+      provenance: new PostgresProvenanceRepository(executor),
+      sources: new PostgresSourceRepository(executor),
+      sourceItems: new PostgresSourceItemRepository(executor),
+      sourceVersions: new PostgresSourceVersionRepository(executor),
+      journal: new InMemoryJournal(),
+      transaction: new InMemoryTransaction(),
+      identity: new InMemoryIdentityResolver(),
+      candidates: new InMemoryCandidateRepository(),
+      decisions: new InMemoryDecisionRepository(),
+      policies: new InMemoryPolicyRepository(),
+      decisionModel: new DeterministicDecisionModel(),
+      policyModel: new PermissivePolicyModel(),
+      accessControl: new SensitivityAccessControlModel(),
+    agentPolicies: new InMemoryAgentPolicyRepository(),
+    agentAccessModel: new PolicyBasedAgentAccessModel(),
+      agentPolicies: new InMemoryAgentPolicyRepository(),
+      agentAccessModel: new PolicyBasedAgentAccessModel(),
+      representations: new InMemoryRepresentationRepository(),
+      representationModel: new TrivialRepresentationModel(),
+      segments: new InMemorySegmentRepository(),
+      segmentSecurity: new TrivialSegmentSecurityModel(),
+      extractionModel: new RegexExtractionModel(),
+    });
+    return { core, close: async () => {} };
+  }
+
   if (command === 'serve') {
     const dbFile = args[1] || 'memory-core.db';
     const port = parseInt(args[2] || '7900', 10);
-    const { core, close } = buildSqliteCore(dbFile);
+    const { core, close } = storage === 'postgres' ? await buildPostgresCore() : buildSqliteCore(dbFile);
     const engine = new QueryEngine(core);
     await startHttpServer(core, engine, { port, host: '127.0.0.1' });
     console.log(`Memory Core HTTP server on http://127.0.0.1:${port} (db: ${dbFile})`);
@@ -128,6 +195,26 @@ async function main() {
       close();
       process.exit(0);
     });
+    return;
+  }
+
+  if (command === 'replicate-pull') {
+    const sourceUrl = process.env.REPLICATION_SOURCE_URL || args[1];
+    const dbFile = args[2] || 'memory-core.db';
+    const authHeader = process.env.REPLICATION_TOKEN ? `Bearer ${process.env.REPLICATION_TOKEN}` : null;
+    if (!sourceUrl) {
+      console.error('Usage: memory-core replicate-pull <sourceUrl> [dbFile] (env REPLICATION_TOKEN optional)');
+      process.exit(1);
+    }
+    const { pullReplicationOnce } = await import('../dist/adapters/replication/index.js');
+    const { core, close } = storage === 'postgres' ? await buildPostgresCore() : buildSqliteCore(dbFile);
+    const result = await pullReplicationOnce(core, {
+      getEvents: async () => ({ lastSequence: core.journalSequence(), events: [] }),
+      sourceUrl,
+      authHeader,
+    });
+    console.log(JSON.stringify(result, null, 2));
+    close();
     return;
   }
 
@@ -245,11 +332,15 @@ Usage:
   memory-core journal [dbFile]          Show journal events
   memory-core extract <ev> <content> [dbFile]  Extract claims/relationships
   memory-core extract-async <ev> <content> [dbFile]  Extract via OpenRouter LLM
+  memory-core replicate-pull <sourceUrl> [dbFile]  Pull journal events from remote
   memory-core query <type> <query> [dbFile]    Query memory
     types: entry-points, knowledge, context
 
 Default dbFile: memory-core.db
 Default port: 7900
+
+Storage: env STORAGE=sqlite|postgres (postgres требует DATABASE_URL)
+Replication: env REPLICATION_TOKEN (Bearer) для аутентификации pull
 `);
 }
 

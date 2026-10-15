@@ -60,6 +60,8 @@ export function createHttpServer(
         contextId: (request.params as any).id,
         maxSensitivity: query.maxSensitivity,
         tenantId: query.tenantId ?? 'default',
+        agentId: query.agentId,
+        purpose: query.purpose ?? null,
       });
     } catch (error: any) {
       reply.code(404);
@@ -312,6 +314,14 @@ export function createHttpServer(
 
   app.get('/replication/events', async (request, reply) => {
     try {
+      const expectedToken = process.env.REPLICATION_TOKEN || null;
+      if (expectedToken) {
+        const authHeader = (request.headers as any).authorization || '';
+        if (authHeader !== `Bearer ${expectedToken}`) {
+          reply.code(401);
+          return { error: 'unauthorized' };
+        }
+      }
       const query = request.query as any;
       return {
         lastSequence: core.journalSequence(),

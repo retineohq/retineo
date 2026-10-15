@@ -4,6 +4,7 @@ import { MemoryCore } from '../src/index.js';
 import { InMemoryObjectRepository, InMemoryClaimRepository, InMemoryRelationshipRepository, InMemoryContextRepository, InMemoryMembershipRepository, InMemoryGapRepository, InMemoryEvidenceRepository, InMemoryProvenanceRepository, InMemoryJournal, InMemoryTransaction, InMemoryIdentityResolver, InMemoryRepresentationRepository, TrivialRepresentationModel, InMemorySegmentRepository, TrivialSegmentSecurityModel, RegexExtractionModel } from '../src/index.js';
 import { InMemorySourceRepository, InMemorySourceItemRepository, InMemorySourceVersionRepository } from '../src/index.js';
 import { InMemoryCandidateRepository, InMemoryDecisionRepository, InMemoryPolicyRepository, DeterministicDecisionModel, PermissivePolicyModel, SensitivityAccessControlModel } from '../src/index.js';
+import { PolicyBasedAgentAccessModel, InMemoryAgentPolicyRepository } from '../src/index.js';
 
 function buildCore(): MemoryCore {
   return new MemoryCore({
@@ -27,6 +28,8 @@ function buildCore(): MemoryCore {
     decisionModel: new DeterministicDecisionModel(),
     policyModel: new PermissivePolicyModel(),
     accessControl: new SensitivityAccessControlModel(),
+    agentPolicies: new InMemoryAgentPolicyRepository(),
+    agentAccessModel: new PolicyBasedAgentAccessModel(),
     representations: new InMemoryRepresentationRepository(),
     representationModel: new TrivialRepresentationModel(),
     segments: new InMemorySegmentRepository(),

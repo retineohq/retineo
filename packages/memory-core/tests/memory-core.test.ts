@@ -28,6 +28,8 @@ import {
   InMemoryPolicyRepository,
   DeterministicDecisionModel,
   PermissivePolicyModel,
+  PolicyBasedAgentAccessModel,
+  InMemoryAgentPolicyRepository,
 } from '../src/index.js';
 import { createId } from '../src/index.js';
 
@@ -50,6 +52,8 @@ function buildCore(): MemoryCore {
     decisionModel: new DeterministicDecisionModel(),
     policyModel: new PermissivePolicyModel(),
     accessControl: new SensitivityAccessControlModel(),
+    agentPolicies: new InMemoryAgentPolicyRepository(),
+    agentAccessModel: new PolicyBasedAgentAccessModel(),
     representations: new InMemoryRepresentationRepository(),
     representationModel: new TrivialRepresentationModel(),
     segments: new InMemorySegmentRepository(),
@@ -648,6 +652,19 @@ describe('Segments + agent access', () => {
     expect(pkg).toBe(null);
   });
 
+  it('agent policies: stored policy grants access for known agent', () => {
+    const core = buildCore();
+    (core as any).deps.agentPolicies.savePolicy({
+      agentId: 'agent-1',
+      tenantId: 'default',
+      maxSensitivity: 'internal',
+    });
+    const ctx = core.createContext({ type: 'project', name: 'PolicyTest', actor: 'test', tenantId: 'default' });
+    const pkg = core.getAgentContext({ contextId: ctx.id, tenantId: 'default', agentId: 'agent-1' });
+    expect(pkg).not.toBe(null);
+    expect(core.getAgentContext({ contextId: ctx.id, tenantId: 'default', agentId: 'agent-unknown' })).toBe(null);
+  });
+
   it('distributed: journalSince and applyJournalEvent basics', () => {
     const core = buildCore();
     core.createObject({ type: 'technology', name: 'Replicated', actor: 'test', tenantId: 'default' });
@@ -932,11 +949,19 @@ describe('SQLite persistent adapter (Stage 2)', () => {
       decisionModel: new DeterministicDecisionModel(),
       policyModel: new PermissivePolicyModel(),
       accessControl: new SensitivityAccessControlModel(),
+      agentPolicies: new InMemoryAgentPolicyRepository(),
+      agentAccessModel: new PolicyBasedAgentAccessModel(),
+    agentPolicies: new InMemoryAgentPolicyRepository(),
+    agentAccessModel: new PolicyBasedAgentAccessModel(),
       representations: new InMemoryRepresentationRepository(),
       representationModel: new TrivialRepresentationModel(),
       segments: new InMemorySegmentRepository(),
       segmentSecurity: new TrivialSegmentSecurityModel(),
       accessControl: new SensitivityAccessControlModel(),
+      agentPolicies: new InMemoryAgentPolicyRepository(),
+      agentAccessModel: new PolicyBasedAgentAccessModel(),
+    agentPolicies: new InMemoryAgentPolicyRepository(),
+    agentAccessModel: new PolicyBasedAgentAccessModel(),
       _db: db,
     } as any);
     return { core, close: () => db.close() };
@@ -991,6 +1016,12 @@ describe('SQLite persistent adapter (Stage 2)', () => {
         decisionModel: new DeterministicDecisionModel(),
         policyModel: new PermissivePolicyModel(),
         accessControl: new SensitivityAccessControlModel(),
+        agentPolicies: new InMemoryAgentPolicyRepository(),
+        agentAccessModel: new PolicyBasedAgentAccessModel(),
+      agentPolicies: new InMemoryAgentPolicyRepository(),
+      agentAccessModel: new PolicyBasedAgentAccessModel(),
+    agentPolicies: new InMemoryAgentPolicyRepository(),
+    agentAccessModel: new PolicyBasedAgentAccessModel(),
         representations: new InMemoryRepresentationRepository(),
         representationModel: new TrivialRepresentationModel(),
         segments: new InMemorySegmentRepository(),

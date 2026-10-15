@@ -4,5 +4,6 @@ export * from './transaction.js';
 export * from './identity-resolver.js';
 export * from './lifecycle.js';
 export * from './agent-access.js';
+export * from './agent-policy-repository.js';
 export * from './extraction.js';
 export * from './embedding.js';

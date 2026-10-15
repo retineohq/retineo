@@ -67,6 +67,8 @@ import type {
   PolicyModel,
   AccessControlModel,
 } from '../ports/lifecycle.js';
+import type { AgentPolicyRepository } from '../ports/agent-policy-repository.js';
+import type { AgentAccessModel } from '../ports/agent-access.js';
 import type {
   ExtractionModel,
   AsyncExtractionModel,
@@ -107,6 +109,8 @@ export interface MemoryCoreDeps {
   segments: SegmentRepository;
   segmentSecurity: SegmentSecurityModel;
   extractionModel: ExtractionModel;
+  agentPolicies: AgentPolicyRepository;
+  agentAccessModel: AgentAccessModel;
   sources: SourceRepository;
   sourceItems: SourceItemRepository;
   sourceVersions: SourceVersionRepository;
@@ -940,6 +944,8 @@ export class MemoryCore {
     contextId: ContextId;
     maxSensitivity?: string;
     tenantId?: string;
+    agentId?: string;
+    purpose?: string | null;
     allowedPurposes?: string[];
   }): {
     objects: Object[];
@@ -955,6 +961,13 @@ export class MemoryCore {
     const tenant = input.tenantId ?? 'default';
     const access = this.deps.accessControl.canRead({ tenantId: tenant, sensitivity: context.sensitivity, maxSensitivity: input.maxSensitivity });
     if (!access.allowed) return null;
+    if (input.agentId) {
+      const agentCheck = this.deps.agentAccessModel.canRead(
+        { agentId: input.agentId, tenantId: tenant, sensitivity: context.sensitivity, purpose: input.purpose ?? null },
+        this.deps.agentPolicies.listPolicies(),
+      );
+      if (!agentCheck.allowed) return null;
+    }
     const maxLevel = parseSensitivity(input.maxSensitivity ?? 'restricted');
     const withinSensitivity = (sensitivity: string) => {
       return SENSITIVITY_ORDER[parseSensitivity(sensitivity)] <= SENSITIVITY_ORDER[maxLevel];
