@@ -1,7 +1,7 @@
 # RETINEO Memory Core — Status Snapshot
 
-> Фиксация состояния на 2026-10-06. Точка перехода от экспериментов
-> (Phase 0–6) к реализации (Phase 7) и дальнейшей стабилизации.
+> Фиксация состояния на 2026-10-16. Wave 2 завершена: AI-адаптеры,
+> multi-tenant, ACL, Postgres foundation, distributed replication foundation.
 
 ---
 
@@ -39,7 +39,24 @@
 - **Программная валидация Phase 4–5 (Этап 7):** `experiments/validate-phase4-5.ts` — 5/5 тестов пройдено программно. HashEmbeddingModel (детерминированный, 64 dim). Проверено: entry points через cosine similarity (0.192), compression 5.8×, semantic recall 1.00, relationship discovery через extraction pipeline, multi-hop reconstruction.
 - **tsc:** чисто для memory-core и для старого ядра.
 
-### 1.3. Решения пользователя
+### 1.3. Wave 2 (2026-10-13 … 2026-10-16)
+
+- **SQLite migrations:** `schema_version` v1, версия хранится в БД.
+- **REST expansion:** +8 endpoints (contexts POST, memberships, relationships GET, candidates, decide, apply-policy, extract, segments/export).
+- **Negative tests:** +43 edge cases (дубликаты, коллизии, отсутствие evidence, race идемпотентность).
+- **OpenRouter extraction:** async `ExtractionModel` порт (`extractAsync`), adapter `OpenRouterExtractionModel`, env `OPENROUTER_API_KEY`/`OPENROUTER_EXTRACTION_MODEL`. CLI `extract-async`, REST `POST /extract { async: true }`.
+- **Ollama extraction:** adapter `OllamaExtractionModel` (`/api/generate`, `format: json`), few-shot prompt, env `OLLAMA_BASE_URL`/`OLLAMA_EXTRACTION_MODEL` (default `qwen2.5:3b`). CLI `extract-async … ollama`, REST `engine: "ollama"`. Real round-trip проверен пользователем.
+- **Ollama embeddings:** `OllamaEmbeddingModel` (768 dims проверено).
+- **Sensitivity model:** уровни `public|internal|confidential|restricted`, поля `sensitivity` на core-сущностях, SQLite колонки + default 'internal'.
+- **Agent filtering:** `getAgentContext({ maxSensitivity, tenantId })`, REST query-param.
+- **Multi-tenant:** `tenantId` на Source/SourceItem/SourceVersion/Evidence/Object/Claim/Relationship/Context/Membership/Gap; core-методы принимают обязательный `tenantId`; изоляция в queries/multi-hop/agent-context; SQLite `tenant_id` колонки.
+- **ACL (v1):** `AccessControlModel.canRead` + `SensitivityAccessControlModel`; denied → `getAgentContext` возвращает `null`.
+- **Postgres foundation:** `SqlExecutor` contract, `PostgresDatabase.applySchema`, `PostgresObjectRepository`, `createPgExecutor` (pg Pool, `DATABASE_URL`), select-cache + `prepareSelect` для sync-чтения. Integration-test зелёный против Docker Postgres (140 passed).
+- **Multi-hop:** `QueryEngine.findMultiHopPaths(start, end, maxDepth, tenantId)` + REST `POST /query/multi-hop`.
+- **Distributed foundation:** journal events idempotent, `core.journalSince/journalSequence/applyJournalEvent`, REST `GET/POST /replication/events`.
+- **CI:** green; tests 140 (плюс 1 integration skipped без DATABASE_URL).
+
+### 1.4. Решения пользователя
 
 1. Summary/Essence — representation layer, не память (подтверждено)
 2. Support State вычисление — отложено до Phase 7/6
@@ -64,13 +81,12 @@
 
 | Пункт | Фаза | Причина |
 |---|---|---|
-| SQLite/Postgres adapter | Phase 7 (persistent) | Инфраструктура, не domain. Отложена до стабилизации. |
-| HTTP API | Phase 12 | Инфраструктура. Не нужна для 16-шагового milestone. |
-| CLI интеграция | — | Старый CLI работает со старым ядром. Замена — после стабилизации. |
-| Semantic compression через LLM | Phase 5 (real) | Валидация выполнена программно (5/5). LLM-извлечение — adapter за портом, будущее расширение. |
+| Semantic compression через LLM | Phase 5 (real) | Валидация выполнена программно (5/5). Essence-LLM — адаптер за портом, будущее расширение. |
 | Acceptance test метрики | Phase 4 | Отложено по решению пользователя. |
 | Support State вычисление | Phase 6 | Отложено по решению пользователя. |
-| structure.md docs section | — | Обновлён (см. Top-Level Layout + Functional Cross-Reference Index). |
+| Distributed (реальная синхронизация) | Wave 3 | Есть только journal-фундамент: pull по sequence, idempotent apply. Нет конфликт-резолюции и push.
+| Postgres: полный набор репозиториев | Wave 3 | Сейчас foundation (Object + schema + executor). Остальные repository по аналогии. |
+| Postgres migrations | Wave 3 | SQLite-схема не переносится автоматически; нужен SQL runner поверх `schema.sql`.
 
 ---
 
@@ -78,24 +94,21 @@
 
 Рекомендуемый порядок:
 
-1. **Stabilization.** Расширить покрытие инвариантов M2, M3, M6, M7, M8, M11–M18 тестами. 20 из 27 тестов — happy path; нужно больше negative cases.
-2. **Persistent adapter.** SQLite как первый persistent adapter (простой, надёжный, локальный).
-3. **Retrieval projections.** BM25/vector/graph/temporal как derived projections (не память).
-4. **CLI/HTTP integration.** Через новые порты, не через старое ядро.
-5. **Programmatic compression experiment.** Подтверждение Phase 5 программно.
-6. **Cleanup старого ядра.** После замены CLI/bridge на новых портах — удалить `packages/core`.
+1. **Wave 3 — Postgres completion.** Остальные репозитории (Source*, Claim, Relationship, Context*, Gap, Evidence, Provenance) по образцу Object; SQL migrations runner; peer-тест с SQLite-поведением.
+2. **Wave 3 — Distributed v1.** Pull-loop между инстансами по `/replication/events?since=`, дедупликация, journal compaction, опционально push-уведомления.
+3. **Wave 3 — Agent filtering v2.** Фильтрация по агентским правам поверх tenant+sensitivity (Политики-как-код, тесты).
+4. **Cleanup старого ядра.** После полного перевода CLI/bridge на новые порты — удалить `packages/core`.
 
 ---
 
-## 5. Коммит-граница
+## 5. Коммит-граница (актуализация)
 
-Рекомендуемый первый commit:
+Основные репозитории формируются волнами. Актуальная точка:
 
 ```
-docs/semantic-model/       # Phase 1–6 артефакты
-packages/memory-core/      # Phase 7 implementation (partial)
-structure.md               # updated
-docs/semantic-model/STATUS.md  # this file
+packages/memory-core/       # domain, ports, adapters (inmemory, sqlite, postgres-foundation, ollama, openrouter, ingestion)
+packages/memory-core/tests  # 140 passing (+1 integration skipped без DATABASE_URL)
+docs/semantic-model/        # артефакты Phase 1–6 + STATUS snapshot (Wave 2)
 ```
 
 Старое ядро (`packages/core/`) не изменено.
