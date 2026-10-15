@@ -47,6 +47,16 @@ export async function createPgExecutor(options: PostgresConnectionOptions = {}):
     pumpSelects: async () => {
       await Promise.all([...selects.values()]);
     },
+    prepareSelect: async (sql: string, params: unknown[] = []) => {
+      const key = `${sql}:${JSON.stringify(params)}`;
+      const existing = selects.get(key);
+      if (existing) {
+        await existing;
+        return;
+      }
+      const rows = await runSelect(sql, params);
+      selectCache.set(key, rows);
+    },
     __pump: async () => {
       await Promise.all([...writes, ...Array.from(selects.values())]);
     },

@@ -6,6 +6,7 @@ export interface SqlExecutor {
 export interface SqlExecutorWithPump extends SqlExecutor {
   __pump?: () => Promise<void>;
   pumpSelects?: () => Promise<void>;
+  prepareSelect?: (sql: string, params?: unknown[]) => Promise<void>;
 }
 
 export class PostgresDatabase {
