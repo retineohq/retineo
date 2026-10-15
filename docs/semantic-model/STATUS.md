@@ -56,7 +56,12 @@
 - **Distributed foundation:** journal events idempotent, `core.journalSince/journalSequence/applyJournalEvent`, REST `GET/POST /replication/events`.
 - **CI:** green; tests 140 (плюс 1 integration skipped без DATABASE_URL).
 
-### 1.4. Wave 3 (2026-10-16)
+### 1.5. Wave 4 (2026-10-16)
+
+- **Runtime Postgres:** CLI/REST поддерживают `STORAGE=postgres` + `DATABASE_URL`; дефолт — SQLite.
+- **Replication pull:** CLI `replicate-pull <sourceUrl> [dbFile]`, env `REPLICATION_TOKEN` (Bearer), `GET /replication/events` защищён токеном при его наличии.
+- **Agent policies storage:** `AgentPolicyRepository` port + `InMemoryAgentPolicyRepository`; `getAgentContext({ agentId, purpose })` проверяет политики через `PolicyBasedAgentAccessModel`.
+- **CI:** green; tests 146 passing (+1 integration skipped).
 
 - **Postgres completion:** полный набор репозиториев (Sources, SourceItems, SourceVersions, Claims, Relationships, Contexts, Memberships, Gaps, Evidence, Provenance), полный schema.sql, migrations runner `runPostgresMigrations`.
 - **Distributed v1:** `pullReplicationOnce/pullReplicationLoop` (adapter), дедупликация через journal id, тест pull-loop.
