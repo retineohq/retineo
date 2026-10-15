@@ -44,6 +44,9 @@ export async function createPgExecutor(options: PostgresConnectionOptions = {}):
       writes.push(runWrite(sql, params));
       return { rows: [] };
     },
+    pumpSelects: async () => {
+      await Promise.all([...selects.values()]);
+    },
     __pump: async () => {
       await Promise.all([...writes, ...Array.from(selects.values())]);
     },

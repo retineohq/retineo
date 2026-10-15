@@ -23,8 +23,7 @@ describe.skipIf(!DATABASE_URL)('Postgres integration', () => {
       updatedAt: new Date().toISOString(),
     };
     repo.save(object);
-    await executor.exec('SELECT 1');
-    await (executor as any).__pump?.();
+    await executor.pumpSelects?.();
     const loaded = repo.get(object.id);
     expect(loaded).toEqual(object);
     await executor.query('DELETE FROM objects WHERE id = $1', [object.id]);
