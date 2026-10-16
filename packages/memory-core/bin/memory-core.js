@@ -245,6 +245,7 @@ async function main() {
       sourceName: 'CLI Ingest',
       trustProfile: 'trusted',
       actor: 'cli',
+      tenantId: process.env.TENANT_ID || 'default',
     });
     console.log(JSON.stringify(result, null, 2));
     close();
@@ -269,7 +270,7 @@ async function main() {
       process.exit(1);
     }
     const { core, close } = buildSqliteCore(dbFile);
-    const result = core.extractFromEvidence({ evidenceId, content, actor: 'cli' });
+    const result = core.extractFromEvidence({ evidenceId, content, actor: 'cli', tenantId: process.env.TENANT_ID || 'default' });
     console.log(JSON.stringify(result, null, 2));
     close();
     return;
@@ -290,7 +291,7 @@ async function main() {
       ? new OllamaExtractionModel()
       : new OpenRouterExtractionModel();
     const { core, close } = buildSqliteCore(dbFile);
-    const result = await core.extractFromEvidenceAsync({ evidenceId, content, actor: 'cli', extractionModel: model });
+    const result = await core.extractFromEvidenceAsync({ evidenceId, content, actor: 'cli', tenantId: process.env.TENANT_ID || 'default', extractionModel: model });
     console.log(JSON.stringify(result, null, 2));
     close();
     return;
