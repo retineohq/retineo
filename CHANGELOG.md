@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.2 (2026-10-17)
+
+- CLI: `ingest`, `extract`, `extract-async` now pass `tenantId` (`TENANT_ID` env or `default`) into the pipeline, fixing NOT NULL constraint on `sources.tenant_id`.
+
 ## 0.7.1 (2026-10-17)
 
 - Same as 0.7.0 plus fixed npm entry points (`main`/`types`) for the root package.
