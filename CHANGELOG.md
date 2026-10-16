@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.3 (2026-10-17)
+
+- npm packaging: root `bin` points to `bin/memory-core.js` (thin loader), fixing `npx` execution of the published package (`memory-core: not found`).
+
 ## 0.7.2 (2026-10-17)
 
 - CLI: `ingest`, `extract`, `extract-async` now pass `tenantId` (`TENANT_ID` env or `default`) into the pipeline, fixing NOT NULL constraint on `sources.tenant_id`.
