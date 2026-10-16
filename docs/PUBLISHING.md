@@ -25,6 +25,10 @@ npm i @retineo/memory-core
 node -e "import('@retineo/memory-core').then(m => console.log(Object.keys(m).length, 'exports'))"
 ```
 
+**Status 2026-10-17:** `@retineo/memory-core@0.7.1` published successfully.
+Root `package.json` now exposes `main`/`types` pointing to
+`packages/memory-core/dist/index.{js,d.ts}`.
+
 5. Tag is already pushed (`v0.7.0`). GitHub release notes can reuse `CHANGELOG.md` section.
 
 ## Legacy package: `@retineo/core` (0.4.5)
