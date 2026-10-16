@@ -1,6 +1,6 @@
 {
   "name": "@retineo/memory-core",
-  "version": "0.1.0",
+  "version": "0.7.0",
   "description": "Persistent epistemic memory core. Clean rewrite per HANDOFF Phase 7.",
   "type": "module",
   "bin": {
