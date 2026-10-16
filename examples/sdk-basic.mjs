@@ -1,0 +1,86 @@
+// Basic SDK usage: in-memory core, tenant + sensitivity defaults.
+import {
+  MemoryCore,
+  InMemoryObjectRepository,
+  InMemoryClaimRepository,
+  InMemoryRelationshipRepository,
+  InMemoryContextRepository,
+  InMemoryMembershipRepository,
+  InMemoryGapRepository,
+  InMemoryEvidenceRepository,
+  InMemoryProvenanceRepository,
+  InMemorySourceRepository,
+  InMemorySourceItemRepository,
+  InMemorySourceVersionRepository,
+  InMemoryJournal,
+  InMemoryTransaction,
+  InMemoryIdentityResolver,
+  InMemoryCandidateRepository,
+  InMemoryDecisionRepository,
+  InMemoryPolicyRepository,
+  InMemoryRepresentationRepository,
+  InMemorySegmentRepository,
+  InMemoryAgentPolicyRepository,
+  DeterministicDecisionModel,
+  PermissivePolicyModel,
+  SensitivityAccessControlModel,
+  PolicyBasedAgentAccessModel,
+  TrivialRepresentationModel,
+  TrivialSegmentSecurityModel,
+  RegexExtractionModel,
+} from '@retineo/memory-core';
+
+const core = new MemoryCore({
+  objects: new InMemoryObjectRepository(),
+  claims: new InMemoryClaimRepository(),
+  relationships: new InMemoryRelationshipRepository(),
+  contexts: new InMemoryContextRepository(),
+  memberships: new InMemoryMembershipRepository(),
+  gaps: new InMemoryGapRepository(),
+  evidence: new InMemoryEvidenceRepository(),
+  provenance: new InMemoryProvenanceRepository(),
+  sources: new InMemorySourceRepository(),
+  sourceItems: new InMemorySourceItemRepository(),
+  sourceVersions: new InMemorySourceVersionRepository(),
+  journal: new InMemoryJournal(),
+  transaction: new InMemoryTransaction(),
+  identity: new InMemoryIdentityResolver(),
+  candidates: new InMemoryCandidateRepository(),
+  decisions: new InMemoryDecisionRepository(),
+  policies: new InMemoryPolicyRepository(),
+  decisionModel: new DeterministicDecisionModel(),
+  policyModel: new PermissivePolicyModel(),
+  accessControl: new SensitivityAccessControlModel(),
+  agentPolicies: new InMemoryAgentPolicyRepository(),
+  agentAccessModel: new PolicyBasedAgentAccessModel(),
+  representations: new InMemoryRepresentationRepository(),
+  representationModel: new TrivialRepresentationModel(),
+  segments: new InMemorySegmentRepository(),
+  segmentSecurity: new TrivialSegmentSecurityModel(),
+  extractionModel: new RegexExtractionModel(),
+});
+
+const object = core.createObject({
+  type: 'technology',
+  name: 'PostgreSQL',
+  actor: 'example',
+  tenantId: 'default',
+});
+console.log('object:', object);
+
+const evidence = core.createEvidence({
+  id: 'ev:example-1',
+  sourceVersionId: 'sv:example-1',
+  segmentRef: null,
+  contentHash: 'hash-1',
+  state: 'available',
+});
+const claim = core.createClaim({
+  subjectId: object.id,
+  predicate: 'has_property',
+  objectOrValue: 'primary database',
+  evidenceRefs: [evidence.id],
+  actor: 'example',
+  tenantId: 'default',
+});
+console.log('claim:', claim);
