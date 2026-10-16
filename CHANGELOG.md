@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.1 (2026-10-17)
+
+- Same as 0.7.0 plus fixed npm entry points (`main`/`types`) for the root package.
+
 ## 0.7.0 (2026-10-16)
 
 ### Wave 1–4 summary
