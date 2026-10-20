@@ -15,5 +15,5 @@ MODEL=${OLLAMA_EXTRACTION_MODEL:-"anismselmi/sandwich1.0:latest"}
 export OLLAMA_EXTRACTION_MODEL="$MODEL"
 for ev in "${!MAP[@]}"; do
   echo "== $ev <- ${MAP[$ev]} (model: $MODEL) =="
-  npx -y @retineo/memory-core@0.7.3 extract-async "$ev" "$(cat "${MAP[$ev]}")" ollama "$DB"
+  node bin/memory-core.js extract-async "$ev" "$(cat "${MAP[$ev]}")" ollama "$DB"
 done
